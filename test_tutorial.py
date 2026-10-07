@@ -53,7 +53,7 @@ def act(tut, con, once):
     if g.startswith(("PRESS ENTER", "STUDY", "WATCH THE NOISE", "TRAINING COMPLETE")):
         do("enter", lambda: con.key(pygame.K_RETURN))
     elif g.startswith("RING UP HALF"):
-        do("half", lambda: con.click((layout.TELEGRAPH_C[0], layout.TELEGRAPH_C[1] - 60)))  # click the HALF sector
+        do("half", lambda: con.click(layout.TELEGRAPH_BTNS[2].center))  # press the HALF button
     elif g.startswith("RING UP FLANK"):
         do("flank", lambda: (con.key(pygame.K_x), con.key(pygame.K_x)))
     elif g.startswith("RING DOWN TO SLOW"):

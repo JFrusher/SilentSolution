@@ -9,11 +9,11 @@ import pygame
 from ai import ThreatDirector
 from displays import CLASSES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
-from graphics import brass
+from graphics import console_art as art
 from graphics.periscope import EYE
 from layout import (BLOW_BTN, CRT_RECT, DEPTH_C, DEPTH_R, HOLD_BTN, LOOK_BTN, NMKR_BTN, ORDER_SLIP, PD_BTN,
                     PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER, SCOPE_R, SNORT_LEVER, TDC_PANEL, TDC_ROW_H,
-                    TDC_ROW_Y0, TELEGRAPH_C, TELEGRAPH_R, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
+                    TDC_ROW_Y0, TELEGRAPH_BTNS, TELEGRAPH_RECT, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
 from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
                  YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
@@ -313,15 +313,14 @@ class Console:
             self.dial = (x - wf.x) / WF_W * 360
         elif math.hypot(x - SCOPE_C[0], y - SCOPE_C[1]) <= SCOPE_R:
             self.cycle_scope()
-        elif math.hypot(x - TELEGRAPH_C[0], y - TELEGRAPH_C[1]) <= TELEGRAPH_R and y <= TELEGRAPH_C[1]:
-            a = math.degrees(math.atan2(TELEGRAPH_C[1] - y, x - TELEGRAPH_C[0]))
-            self.telegraph(int((180 - a) / (180 / len(TELEGRAPH))))
+        elif any(b.collidepoint(pos) for b in TELEGRAPH_BTNS):
+            self.telegraph(next(i for i, b in enumerate(TELEGRAPH_BTNS) if b.collidepoint(pos)))
         elif math.hypot(x - WHEEL_C[0], y - WHEEL_C[1]) <= WHEEL_R + 18 or RUDDER_BAR.inflate(0, 16).collidepoint(pos):
             self.dragging = "wheel"
             self.drag(pos)
         elif math.hypot(x - DEPTH_C[0], y - DEPTH_C[1]) <= DEPTH_R:
             a = math.degrees(math.atan2(DEPTH_C[1] - y, x - DEPTH_C[0]))
-            self.order_depth(round(brass.angle_value(a, 0, 300) / 5) * 5)
+            self.order_depth(round(art.angle_value(a, 0, 300) / 5) * 5)
         elif TDC_PANEL.collidepoint(pos) and 0 <= (y - TDC_ROW_Y0) // TDC_ROW_H < len(FIELDS):
             self.tdc.selected = int((y - TDC_ROW_Y0) // TDC_ROW_H)
         else:
@@ -352,7 +351,7 @@ class Console:
             self.order_depth(p.ordered_depth - 10 * dy)
         elif math.hypot(x - WHEEL_C[0], y - WHEEL_C[1]) <= WHEEL_R + 18:
             p.rudder = clamp(p.rudder + 5 * dy, -MAX_RUDDER, MAX_RUDDER)
-        elif math.hypot(x - TELEGRAPH_C[0], y - TELEGRAPH_C[1]) <= TELEGRAPH_R:
+        elif TELEGRAPH_RECT.collidepoint(pos):
             self.telegraph(self.telegraph_index() + dy)
         elif CRT_RECT.collidepoint(pos):
             self.dial = (self.dial + dy) % 360

@@ -1,4 +1,4 @@
-"""The physical workstation: renders the brass-and-iron station, the CRTs and the periscope eyepiece."""
+"""The physical workstation: a 1970s/80s control-room console around the CRTs, and the periscope eyepiece."""
 import math
 import random
 import textwrap
@@ -9,23 +9,27 @@ import pygame
 from console import ECHO_FADE
 from displays import CLASSES, CLASS_TAGS, SPEC_BINS, TEMPLATES
 from fire_control import FIELDS
-from graphics import brass
+from graphics import console_art as art
 from graphics.crt_renderer import DIM, PHOSPHOR, RED, CRTRenderer
 from graphics.periscope import EYE, PeriscopeRenderer, View
-from layout import (BLOW_BTN, CONSOLE, CRT_RECT, DEPTH_C, DEPTH_R, EYEPIECE_C, GAUGES, GAUGE_POS, GAUGE_R,
-                    GAUGE_SPECS, H, HIGHLIGHTS, HOLD_BTN, HYD_POS, LAMPS, LAMP_DY, LAMP_X, LAMP_Y0, LIB_RECT,
-                    LOG_POS, LOOK_BTN, MONITOR, NMKR_BTN, ORDER_SLIP, PAPER_RECT, PD_BTN, PING_BTN, RUDDER_BAR,
-                    SCOPE_C, SCOPE_LEVER, SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H,
-                    TDC_ROW_Y0, TELEGRAPH_C, TELEGRAPH_R, TELETYPE, TUBE_SW, W, WF_H, WF_POS, WF_W, WHEEL_C,
-                    WHEEL_R)
+from layout import (ANNUNCIATORS, BLOW_BTN, CONSOLE, CRT_RECT, DEPTH_C, DEPTH_R, EYEPIECE_C, GAUGES, GAUGE_POS,
+                    GAUGE_R, GAUGE_SPECS, H, HIGHLIGHTS, HOLD_BTN, HYD_POS, LAMPS, LIB_RECT, LOG_POS, LOOK_BTN,
+                    MONITOR, NMKR_BTN, ORDER_SLIP, PAPER_RECT, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER,
+                    SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H, TDC_ROW_Y0,
+                    TELEGRAPH_BTNS, TELEGRAPH_RECT, TELETYPE, TUBE_SW, W, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
 from sensors import SCOPE_FOV
 from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, SCOPE_TOP, SOUND_SPEED,
                  TELEGRAPH, TORP_MAX_RUN, YARD)
 
+# console sections: black faceplates set into the painted steel
+HELM_PLATE = pygame.Rect(234, 486, 178, 212)
+DIVE_PLATE = pygame.Rect(414, 486, 216, 214)
+WEAPONS_PLATE = pygame.Rect(634, 486, 160, 214)
+ALARM_PLATE = pygame.Rect(796, 486, 114, 214)
 
-# ---------- the physical workstation ----------
+
 class Workstation:
-    """Renders the brass-and-iron operator station around the console state."""
+    """Renders the operator station around the console state."""
 
     def __init__(self):
         self.frame = pygame.Surface((W, H))
@@ -35,10 +39,10 @@ class Workstation:
         self.scope_crt = CRTRenderer(self.scope_surf.get_size(), ghost_decay=200)  # long-persistence PPI phosphor
         self.background = self._background()
         self.overlay = self._overlay()
-        self.wheel = brass.ship_wheel(WHEEL_R)
-        self.wheel_cache = {}
-        self.paper = brass.texture(PAPER_RECT.size, brass.PAPER, grain=5, light=(1.05, 0.9))
-        self.needles = {k: brass.Needle() for k in ("DEPTH", "BATTERY", "NOISE", "HULL", "O2", "ORDER")}
+        self.yoke = art.helm_yoke(WHEEL_R)
+        self.yoke_cache = {}
+        self.paper = self._greenbar(PAPER_RECT.size)
+        self.needles = {k: art.Needle() for k in ("DEPTH", "BATTERY", "NOISE", "HULL", "O2", "ORDER")}
         self.title_buttons = []  # (screen rect, difficulty)
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
@@ -49,30 +53,42 @@ class Workstation:
         alpha[hole] = 0
         del alpha
 
+    @staticmethod
+    def _greenbar(size):
+        """Tractor-feed computer paper: pale green bands every few lines."""
+        paper = art.texture(size, art.PAPER, grain=2.5, light=(1.02, 0.94))
+        for y in range(0, size[1], 30):
+            band = pygame.Surface((size[0] - 28, 15), pygame.SRCALPHA)
+            band.fill((*art.PAPER_BAND, 120))
+            paper.blit(band, (14, y))
+        return paper
+
+    # --- periscope screen ---
     def _periscope_background(self):
-        """The view from the eyepiece: dark trunk, brass eyepiece ring, training handles, engraved plates."""
-        bg = brass.texture((W, H), (34, 34, 33), grain=4, light=(1.0, 0.8))
+        """The optics module of an attack periscope: grey housing, rubber eyecup, training handles, readout panels."""
+        bg = art.texture((W, H), (40, 43, 46), grain=2.5, light=(1.0, 0.8))
         cx, cy = EYEPIECE_C
         r = EYE // 2
-        pygame.draw.circle(bg, brass.IRON_DARK, EYEPIECE_C, r + 34)
-        pygame.draw.circle(bg, brass.BRASS_DARK, EYEPIECE_C, r + 26, 14)
-        pygame.draw.circle(bg, brass.BRASS, EYEPIECE_C, r + 22, 6)
-        pygame.draw.circle(bg, brass.BRASS_LIGHT, (cx - 3, cy - 3), r + 24, 2)
-        for k in range(12):
-            brass.rivet(bg, brass.polar(EYEPIECE_C, r + 26, k * 30 + 15), 4)
-        for side in (-1, 1):  # training handles
-            hx = cx + side * (r + 70)
-            pygame.draw.rect(bg, brass.IRON_DARK, (hx - 22, cy - 20, 44, 40), border_radius=6)
-            pygame.draw.rect(bg, brass.BRASS, (hx - 18 + side * 10, cy - 70, 26, 140), border_radius=10)
-            pygame.draw.line(bg, brass.BRASS_LIGHT, (hx - 12 + side * 10, cy - 64), (hx - 12 + side * 10, cy + 64), 2)
+        pygame.draw.circle(bg, (12, 12, 13), EYEPIECE_C, r + 34)        # rubber eyecup
+        pygame.draw.circle(bg, (28, 29, 31), EYEPIECE_C, r + 30, 18)
+        pygame.draw.circle(bg, art.CHROME, EYEPIECE_C, r + 13, 3)
+        pygame.draw.circle(bg, (60, 62, 66), EYEPIECE_C, r + 9, 6)
+        for k in range(6):
+            art.screw(bg, art.polar(EYEPIECE_C, r + 40, k * 60 + 30), 5)
+        for side in (-1, 1):  # training handles: black rubber grips on chrome arms
+            hx = cx + side * (r + 54)
+            pygame.draw.rect(bg, art.CHROME, (hx - 26 if side > 0 else hx, cy - 6, 26, 12))
+            pygame.draw.rect(bg, (16, 16, 18), (hx - 16 + side * 12, cy - 78, 30, 156), border_radius=14)
+            for k in range(-60, 61, 12):
+                pygame.draw.line(bg, (40, 40, 44), (hx - 12 + side * 12, cy + k), (hx + 10 + side * 12, cy + k), 2)
         for rect in (pygame.Rect(30, 120, 230, 300), pygame.Rect(W - 260, 120, 230, 300)):
-            brass.plate(bg, rect, brass.BRASS, spacing=200)
-        brass.plaque(bg, (145, 136), "ATTACK PERISCOPE", 12)
-        brass.plaque(bg, (W - 145, 136), "CONTROL ROOM", 12)
-        keys = ("A / D  or drag   TRAIN", "TAB  or wheel   POWER", "M     MARK INTO TDC", "V     BACK TO STATION",
-                "U     DOWN SCOPE")
+            art.faceplate(bg, rect)
+        art.label_plate(bg, (145, 136), "SCOPE DATA", 12)
+        art.label_plate(bg, (W - 145, 136), "SHIP CONTROL", 12)
+        keys = ("A / D  or drag   TRAIN", "TAB  or wheel   POWER", "M     MARK TO FIRE CONTROL", "V     BACK TO STATION",
+                "U     LOWER SCOPE")
         for i, line in enumerate(keys):
-            brass.engrave(bg, line, (40, 440 + i * 20), 12, brass.BRASS_LIGHT, bold=False)
+            art.engrave(bg, line, (40, 440 + i * 20), 12, art.LEGEND_DIM, bold=False)
         return bg.convert()
 
     def draw_periscope(self, f, con, paused):
@@ -87,109 +103,110 @@ class Workstation:
         f.blit(self.periscope.render(view), (EYEPIECE_C[0] - EYE // 2, EYEPIECE_C[1] - EYE // 2))
         f.blit(self.scope_surround, (0, 0))
 
-        # left plate: where the scope points and what it last measured
-        x, y = 48, 160
+        # left panel: where the scope points and what it last measured
+        x, y = 48, 164
         rows = [("TRUE BRG", f"{true_brg:05.1f}"), ("REL BRG", f"{con.scope_brg:05.1f}"),
-                ("POWER", "6 X" if con.high_power else "1.5X")]
+                ("POWER", " 6" if con.high_power else "1.5")]
         if con.scope_fix:
             brg, rng, t = con.scope_fix
             rows += [("LAST MARK", f"{(brg - p.heading) % 360:05.1f}"), ("RANGE YD", f"{rng / YARD:6,.0f}"),
                      ("AGE S", f"{w.time - t:4.0f}")]
         for i, (k, v) in enumerate(rows):
-            brass.engrave(f, k, (x, y + i * 42), 12)
-            brass.counter(f, (x + 100, y - 2 + i * 42), v, 14)
-        # right plate: the boat, and how visible we are
+            art.engrave(f, k, (x, y + i * 42), 12)
+            art.counter(f, (x + 100, y - 4 + i * 42), v, 16)
+        # right panel: the boat, and how visible we are
         x = W - 248
         rows = [("DEPTH M", f"{p.z:5.1f}"), ("LENS  M", f"{max(0.0, SCOPE_TOP - p.z - p.wave):4.1f}"),
                 ("SPEED KT", f"{kt:4.1f}"), ("BATTERY", f"{p.battery:4.0f}")]
         for i, (k, v) in enumerate(rows):
-            brass.engrave(f, k, (x, y + i * 42), 12)
-            brass.counter(f, (x + 110, y - 2 + i * 42), v, 14)
+            art.engrave(f, k, (x, y + i * 42), 12)
+            art.counter(f, (x + 110, y - 4 + i * 42), v, 16)
         risk = con.exposure
-        brass.engrave(f, "EXPOSURE / MIN", (x, y + 4 * 42), 12, brass.INK_RED if risk > 0.25 else brass.INK)
-        bar = pygame.Rect(x, y + 4 * 42 + 20, 150, 14)
-        pygame.draw.rect(f, brass.IRON_DARK, bar)
-        pygame.draw.rect(f, (200, 60, 30) if risk > 0.25 else (80, 170, 80), (bar.x, bar.y, int(bar.w * min(risk, 1.0)), bar.h))
-        brass.engrave(f, f"{risk * 100:3.0f} %", (bar.right + 8, bar.y - 1), 12)
+        art.engrave(f, "EXPOSURE / MIN", (x, y + 4 * 42), 12, art.WARN if risk > 0.25 else art.LEGEND)
+        bar = pygame.Rect(x, y + 4 * 42 + 20, 150, 12)  # LED bar graph
+        for k in range(15):
+            on = k < round(15 * min(risk, 1.0))
+            color = art.RED if k >= 10 else art.AMBER if k >= 5 else art.GREEN
+            pygame.draw.rect(f, color if on else tuple(v // 7 for v in color), (bar.x + k * 10, bar.y, 8, bar.h))
+        art.engrave(f, f"{risk * 100:3.0f} %", (bar.right + 8, bar.y - 2), 12)
         if kt > FEATHER_KT:
-            brass.engrave(f, "FEATHER! SLOW DOWN", (x, bar.bottom + 8), 12, brass.INK_RED)
+            art.engrave(f, "FEATHER - SLOW DOWN", (x, bar.bottom + 10), 12, art.RED)
         if p.snorkeling:
-            brass.engrave(f, "DIESELS RUNNING - DEAF", (x, bar.bottom + 26), 12, brass.INK_RED)
+            art.engrave(f, "DIESELS RUNNING - SONAR DEAF", (x, bar.bottom + 28), 12, art.WARN)
 
-        # warning strip: lamps you can still see from the scope, and the last thing sonar said
-        pygame.draw.rect(f, brass.IRON_DARK, STRIP, border_radius=6)
+        # annunciator strip under the eyepiece: what you can still see from the scope
+        pygame.draw.rect(f, (14, 15, 16), STRIP, border_radius=4)
         blink = int(w.time * 4) % 2 == 0
-        lamps = (("TORPEDO", con.torpedo_warning and blink, (240, 50, 30)),
-                 ("ENEMY SONAR", con.lamp_enemy > 0 and blink, (240, 170, 40)),
-                 ("EXPOSED", risk > 0.25 and blink, (240, 50, 30)),
-                 ("BROACH", p.broached and blink, (240, 50, 30)),
-                 ("DIESEL", p.snorkeling, (80, 220, 90)))
+        lamps = (("TORPEDO", con.torpedo_warning and blink, art.RED), ("ENEMY SONAR", con.lamp_enemy > 0 and blink, art.AMBER),
+                 ("EXPOSED", risk > 0.25 and blink, art.RED), ("BROACH", p.broached and blink, art.RED),
+                 ("DIESEL", p.snorkeling, art.GREEN))
         for i, (name, on, color) in enumerate(lamps):
-            lx = STRIP.x + 20 + i * 132
-            brass.lamp(f, (lx, STRIP.centery), on, color, 6)
-            brass.engrave(f, name, (lx + 12, STRIP.y + 10), 11, brass.BRASS_LIGHT)
+            art.annunciator(f, (STRIP.x + 8 + i * 118, STRIP.y + 8, 110, 20), name, on, color)
         line = con.log[-1] if con.log else ""
         if con.tutorial and not con.tutorial.finished:
             line = f"ORDER {con.tutorial.progress}: {con.tutorial.goal}"
         if con.banner[1] > 0:
             line = con.banner[0]
-        brass.engrave(f, line, (STRIP.x + 690, STRIP.y + 10), 12, (236, 226, 200), bold=False)
+        art.engrave(f, line, (STRIP.x + 610, STRIP.y + 10), 12, art.AMBER, bold=False)
         if paused:
-            brass.plaque(f, EYEPIECE_C, "PAUSED  -  P TO RESUME", 16)
+            art.label_plate(f, EYEPIECE_C, "PAUSED  -  P TO RESUME", 16)
 
+    # --- the station, built once ---
     def _background(self):
-        bg = brass.texture((W, H), brass.WALL, grain=4)
-        for rect, base in ((TDC_PANEL, brass.BRASS), (CONSOLE, brass.BRASS), (GAUGES, brass.BRASS),
-                           (TELETYPE, brass.IRON)):
-            brass.plate(bg, rect, base)
+        bg = art.texture((W, H), art.WALL, grain=3)
+        for rect in (TDC_PANEL, CONSOLE, GAUGES):
+            art.panel(bg, rect)
+        art.panel(bg, TELETYPE, base=(150, 146, 134))  # the printer's beige enamel
+        art.faceplate(bg, TDC_PANEL.inflate(-12, -12))
+        art.faceplate(bg, GAUGES.inflate(-14, -14))
+        for plate in (TELEGRAPH_RECT, HELM_PLATE, DIVE_PLATE, WEAPONS_PLATE, ALARM_PLATE):
+            art.faceplate(bg, plate, screws=False)
         for name, c in GAUGE_POS.items():
-            face, fc = brass.gauge_face(GAUGE_R, **GAUGE_SPECS[name])
+            face, fc = art.gauge_face(GAUGE_R, **GAUGE_SPECS[name])
             bg.blit(face, (c[0] - fc[0], c[1] - fc[1]))
-        face, fc = brass.telegraph_face(TELEGRAPH_R, [n for n, _ in TELEGRAPH])
-        bg.blit(face, (TELEGRAPH_C[0] - fc[0], TELEGRAPH_C[1] - fc[1]))
-        face, fc = brass.gauge_face(DEPTH_R, "", 0, 300, 50, 10, red=(CRUSH_DEPTH, 300))
+        face, fc = art.gauge_face(DEPTH_R, "", 0, 300, 50, 10, red=(CRUSH_DEPTH, 300))
         bg.blit(face, (DEPTH_C[0] - fc[0], DEPTH_C[1] - fc[1]))
+        pygame.draw.rect(bg, (16, 16, 18), (WHEEL_C[0] - 14, WHEEL_C[1], 28, HELM_PLATE.bottom - WHEEL_C[1] - 30))  # yoke column
 
-        bottom = CONSOLE.bottom - 16
-        brass.plaque(bg, (TELEGRAPH_C[0], bottom), "ENGINE TELEGRAPH")
-        brass.plaque(bg, (WHEEL_C[0], bottom), "HELM")
-        brass.plaque(bg, (DEPTH_C[0], bottom), "DIVING STATION")
-        brass.plaque(bg, (712, CONSOLE.top + 14), "TORPEDO ROOM")
-        brass.plaque(bg, (858, CONSOLE.top + 14), "WARNINGS")
-        brass.plaque(bg, (TDC_PANEL.centerx, TDC_PANEL.top + 14), "TORPEDO DATA COMPUTER")
-        brass.plaque(bg, (GAUGES.centerx, GAUGES.bottom - 14), "ENGINEERING")
-        brass.plaque(bg, (TELETYPE.x + 70, TELETYPE.y + 18), "TELEPRINTER")
-        for i, name in enumerate(LAMPS):
-            brass.engrave(bg, name, (LAMP_X + 16, LAMP_Y0 + i * LAMP_DY - 7), 10)
+        art.label_plate(bg, (TELEGRAPH_RECT.centerx, TELEGRAPH_RECT.top + 12), "ENGINE ORDER", 11)
+        art.label_plate(bg, (HELM_PLATE.centerx, HELM_PLATE.top + 12), "SHIP CONTROL - HELM", 11)
+        art.label_plate(bg, (DIVE_PLATE.centerx, DIVE_PLATE.bottom - 12), "DIVING  /  MASTS", 11)
+        art.label_plate(bg, (WEAPONS_PLATE.centerx, WEAPONS_PLATE.top + 12), "WEAPONS", 11)
+        art.label_plate(bg, (ALARM_PLATE.centerx, ALARM_PLATE.top + 2), "ALARMS", 10)
+        art.label_plate(bg, (TDC_PANEL.centerx, TDC_PANEL.top + 14), "FIRE CONTROL - TDC", 12)
+        art.label_plate(bg, (GAUGES.centerx, GAUGES.bottom - 16), "SHIP SYSTEMS", 12)
+        art.label_plate(bg, (TELETYPE.x + 70, TELETYPE.y + 18), "TELEPRINTER", 12)
+        art.engrave(bg, "ORDERED", (TELEGRAPH_RECT.x + 14, 530), 10, art.LEGEND_DIM)
+        art.engrave(bg, "SHAFT KTS", (TELEGRAPH_RECT.x + 112, 530), 10, art.LEGEND_DIM)
         for i, (label, units, *_) in enumerate(FIELDS.values()):
             y = TDC_ROW_Y0 + i * TDC_ROW_H
-            brass.engrave(bg, label, (30, y + 2), 12)
-            brass.engrave(bg, units, (214, y + 3), 10, brass.INK_RED)
-        brass.engrave(bg, "GYRO", (30, 430), 12)
-        brass.engrave(bg, "RUN", (30, 448), 12)
+            art.engrave(bg, label, (30, y + 2), 12)
+            art.engrave(bg, units, (214, y + 3), 10, art.WARN)
+        art.engrave(bg, "GYRO", (30, 430), 12)
+        art.engrave(bg, "RUN YD", (30, 448), 12)
         for i, (sx, sy) in enumerate(TUBE_SW):
-            brass.engrave(bg, f"TUBE {i + 1}", (sx, sy - 34), 11, center=True)
-        brass.engrave(bg, "TORPS", (650, 590), 10)
-        brass.engrave(bg, "DECOYS", (718, 590), 10)
-        brass.engrave(bg, "SCOPE", (SCOPE_LEVER[0], SCOPE_LEVER[1] - 36), 10, center=True)
-        brass.engrave(bg, "SNORT", (SNORT_LEVER[0], SNORT_LEVER[1] - 36), 10, center=True)
-        brass.engrave(bg, "L30", (RUDDER_BAR.left - 26, RUDDER_BAR.top - 2), 9)
-        brass.engrave(bg, "R30", (RUDDER_BAR.right + 4, RUDDER_BAR.top - 2), 9)
-        brass.engrave(bg, "WAVE", (TELETYPE.x + 150, TELETYPE.y + 10), 10, brass.BRASS_LIGHT)
-        brass.engrave(bg, "GRT", (TELETYPE.x + 232, TELETYPE.y + 10), 10, brass.BRASS_LIGHT)
+            art.engrave(bg, f"TUBE {i + 1}", (sx, sy - 33), 10, center=True)
+        art.engrave(bg, "TORPS", (650, 590), 10, art.LEGEND_DIM)
+        art.engrave(bg, "DECOYS", (718, 590), 10, art.LEGEND_DIM)
+        art.dymo(bg, (SCOPE_LEVER[0] - 22, SCOPE_LEVER[1] - 44), "SCOPE")
+        art.dymo(bg, (SNORT_LEVER[0] - 22, SNORT_LEVER[1] - 44), "SNORT")
+        art.engrave(bg, "L30", (RUDDER_BAR.left - 22, RUDDER_BAR.top - 3), 9, art.LEGEND_DIM)
+        art.engrave(bg, "R30", (RUDDER_BAR.right + 4, RUDDER_BAR.top - 3), 9, art.LEGEND_DIM)
+        art.engrave(bg, "WAVE", (TELETYPE.x + 150, TELETYPE.y + 10), 10, art.INK)
+        art.engrave(bg, "GRT", (TELETYPE.x + 210, TELETYPE.y + 10), 10, art.INK)
         return bg.convert()
 
     def _overlay(self):
         hole = pygame.Rect(0, 0, SCOPE_R * 2, SCOPE_R * 2)
         hole.center = SCOPE_C
-        ov = brass.bezel_overlay((W, H), [(MONITOR, CRT_RECT, 26), (SCOPE_PANEL, hole, None)])
+        ov = art.bezel_overlay((W, H), [(MONITOR, CRT_RECT, 26), (SCOPE_PANEL, hole, None)])
         for c in [*GAUGE_POS.values()]:
-            g = brass.glint(GAUGE_R)
+            g = art.glint(GAUGE_R)
             ov.blit(g, (c[0] - g.get_width() / 2, c[1] - g.get_height() / 2))
-        g = brass.glint(DEPTH_R)
+        g = art.glint(DEPTH_R)
         ov.blit(g, (DEPTH_C[0] - g.get_width() / 2, DEPTH_C[1] - g.get_height() / 2))
-        brass.plaque(ov, (MONITOR.centerx, MONITOR.bottom - 13), "SONAR STATION No.1  -  HYDROPHONE ARRAY", 11)
-        brass.plaque(ov, (SCOPE_C[0], SCOPE_PANEL.bottom - 12), "ACTIVE / TACTICAL", 10)
+        art.label_plate(ov, (MONITOR.centerx, MONITOR.bottom - 13), "SONAR  -  PASSIVE / ACTIVE / ACOUSTIC ANALYSIS", 11)
+        art.label_plate(ov, (SCOPE_C[0], SCOPE_PANEL.bottom - 12), "TACTICAL PPI", 10)
         return ov
 
     # --- frame ---
@@ -376,7 +393,7 @@ class Workstation:
         crt.line(s, c, (c[0] + 12 * math.sin(h), c[1] - 12 * math.cos(h)), PHOSPHOR, 2)
         crt.text(s, f"{con.scope_range:,.0f} YD", (R, 2 * R - 30), PHOSPHOR, small=True, center=True)
 
-    # --- brass instruments ---
+    # --- instruments ---
     def draw_needles(self, f, con, dt):
         p, world, nd = con.world.player, con.world, self.needles
         stress = 0.6 if p.z > CRUSH_DEPTH else 0.05
@@ -385,113 +402,112 @@ class Workstation:
         for name, (v, jitter) in values.items():
             spec, c = GAUGE_SPECS[name], GAUGE_POS[name]
             shown = nd[name].update(v, dt, jitter * (spec["hi"] - spec["lo"]) / 100)
-            brass.needle(f, c, brass.value_angle(shown, spec["lo"], spec["hi"]), GAUGE_R - 20)
+            art.needle(f, c, art.value_angle(shown, spec["lo"], spec["hi"]), GAUGE_R - 20)
         if p.uses_oxygen:
             c = GAUGE_POS["BATTERY"]
-            brass.needle(f, c, brass.value_angle(nd["O2"].update(p.o2, dt), 0, 100), GAUGE_R - 30, brass.INK_RED, 2)
-            brass.engrave(f, "RED: O2", (c[0], c[1] - 26), 9, brass.INK_RED, center=True)
+            art.needle(f, c, art.value_angle(nd["O2"].update(p.o2, dt), 0, 100), GAUGE_R - 30, art.BLUE, 2)
+            art.engrave(f, "BLUE: O2", (c[0], c[1] - 26), 9, art.BLUE, center=True)
         dc = GAUGE_POS["DEPTH"]
-        brass.counter(f, (dc[0] - 24, dc[1] + 46), f"{14.7 + p.z * 1.4228:4.0f}", 11)
-        brass.engrave(f, "PSI", (dc[0] + 28, dc[1] + 49), 9, brass.INK_RED)
-        brass.needle(f, DEPTH_C, brass.value_angle(nd["ORDER"].update(p.ordered_depth, dt), 0, 300), DEPTH_R - 16,
-                     brass.INK_RED, 3)
-        brass.needle(f, DEPTH_C, brass.value_angle(p.z, 0, 300), DEPTH_R - 22, brass.INK, 1, tail=6)
+        art.counter(f, (dc[0] - 36, dc[1] + 44), f"{14.7 + p.z * 1.4228:4.0f}", 11, art.RED)
+        art.engrave(f, "PSI", (dc[0] + 28, dc[1] + 47), 9, art.WARN)
+        art.needle(f, DEPTH_C, art.value_angle(nd["ORDER"].update(p.ordered_depth, dt), 0, 300), DEPTH_R - 16, art.WARN, 3)
+        art.needle(f, DEPTH_C, art.value_angle(p.z, 0, 300), DEPTH_R - 22, art.WHITE, 1, tail=6)
 
     def draw_controls(self, f, con):
         p, world = con.world.player, con.world
         blink = int(world.time * 4) % 2 == 0
-        # telegraph handle
+        # engine order telegraph: backlit buttons, LED ordered/actual
         idx = con.telegraph_index()
-        tip = brass.polar(TELEGRAPH_C, TELEGRAPH_R - 16, brass.telegraph_angle(idx, len(TELEGRAPH)))
-        pygame.draw.line(f, brass.BRASS_DARK, TELEGRAPH_C, tip, 9)
-        pygame.draw.line(f, brass.BRASS_LIGHT, TELEGRAPH_C, tip, 3)
-        pygame.draw.circle(f, brass.IRON_DARK, [int(v) for v in tip], 9)
-        pygame.draw.circle(f, brass.BRASS, [int(v) for v in tip], 7)
-        pygame.draw.circle(f, brass.BRASS, TELEGRAPH_C, 12)
-        brass.engrave(f, f"{p.speed / KNOT:4.1f} KT", (TELEGRAPH_C[0], TELEGRAPH_C[1] + 22), 12, center=True)
-        # helm
-        angle = int(p.rudder * 4)
-        if angle not in self.wheel_cache:
-            self.wheel_cache[angle] = pygame.transform.rotate(self.wheel, -angle)
-        w = self.wheel_cache[angle]
-        f.blit(w, w.get_rect(center=WHEEL_C))
-        pygame.draw.rect(f, brass.IRON_DARK, RUDDER_BAR)
+        art.counter(f, (TELEGRAPH_RECT.x + 16, 548), f"{TELEGRAPH[idx][1]:4.1f}", 18)
+        art.counter(f, (TELEGRAPH_RECT.x + 114, 548), f"{p.speed / KNOT:4.1f}", 18, art.GREEN)
+        for i, (b, (name, _)) in enumerate(zip(TELEGRAPH_BTNS, TELEGRAPH)):
+            art.button(f, b, name, lit=i == idx, color=art.RED if name == "FLANK" else art.AMBER)
+        # helm: control yoke turns with the rudder
+        angle = int(p.rudder * 2)
+        if angle not in self.yoke_cache:
+            self.yoke_cache[angle] = pygame.transform.rotate(self.yoke, -angle)
+        y = self.yoke_cache[angle]
+        f.blit(y, y.get_rect(center=WHEEL_C))
+        pygame.draw.rect(f, (8, 8, 9), RUDDER_BAR.inflate(4, 4))
+        for k in range(-3, 4):
+            x = RUDDER_BAR.centerx + k * (RUDDER_BAR.w / 2 - 3) / 3
+            pygame.draw.line(f, art.LEGEND_DIM, (x, RUDDER_BAR.top), (x, RUDDER_BAR.bottom), 1)
         px = RUDDER_BAR.centerx + p.rudder / MAX_RUDDER * (RUDDER_BAR.w / 2 - 3)
-        pygame.draw.line(f, brass.BRASS_LIGHT, (RUDDER_BAR.centerx, RUDDER_BAR.top), (RUDDER_BAR.centerx, RUDDER_BAR.bottom))
-        pygame.draw.polygon(f, brass.INK_RED, [(px, RUDDER_BAR.top - 1), (px - 5, RUDDER_BAR.top - 8), (px + 5, RUDDER_BAR.top - 8)])
-        side = "AMIDSHIPS" if abs(p.rudder) < 0.5 else f"{abs(p.rudder):.0f} {'RIGHT' if p.rudder > 0 else 'LEFT'}"
-        brass.engrave(f, f"RUDDER {side}  HDG {p.heading:05.1f}", (WHEEL_C[0], RUDDER_BAR.bottom + 10), 11, center=True)
-        # diving station
+        pygame.draw.rect(f, art.WARN, (px - 3, RUDDER_BAR.top - 2, 6, RUDDER_BAR.h + 4))
+        art.engrave(f, "HDG", (HELM_PLATE.x + 14, RUDDER_BAR.bottom + 8), 10, art.LEGEND_DIM)
+        art.counter(f, (HELM_PLATE.x + 40, RUDDER_BAR.bottom + 6), f"{p.heading:05.1f}", 11)
+        art.engrave(f, "RUD", (HELM_PLATE.x + 106, RUDDER_BAR.bottom + 8), 10, art.LEGEND_DIM)
+        art.counter(f, (HELM_PLATE.x + 132, RUDDER_BAR.bottom + 6), f"{abs(p.rudder):2.0f}" + ("R" if p.rudder > 0.5 else "L" if p.rudder < -0.5 else "-"), 11)
+        # diving station and masts
         holding = abs(p.ordered_depth - p.z) < 1 and not p.blowing
-        brass.button(f, HOLD_BTN, "HOLD", lit=holding, color=(60, 140, 70))
-        brass.button(f, BLOW_BTN, "BLOW", lit=p.blowing and blink)
-        brass.button(f, PD_BTN, "P.D.", lit=abs(p.ordered_depth - PERISCOPE_DEPTH) < 0.5, color=(60, 110, 160))
-        for (lx, ly), up, ready, color in ((SCOPE_LEVER, p.scope_up, p.z <= MAST_DEPTH, (240, 170, 40)),
-                                           (SNORT_LEVER, p.snorkel_up, p.z <= MAST_DEPTH, (80, 220, 90))):
-            brass.toggle(f, (lx, ly), up)
-            brass.lamp(f, (lx, ly + 24), up or (ready and blink and con.tutorial is not None), color, 5)
-        brass.button(f, LOOK_BTN, "LOOK", lit=p.scope_up, color=(160, 120, 40))
+        art.button(f, HOLD_BTN, "HOLD", lit=holding, color=art.GREEN)
+        art.button(f, BLOW_BTN, "BLOW", lit=p.blowing and blink, color=art.RED)
+        art.button(f, PD_BTN, "P.D.", lit=abs(p.ordered_depth - PERISCOPE_DEPTH) < 0.5, color=art.BLUE)
+        for (lx, ly), up, ready, color in ((SCOPE_LEVER, p.scope_up, p.z <= MAST_DEPTH, art.AMBER),
+                                           (SNORT_LEVER, p.snorkel_up, p.z <= MAST_DEPTH, art.GREEN)):
+            art.toggle(f, (lx, ly), up)
+            art.lamp(f, (lx, ly + 28), up or (ready and blink and con.tutorial is not None), color, 5)
+        art.button(f, LOOK_BTN, "LOOK", lit=p.scope_up, color=art.AMBER)
         if p.scope_damage > 0:
-            brass.engrave(f, "JAMMED", (SCOPE_LEVER[0], SCOPE_LEVER[1] + 22), 9, brass.INK_RED, center=True)
+            art.engrave(f, "JAMMED", (SCOPE_LEVER[0], SCOPE_LEVER[1] + 40), 9, art.RED, center=True)
         planes = "BLOWING" if p.blowing else "LEVEL" if holding else "DIVE" if p.ordered_depth > p.z else "RISE"
-        brass.engrave(f, f"PLANES {planes}  ORD {p.ordered_depth:.0f} M", (DEPTH_C[0], HOLD_BTN.bottom + 10), 11, center=True)
-        # torpedo room
+        art.engrave(f, f"PLANES {planes}   ORDER {p.ordered_depth:.0f} M", (DEPTH_C[0], HOLD_BTN.bottom + 10), 10,
+                    art.LEGEND, center=True)
+        # weapons: guarded firing switches
         for i, (sx, sy) in enumerate(TUBE_SW):
             r = con.tubes[i]
             ready, empty = r == 0, r == math.inf
-            brass.toggle(f, (sx, sy), ready)
-            brass.lamp(f, (sx + 26, sy - 16), ready or (not empty and blink),
-                       (80, 220, 90) if ready else (230, 160, 40), 6)
+            art.toggle(f, (sx, sy), ready, guard_color=art.RED)
+            art.lamp(f, (sx + 26, sy - 16), ready or (not empty and blink), art.GREEN if ready else art.AMBER, 5)
             state = "READY" if ready else "EMPTY" if empty else f"{r:2.0f} S"
-            brass.engrave(f, state, (sx, sy + 34), 11, brass.INK_RED if empty else brass.INK, center=True)
-        brass.counter(f, (650, 604), f"{p.torpedoes:02d}", 14)
-        brass.counter(f, (718, 604), f"{p.noisemakers:02d}", 14)
-        brass.button(f, NMKR_BTN, "NOISEMAKER  [N]")
-        brass.button(f, PING_BTN, "ACTIVE PING  [SPACE]", lit=world.time - con.ping_time < 0.6)
-        # warning lamps
+            art.engrave(f, state, (sx, sy + 36), 10, art.RED if empty else art.LEGEND, center=True)
+        art.counter(f, (650, 604), f"{p.torpedoes:02d}", 14)
+        art.counter(f, (718, 604), f"{p.noisemakers:02d}", 14)
+        art.button(f, NMKR_BTN, "NOISEMAKER  [N]", color=art.AMBER)
+        art.button(f, PING_BTN, "ACTIVE PING  [SPACE]", lit=world.time - con.ping_time < 0.6, color=art.RED)
+        # annunciator panel: legend on every tile, so colour is never the only cue
         exposed = con.exposure > 0.25
         masts = p.scope_up or p.snorkel_up
         states = (con.lamp_enemy > 0 and blink, con.torpedo_warning and blink, p.cavitating, p.snorkeling,
                   masts and (blink or not exposed), p.broached and blink, bool(p.leaks),
                   p.z > CRUSH_DEPTH - 20 and blink, p.z >= world.ocean.layer_depth)
-        colors = ((240, 170, 40), (240, 50, 30), (240, 170, 40), (80, 220, 90),
-                  (240, 50, 30) if exposed else (240, 170, 40), (240, 50, 30), (240, 50, 30), (240, 50, 30),
-                  (90, 170, 240))
-        for i, (on, color) in enumerate(zip(states, colors)):
-            brass.lamp(f, (LAMP_X, LAMP_Y0 + i * LAMP_DY), on, color, 6)
-        # TDC
+        colors = (art.AMBER, art.RED, art.AMBER, art.GREEN, art.RED if exposed else art.AMBER, art.RED, art.RED, art.RED,
+                  art.BLUE)
+        for rect, name, on, color in zip(ANNUNCIATORS, LAMPS, states, colors):
+            art.annunciator(f, rect, name, on, color)
+        # TDC readouts
         for i, (name, (_, _, fmt, *_)) in enumerate(FIELDS.items()):
             y = TDC_ROW_Y0 + i * TDC_ROW_H
             if i == con.tdc.selected:
-                pygame.draw.polygon(f, brass.INK_RED, [(16, y + 3), (16, y + 15), (25, y + 9)])
-            brass.counter(f, (112, y), fmt.format(con.tdc.get(name)), 13)
+                pygame.draw.polygon(f, art.WARN, [(17, y + 3), (17, y + 15), (25, y + 9)])
+            art.counter(f, (112, y), fmt.format(con.tdc.get(name)), 13)
         sol = con.tdc.solve()
         far = sol is not None and sol.run > TORP_MAX_RUN
-        brass.counter(f, (112, 428), f"{sol.gyro:05.1f}" if sol else "---.-", 13)
-        brass.counter(f, (112, 446), f"{sol.run / YARD:6,.0f}" if sol else "------", 13)
-        brass.lamp(f, (238, 446), sol is not None, (240, 50, 30) if far else (80, 220, 90), 6)
+        art.counter(f, (112, 428), f"{sol.gyro:05.1f}" if sol else "---.-", 13)
+        art.counter(f, (112, 446), f"{sol.run / YARD:6,.0f}" if sol else "------", 13)
+        art.lamp(f, (238, 446), sol is not None, art.RED if far else art.GREEN, 5)
 
     def draw_teletype(self, f, con):
         r = PAPER_RECT
         f.blit(self.paper, r.topleft)
         tt = con.teletype if con else None
         fed = tt.fed if tt else 0
-        for k in range(0, r.h + 14, 14):  # tractor-feed perforations creep up as paper feeds
+        for k in range(0, r.h + 14, 14):  # tractor-feed holes creep up as the paper feeds
             y = r.bottom - ((k + fed * 7) % (r.h + 14))
-            for x in (r.x + 9, r.right - 9):
-                pygame.draw.circle(f, (150, 138, 108), (x, int(y)), 3)
+            for x in (r.x + 7, r.right - 7):
+                pygame.draw.circle(f, (176, 180, 170), (x, int(y)), 3)
         if tt:
-            font = brass.mono(12)
+            font = art.mono(12)
             rows = (r.h - 16 - (ORDER_SLIP.h + 8 if con.tutorial else 0)) // 15
             lines = [*list(tt.lines)[-(rows - 1):], tt.typing]
             for i, line in enumerate(lines):
-                f.blit(font.render(line, True, brass.INK), (r.x + 20, r.bottom - 12 - (len(lines) - i) * 15))
+                f.blit(font.render(line, True, art.INK), (r.x + 20, r.bottom - 12 - (len(lines) - i) * 15))
             if tt.queue and int(pygame.time.get_ticks() / 150) % 2:
                 cx = r.x + 20 + font.size(tt.typing)[0]
-                pygame.draw.rect(f, brass.INK, (cx, r.bottom - 27, 7, 12))
-            brass.counter(f, (TELETYPE.x + 184, TELETYPE.y + 8), f"{con.wave:02d}", 13)
-            brass.counter(f, (TELETYPE.x + 258, TELETYPE.y + 8), f"{con.score:6d}", 13)
-        pygame.draw.rect(f, brass.IRON_DARK, r, 2)
+                pygame.draw.rect(f, art.INK, (cx, r.bottom - 27, 7, 12))
+            art.counter(f, (TELETYPE.x + 184, TELETYPE.y + 8), f"{con.wave:02d}", 13)
+            art.counter(f, (TELETYPE.x + 234, TELETYPE.y + 8), f"{con.score:6d}", 12)
+        pygame.draw.rect(f, (60, 58, 52), r, 2)
 
     def draw_tutorial(self, f, tut):
         pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 160)
@@ -503,18 +519,18 @@ class Workstation:
             else:
                 pygame.draw.circle(f, color, shape[0], shape[1], 3)
         slip = ORDER_SLIP
-        pygame.draw.rect(f, (246, 238, 214), slip)
-        pygame.draw.rect(f, brass.INK_RED, slip, 2)
-        brass.engrave(f, f"ORDER {tut.progress}", (slip.x + 8, slip.y + 4), 11, brass.INK_RED)
-        font = brass.mono(13, True)
+        pygame.draw.rect(f, (250, 246, 226), slip)
+        pygame.draw.rect(f, art.INK_RED, slip, 2)
+        art.engrave(f, f"ORDER {tut.progress}", (slip.x + 8, slip.y + 4), 11, art.INK_RED)
+        font = art.mono(13, True)
         for i, line in enumerate(textwrap.wrap(tut.goal, 34)[:2]):
-            f.blit(font.render(line, True, brass.INK), (slip.x + 8, slip.y + 22 + i * 17))
+            f.blit(font.render(line, True, art.INK), (slip.x + 8, slip.y + 22 + i * 17))
 
     def draw_debug(self, f, con, dt):
         """Playtest overlay: frame rate, ocean and own-boat state, and the truth about every contact."""
         self.fps = 0.9 * getattr(self, "fps", 60.0) + 0.1 * (1.0 / max(dt, 1e-3))
         w, p, o = con.world, con.world.player, con.world.ocean
-        font = brass.mono(12, True)
+        font = art.mono(12, True)
         states = {}
         for ai in w.ais:
             key = f"{ai.ship.kind[:3]}:{ai.state}"
@@ -548,12 +564,12 @@ class Workstation:
     def draw_help(self, f):
         card = pygame.Rect(0, 0, 600, 562)
         card.center = (W // 2, H // 2)
-        f.blit(brass.texture(card.size, brass.PAPER, grain=5), card.topleft)
-        pygame.draw.rect(f, brass.BRASS_DARK, card, 4)
-        brass.engrave(f, "STATION DRILL", (card.centerx, card.y + 26), 20, center=True)
-        rows = (("A / D", "hydrophone dial", "click waterfall / wheel"), ("M", "mark dial bearing into TDC", ""),
+        f.blit(art.texture(card.size, art.PAPER, grain=3), card.topleft)
+        pygame.draw.rect(f, (40, 44, 48), card, 4)
+        art.engrave(f, "STATION DRILL", (card.centerx, card.y + 26), 20, art.INK, center=True)
+        rows = (("A / D", "hydrophone dial", "click waterfall / mouse wheel"), ("M", "mark dial bearing into TDC", ""),
                 ("W / S", "select TDC field", "click row"), ("UP / DOWN", "adjust TDC field", "mouse wheel"),
-                ("LEFT / RIGHT", "rudder   (C amidships)", "drag the wheel"), ("Z / X", "engine telegraph", "click sector"),
+                ("LEFT / RIGHT", "rudder   (C amidships)", "drag the yoke"), ("Z / X", "engine order", "click a button"),
                 ("Q / E", "depth order -/+ 10 m", "click order dial"), ("H / B", "hold depth / blow ballast", "buttons"),
                 ("SPACE", "active ping - reveals you", "button"), ("F  1  2", "fire next / tube 1 / tube 2", "tube switch"),
                 ("N", "noisemaker decoy astern", "button"), ("T", "tactical scope range", "click scope"),
@@ -563,6 +579,6 @@ class Workstation:
                 ("P / F1 / ESC", "pause / this card / quit", ""))
         for i, (keys, what, mouse) in enumerate(rows):
             y = card.y + 58 + i * 26
-            brass.engrave(f, keys, (card.x + 30, y), 13)
-            brass.engrave(f, what, (card.x + 180, y), 13, bold=False)
-            brass.engrave(f, mouse, (card.x + 420, y), 12, brass.INK_RED, bold=False)
+            art.engrave(f, keys, (card.x + 30, y), 13, art.INK)
+            art.engrave(f, what, (card.x + 180, y), 13, art.INK, bold=False)
+            art.engrave(f, mouse, (card.x + 420, y), 12, art.INK_RED, bold=False)
