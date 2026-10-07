@@ -355,6 +355,7 @@ class Console:
             "TMA PAGE": self.flip_page,
             "AUTO-SOLVE": self.auto_solve,
             "DAMAGE BOARD": self.damage_board,
+            "SKIP DRILL": lambda: self.actions.add("SKIP"),  # training only: the tutorial reads it
         }
         name = settings.action_for(k)
         if name in actions:

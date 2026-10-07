@@ -24,6 +24,8 @@ from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOP
                  TELEGRAPH, TORP_MAX_RUN, YARD)
 from settings import BAR_W, BAR_X, ROW_H, ROW_Y0, SETTINGS, VISIBLE
 from tuning import REPAIR_TIME
+from tutorial import CHAPTERS
+from version import __version__
 
 # console sections: black faceplates set into the painted steel
 HELM_PLATE = pygame.Rect(234, 486, 178, 212)
@@ -267,6 +269,8 @@ class Workstation:
             self._crt_career(s, crt, self.career)
         elif state == "DEBRIEF":
             self._crt_debrief(s, crt, self.debrief)
+        elif state == "CHAPTERS":
+            self._crt_chapters(s, crt)
         elif state == "TITLE" or con is None:
             self._crt_title(s, crt)
         else:
@@ -311,7 +315,21 @@ class Workstation:
         crt.frame(s, box, color=DIM)
         crt.text(s, "[S]  SETTINGS - SOUND, KEYS, MOUSE, TEXT, LAMPS", (box.x + 16, box.y + 5), PHOSPHOR, small=True)
         self.buttons.append((box.move(CRT_RECT.topleft), "SETTINGS"))
-        crt.text(s, "NEW? START WITH [T]  -  F1 STATION DRILL  -  ESC QUIT", (cx, 380), DIM, small=True, center=True)
+        crt.text(s, f"V{__version__} - BY JACOB FRUSHER - PYGAME-CE + NUMPY - F1 KEYS - ESC QUIT",
+                 (cx, 380), DIM, small=True, center=True)
+
+    def _crt_chapters(self, s, crt):
+        cx = s.get_width() // 2
+        crt.text(s, "TRAINING", (cx, 40), PHOSPHOR, huge=True, center=True)
+        crt.text(s, "PICK A CHAPTER. EACH STANDS ON ITS OWN; F6 SKIPS A DRILL INSIDE ONE.", (cx, 76), DIM,
+                 small=True, center=True)
+        for i, (name, blurb) in enumerate(CHAPTERS.items()):
+            box = pygame.Rect(70, 100 + i * 56, 440, 48)
+            crt.frame(s, box, color=PHOSPHOR)
+            crt.text(s, f"[{i + 1}]  {name}", (box.x + 16, box.y + 6), PHOSPHOR, big=True)
+            crt.text(s, blurb, (box.x + 16, box.y + 30), DIM, small=True)
+            self.buttons.append((box.move(CRT_RECT.topleft), i))
+        self._crt_button(s, crt, (220, 336, 140, 26), "[ESC] TITLE", "BACK", DIM)
 
     def _crt_button(self, s, crt, rect, label, name, color=PHOSPHOR):
         rect = pygame.Rect(rect)
@@ -725,6 +743,8 @@ class Workstation:
         pygame.draw.rect(f, (250, 246, 226), slip)
         pygame.draw.rect(f, art.INK_RED, slip, 2)
         art.engrave(f, f"ORDER {tut.progress}", (slip.x + 8, slip.y + 4), 11, art.INK_RED)
+        art.engrave(f, f"{SETTINGS['keys']['SKIP DRILL'].upper()} SKIPS", (slip.right - 34, slip.y + 11), 10, art.INK,
+                    center=True)
         font = art.mono(13, True)
         for i, line in enumerate(textwrap.wrap(tut.goal, 34)[:2]):
             f.blit(font.render(line, True, art.INK), (slip.x + 8, slip.y + 22 + i * 17))

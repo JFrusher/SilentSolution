@@ -12,6 +12,12 @@ from tuning import DIFFICULTY
 # Cadet rules with a working battery (for the snorkel drill) and a homing enemy fish (for the decoy drill)
 TRAINING = dict(DIFFICULTY["CADET"], battery=True, enemy_torp_kt=35, enemy_seeker_yd=800, beam_width=2.0)
 HULL_FLOOR = 25.0  # training warheads: shaken, never sunk
+CHAPTERS = {  # chapter -> what it covers; each starts at the step tagged with its name
+    "STATION DRILL": "EVERY CONTROL: TELEGRAPH, HELM, DIVING, BLOW, PAGES",
+    "SONAR AND FIRE CONTROL": "WATERFALL, PROFILE, MARK, PING, TDC, TMA PLOT",
+    "THE PERISCOPE": "MASTS, EYEPIECE, MARKS, BEING SEEN, SNORKEL, A LIVE SHOT",
+    "LIVE EXERCISES": "WEATHER, ESCORT ATTACK, DAMAGE CONTROL, TORPEDO, SUB HUNT",
+}
 
 
 @dataclass
@@ -22,6 +28,7 @@ class Step:
     setup: Callable | None = None  # (tutorial, con) -> None, once on entry
     highlight: tuple = ()          # workstation parts to ring
     outro: str | Callable = ""     # printed on completion
+    chapter: str = ""              # first step of this chapter
 
 
 def _spawn(world, rel_brg, rng_m, course, speed, **kw):
@@ -50,7 +57,7 @@ def _hostiles(con):
 
 
 class Tutorial:
-    def __init__(self, con):
+    def __init__(self, con, chapter=0):
         self.con = con
         con.tutorial = self
         con.world.director = None  # the tutorial places every contact itself
@@ -61,7 +68,8 @@ class Tutorial:
         o.timer = 1e9  # the instructor orders the weather
         con.teletype.cps = 70.0
         self.steps = self._script()
-        self.i = -1
+        name = list(CHAPTERS)[chapter]
+        self.i = next(i for i, s in enumerate(self.steps) if s.chapter == name) - 1
         self.timer = 0.0
         self.memo = {}
         self.merchant = self.escort = self.sub = None
@@ -101,6 +109,9 @@ class Tutorial:
         con = self.con
         self.timer += dt
         con.world.player.torpedoes = max(con.world.player.torpedoes, 4)  # training racks never run dry
+        if "SKIP" in con.actions:
+            con.teletype.print("INSTRUCTOR: DRILL SKIPPED.")
+            return self.advance()
         for kind, a, b in con.frame_events:
             self._watch(kind, a, b)
         if con.teletype.queue or self.timer < 0.5:  # let the order finish printing first
@@ -132,8 +143,9 @@ class Tutorial:
         return [
             # --- station drill: every command ---
             S("WELCOME ABOARD. THIS DRILL WALKS YOU THROUGH EVERY STATION, THEN LIVE EXERCISES. YOUR CURRENT "
-              "ORDER IS PINNED ON THE SLIP ABOVE; THE PART OF THE STATION YOU NEED GLOWS. F1 SHOWS THE KEY CARD.",
-              "PRESS ENTER (OR CLICK THIS SLIP)", lambda t, c: "ENTER" in c.actions),
+              "ORDER IS PINNED ON THE SLIP ABOVE; THE PART OF THE STATION YOU NEED GLOWS. F1 SHOWS THE KEY CARD; "
+              "F6 SKIPS A DRILL.",
+              "PRESS ENTER (OR CLICK THIS SLIP)", lambda t, c: "ENTER" in c.actions, chapter="STATION DRILL"),
             S("ENGINEERING GAUGES, TOP RIGHT: DEPTH WITH HULL PRESSURE IN PSI (RED PAST 250 M IS CRUSH DEPTH), "
               "BATTERY, SELF NOISE (RED MEANS CAVITATION - ENEMIES HEAR IT), HULL INTEGRITY.",
               "STUDY THE GAUGES - ENTER", lambda t, c: "ENTER" in c.actions, highlight=("gauges",)),
@@ -171,7 +183,7 @@ class Tutorial:
             S("A MERCHANT IS ON THE WATERFALL - THE BRIGHT VERTICAL TRACE. THE RED LINE IS YOUR HYDROPHONE DIAL: "
               "A / D OR CLICK THE WATERFALL. PUT IT ON THE TRACE UNTIL SIG READS LOCK.",
               "DIAL ONTO THE TRACE: SIG = LOCK  (A/D, CLICK)", lambda t, c: c.signal > 0.5,
-              setup=self._spawn_merchant, highlight=("waterfall",)),
+              setup=self._spawn_merchant, highlight=("waterfall",), chapter="SONAR AND FIRE CONTROL"),
             S("THE ACOUSTIC PROFILE IS THE SPECTRUM OF WHATEVER THE DIAL HEARS. EVEN LOW PEAKS ARE A SLOW 2-BLADE "
               "MERCHANT SHAFT. THE LIBRARY BELOW IT MATCHES THE SHAPE: WARSHIPS WHINE HIGH, SUBS SHOW ONE FAINT "
               "LINE, TORPEDOES A SHARP HIGH SPIKE, NOISEMAKERS A FLAT WALL.",
@@ -184,7 +196,7 @@ class Tutorial:
               "ON THE TACTICAL SCOPE - THE ECHO'S DELAY GIVES RANGE. EVERY ENEMY IN EARSHOT HEARS IT TOO.",
               "PING (SPACE) AND WAIT FOR THE ECHO", lambda t, c: c.last_echo is not None,
               setup=lambda t, c: setattr(c, "last_echo", None), highlight=("scope", "ping")),
-            S(lambda c: f"ECHO AT {c.last_echo[1]:,.0f} YD. W / S SELECTS A TDC ROW (OR CLICK IT); UP / DOWN OR "
+            S(lambda c: f"ECHO AT {c.last_echo[1] if c.last_echo else 2500:,.0f} YD. W / S SELECTS A TDC ROW (OR CLICK IT); UP / DOWN OR "
                         "THE MOUSE WHEEL ADJUSTS - HOLD TO RUN FAST. SET TGT RNG TO THE ECHO RANGE.",
               "SET TGT RNG = ECHO RANGE  (W/S, UP/DOWN)",
               lambda t, c: abs(c.tdc.get("RNG") * YARD - c.world.player.range_to(t.merchant)) < 400 * YARD,
@@ -203,7 +215,7 @@ class Tutorial:
             # --- the periscope: seeing, and being seen ---
             S("PERISCOPE DEPTH: G OR THE P.D. BUTTON ORDERS 15 METRES. MASTS CAN ONLY BE RAISED AT 18 M OR "
               "SHALLOWER.", "PERISCOPE DEPTH  (G, P.D. BUTTON)", lambda t, c: c.world.player.z <= 16,
-              highlight=("depth",)),
+              setup=self._ensure_merchant, highlight=("depth",), chapter="THE PERISCOPE"),
             S("UP SCOPE: U OR THE SCOPE SWITCH. THEN V OR LOOK PUTS YOUR EYE TO IT. AT THE EYEPIECE YOU CANNOT SEE "
               "THE STATION - THE STRIP ALONG THE BOTTOM STILL CARRIES THE WARNINGS.",
               "UP SCOPE (U) AND LOOK (V)", lambda t, c: c.looking, highlight=("masts",)),
@@ -240,6 +252,7 @@ class Tutorial:
             S("WEATHER: A STORM IS PASSING OVERHEAD. RAIN HISS FLOODS THE WATERFALL AND THE PROFILE; WEAK CONTACTS "
               "DROWN AND SEA READS STORM. ON PATROL THE WEATHER CHANGES ON ITS OWN.",
               "WATCH THE NOISE FLOOR - ENTER", lambda t, c: "ENTER" in c.actions, setup=self._storm,
+              chapter="LIVE EXERCISES",
               highlight=("waterfall", "spectrum"), outro="THE STORM IS EASING."),
             S("EXERCISE: AN ESCORT HEARD YOUR PING AND IS RUNNING IN AT 24 KNOTS - ITS TRACE BRIGHTENS AS IT REVS "
               "UP. ITS PINGS FLASH THE ENEMY SONAR LAMP AND A RED LINE ON THE SCOPE. GET UNDER THE LAYER (BELOW "
@@ -305,6 +318,11 @@ class Tutorial:
         _clear(con.world)
         rel = 45.0
         self.merchant = _spawn(con.world, rel, 2500 * YARD, con.world.player.heading + rel + 100, 8 * KNOT, noise=1.1)
+
+    def _ensure_merchant(self, t, con):
+        """The periscope chapter can be started on its own: give it the merchant the sonar chapter spawns."""
+        if self.merchant not in con.world.targets:
+            self._spawn_merchant(t, con)
 
     def _storm(self, t, con):
         o = con.world.ocean

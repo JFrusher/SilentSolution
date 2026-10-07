@@ -15,7 +15,7 @@ KEYS = {  # action -> pygame key name
     "SHALLOWER": "q", "DEEPER": "e", "HOLD DEPTH": "h", "BLOW": "b",
     "SLOWER": "z", "FASTER": "x", "RUDDER LEFT": "left", "RUDDER RIGHT": "right", "RUDDER AMIDSHIPS": "c",
     "NOISEMAKER": "n", "SCOPE RANGE": "t", "WIRE LEFT": "[", "WIRE RIGHT": "]", "NEXT FISH": "\\", "CUT WIRE": "l",
-    "TMA PAGE": "f2", "DAMAGE BOARD": "f5", "DEBUG": "f3", "ACKNOWLEDGE": "return",
+    "TMA PAGE": "f2", "DAMAGE BOARD": "f5", "DEBUG": "f3", "ACKNOWLEDGE": "return", "SKIP DRILL": "f6",
 }
 RESERVED = ("escape", "f1", "p")  # quit / back, help card, pause
 DEFAULTS = dict(volume=dict(MASTER=0.8, SONAR=1.0, EFFECTS=1.0, AMBIENCE=1.0), mouse=1.0, large_text=False,
