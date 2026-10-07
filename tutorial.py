@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ai import PATROL, EscortAI, SubmarineAI
-from sim import DIFFICULTY, KNOT, YARD, Vessel, angle_diff, bearing
+from sim import KNOT, YARD, Vessel, angle_diff, bearing
+from tuning import DIFFICULTY
 
 # Cadet rules with a working battery (for the snorkel drill) and a homing enemy fish (for the decoy drill)
 TRAINING = dict(DIFFICULTY["CADET"], battery=True, enemy_torp_kt=35, enemy_seeker_yd=800, beam_width=2.0)
