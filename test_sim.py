@@ -6,7 +6,8 @@ import numpy as np
 
 from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
                 frame_point)
-from console import build_world
+from audio import AudioSynthesizer
+from console import Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
 from layout import WF_W
@@ -259,6 +260,27 @@ if __name__ == "__main__":
     w.player.z = 40.0
     w.step(0.1)
     assert PeriscopeOptics(w).look() is None, "masts struck below periscope depth: blind"
+
+    # spread salvo: F with SPREAD set fires every ready tube, fanned symmetrically about the solution, on the wire
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.tdc.set("SPR", 6.0)
+    con.fire()
+    fish = con.world.torpedoes
+    assert len(fish) == 2 and all(t.wired for t in fish), fish
+    assert abs(abs(angle_diff(fish[0].heading, fish[1].heading)) - 6.0) < 0.01
+
+    # wire guidance: a wired fish steers to its aim point; the wire parts at speed and at the end of the spool
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [])
+    t = w.fire(0.0, wired=True, arm_distance=1e9)
+    t.wire_aim = (3000.0, 3000.0)
+    run(w, 60)
+    assert t.wired and abs(angle_diff(bearing(0, 0, t.x, t.y), 45)) < 12, (t.x, t.y, t.heading)
+    w.player.speed = w.player.ordered_speed = 14 * KNOT
+    assert "WIRE_CUT" in run(w, 0.2) and not t.wired
+    t2 = w.fire(0.0, wired=True, arm_distance=1e9)
+    w.player.speed = w.player.ordered_speed = 0.0
+    t2.run = 8001.0
+    assert "WIRE_CUT" in run(w, 0.2) and not t2.wired
 
     # TMA: noisy bearings across an own-ship leg change plus one echo let auto-solve recover the target
     random.seed(7)

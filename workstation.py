@@ -188,8 +188,8 @@ class Workstation:
             y = TDC_ROW_Y0 + i * TDC_ROW_H
             art.engrave(bg, label, (30, y + 2), 12)
             art.engrave(bg, units, (214, y + 3), 10, art.WARN)
-        art.engrave(bg, "GYRO", (30, 430), 12)
-        art.engrave(bg, "RUN YD", (30, 448), 12)
+        art.engrave(bg, "GYRO", (22, 440), 11)
+        art.engrave(bg, "RUN YD", (124, 440), 11)
         for i, (sx, sy) in enumerate(TUBE_SW):
             art.engrave(bg, f"TUBE {i + 1}", (sx, sy - 33), 10, center=True)
         art.engrave(bg, "TORPS", (650, 590), 10, art.LEGEND_DIM)
@@ -450,8 +450,17 @@ class Workstation:
             crt.line(s, (qx - 3, qy - 3), (qx + 3, qy + 3), RED, 2)
             crt.line(s, (qx - 3, qy + 3), (qx + 3, qy - 3), RED, 2)
         for t in world.torpedoes:
-            if not t.hostile:  # own fish only: wire telemetry
-                crt.circle(s, P(t.x - own.x, t.y - own.y), 2, RED, 0)
+            if not t.hostile:  # own fish only: wire telemetry while the wire holds
+                fx, fy = P(t.x - own.x, t.y - own.y)
+                crt.circle(s, (fx, fy), 2 if t.wired else 1, RED, 0)
+                if t is con.wire_sel:
+                    crt.circle(s, (fx, fy), 6, RED, 1)
+                    if t.wire_aim:
+                        ax, ay = P(t.wire_aim[0] - own.x, t.wire_aim[1] - own.y)
+                        crt.line(s, (fx, fy), (ax, ay), DIM)
+                        crt.line(s, (ax - 3, ay), (ax + 3, ay), RED)
+                        crt.line(s, (ax, ay - 3), (ax, ay + 3), RED)
+                    crt.text(s, f"WIRE T{t.tube}  [ ] L", (R, 26), RED, small=True, center=True)
         h = math.radians(own.heading)
         crt.circle(s, c, 3, PHOSPHOR)
         crt.line(s, c, (c[0] + 12 * math.sin(h), c[1] - 12 * math.cos(h)), PHOSPHOR, 2)
@@ -544,12 +553,12 @@ class Workstation:
             y = TDC_ROW_Y0 + i * TDC_ROW_H
             if i == con.tdc.selected:
                 pygame.draw.polygon(f, art.WARN, [(17, y + 3), (17, y + 15), (25, y + 9)])
-            art.counter(f, (112, y), fmt.format(con.tdc.get(name)), 13)
+            art.counter(f, (112, y), fmt.format(con.tdc.get(name)), 12)
         sol = con.tdc.solve()
         far = sol is not None and sol.run > TORP_MAX_RUN
-        art.counter(f, (112, 428), f"{sol.gyro:05.1f}" if sol else "---.-", 13)
-        art.counter(f, (112, 446), f"{sol.run / YARD:6,.0f}" if sol else "------", 13)
-        art.lamp(f, (238, 446), sol is not None, art.RED if far else art.GREEN, 5)
+        art.counter(f, (56, 438), f"{sol.gyro:05.1f}" if sol else "---.-", 11)
+        art.counter(f, (172, 438), f"{sol.run / YARD:6,.0f}" if sol else "------", 11)
+        art.lamp(f, (250, 448), sol is not None, art.RED if far else art.GREEN, 5)
 
     def draw_teletype(self, f, con):
         r = PAPER_RECT
@@ -626,7 +635,7 @@ class Workstation:
             f.blit(font.render(tag, True, color), (x + 4, y - 7))
 
     def draw_help(self, f):
-        card = pygame.Rect(0, 0, 600, 588)
+        card = pygame.Rect(0, 0, 600, 614)
         card.center = (W // 2, H // 2)
         f.blit(art.texture(card.size, art.PAPER, grain=3), card.topleft)
         pygame.draw.rect(f, (40, 44, 48), card, 4)
@@ -641,6 +650,7 @@ class Workstation:
                 ("V", "look through the periscope", "LOOK button"),
                 ("A/D TAB M", "scope: train / power / mark", "drag / wheel"),
                 ("F2 / F4", "TMA plot / auto-solve (cadet)", ""),
+                ("[ ]  \\  L", "wire: steer / next fish / cut", "click fish, then aim"),
                 ("P / F1 / ESC", "pause / this card / quit", ""))
         for i, (keys, what, mouse) in enumerate(rows):
             y = card.y + 58 + i * 26

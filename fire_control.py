@@ -16,6 +16,7 @@ FIELDS = {
     "CRS": ("TGT CRS", "TRUE", "{:05.1f}", 1.0, 20.0, 0, 360, True),
     "ARM": ("SKR ARM", "YD", "{:5,.0f}", 100.0, 1500.0, 0, 6000, False),
     "DEP": ("RUN DEP", "M", "{:03.0f}", 5.0, 40.0, 5, 250, False),
+    "SPR": ("SPREAD", "DEG", "{:04.1f}", 1.0, 4.0, 0, 10, False),
 }
 
 
@@ -27,7 +28,7 @@ class TargetDataComputer:
     def __init__(self, own):
         self.own = own
         self.x, self.y = 0.0, 3000 * YARD
-        self.values = {"SPD": 10.0, "CRS": 90.0, "ARM": 1000.0, "DEP": 10.0}
+        self.values = {"SPD": 10.0, "CRS": 90.0, "ARM": 1000.0, "DEP": 10.0, "SPR": 0.0}
         self.selected = 0
 
     @property

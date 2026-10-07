@@ -37,7 +37,7 @@ TUBE_SW = ((672, 540), (752, 540))
 NMKR_BTN, PING_BTN = pygame.Rect(642, 640, 140, 24), pygame.Rect(642, 674, 140, 24)
 LAMPS = ("ENEMY SONAR", "TORPEDO", "CAVITATION", "DIESEL", "MASTS UP", "BROACH", "LEAK", "HULL STRESS", "BELOW LAYER")
 ANNUNCIATORS = tuple(pygame.Rect(802, 498 + i * 22, 102, 18) for i in range(len(LAMPS)))  # warning panel tiles
-TDC_ROW_Y0, TDC_ROW_H = 296, 21
+TDC_ROW_Y0, TDC_ROW_H = 290, 20
 
 # inside the CRT (local coordinates)
 WF_POS = (20, 30)
