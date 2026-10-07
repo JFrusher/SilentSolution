@@ -41,6 +41,7 @@ Operator side (only sees the world through sensors):
 |---|---|
 | `sensors.py` | passive and active sonar, periscope optics |
 | `fire_control.py` | Torpedo Data Computer |
+| `tma.py` | bearing history, TMA fit and auto-solve |
 | `displays.py` | waterfall, acoustic profile analyser, teleprinter |
 | `audio.py` | procedural sound |
 | `console.py` | operator state, input and event reporting |

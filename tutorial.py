@@ -186,11 +186,15 @@ class Tutorial:
               "SET TGT RNG = ECHO RANGE  (W/S, UP/DOWN)",
               lambda t, c: abs(c.tdc.get("RNG") * YARD - c.world.player.range_to(t.merchant)) < 400 * YARD,
               highlight=("tdc",)),
-            S(lambda c: f"TARGET MOTION ANALYSIS: SET TGT SPD AND TGT CRS SO THE TDC TICK STAYS ON THE TRACE. "
+            S("F2 FLIPS THE LEFT OF THE MONITOR TO THE TMA PLOT: TRUE BEARING ACROSS, TIME DOWN. EVERY BEARING YOU "
+              "HOLD WITH THE DIAL, MARK OR PING IS A DOT; THE BRIGHT CURVE IS WHERE THE TDC SAYS THE TARGET SHOULD "
+              "HAVE BEEN.", "OPEN THE TMA PLOT  (F2)", lambda t, c: c.crt_page == "TMA", highlight=("waterfall",)),
+            S(lambda c: f"TARGET MOTION ANALYSIS: SET TGT SPD AND TGT CRS UNTIL THE CURVE RUNS THROUGH THE DOTS AND THE "
+                        f"FIT READS UNDER A DEGREE - F4 AUTO-SOLVES IN TRAINING. THEN F2 BACK TO THE WATERFALL. "
                         f"INTEL: ABOUT {self.merchant.speed / KNOT:.0f} KNOTS, COURSE ABOUT "
                         f"{round(self.merchant.heading / 10) * 10:03.0f}. RE-MARK (M) IF THE TICK HAS DRIFTED.",
-              "SET TGT SPD AND TGT CRS",
-              lambda t, c: abs(c.tdc.get("SPD") - t.merchant.speed / KNOT) <= 1.5 and
+              "SET TGT SPD AND TGT CRS, THEN F2",
+              lambda t, c: abs(c.tdc.get("SPD") - t.merchant.speed / KNOT) <= 1.5 and c.crt_page == "SONAR" and
               abs(angle_diff(c.tdc.get("CRS"), t.merchant.heading)) <= 15, highlight=("tdc", "waterfall")),
 
             # --- the periscope: seeing, and being seen ---

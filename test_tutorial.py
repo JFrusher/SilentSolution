@@ -96,8 +96,10 @@ def act(tut, con, once):
     elif g.startswith("SET TGT RNG"):
         con.tdc.selected = 1
         con.tdc.set("RNG", p.range_to(tut.merchant) / YARD)
+    elif g.startswith("OPEN THE TMA"):
+        do("page", lambda: con.key(pygame.K_F2))
     elif g.startswith("SET TGT SPD"):
-        do("tma", lambda: aim(con, tut.merchant))
+        do("tma", lambda: (aim(con, tut.merchant), con.key(pygame.K_F2)))
     elif g.startswith("SINK THE MERCHANT"):
         if not ours_running and 0 in con.tubes:
             aim(con, tut.merchant)

@@ -17,6 +17,7 @@ from layout import (BLOW_BTN, CRT_RECT, DEPTH_C, DEPTH_R, HOLD_BTN, LOOK_BTN, NM
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
 from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
                  YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
+from tma import TMALog
 from tuning import DIFFICULTY
 
 
@@ -88,6 +89,8 @@ class Console:
         self.exposure = 0.0      # estimated chance of being spotted per minute, 0..1
         self.last_valve = -99.0
         self.debug = False       # F3: truth overlay for playtesting and tuning
+        self.tma = TMALog()      # bearing history for the TMA plot
+        self.crt_page = "SONAR"  # F2 flips the left of the monitor between waterfall and TMA plot
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
@@ -181,12 +184,14 @@ class Console:
         self.actions.add("SCOPE_MARK")
         if target is None:
             self.tdc.set("BRG", self.scope_brg)
+            self.tma.add(self.world.time, true_brg, "SCOPE")
             return self.say(f"MARK {self.scope_brg:05.1f}R. NOTHING IN THE WIRES")
         rel = (target.brg - p.heading) % 360
         rng = self.optics.rangefinder(target, self.high_power)
         self.tdc.set("BRG", rel)
         self.tdc.set("RNG", rng / YARD)
         self.scope_fix = (target.brg, rng, self.world.time)
+        self.tma.add(self.world.time, target.brg, "SCOPE", rng)
         self.say(f"MARK! {rel:05.1f}R RANGE {rng / YARD:,.0f} YD")
 
     def estimate_exposure(self):
@@ -250,6 +255,7 @@ class Console:
 
     def mark(self):
         self.tdc.set("BRG", self.dial)
+        self.tma.add(self.world.time, self.dial + self.world.player.heading, "MARK")
         self.actions.add("MARK")
         self.say(f"MARK BEARING {self.dial:05.1f}R")
 
@@ -285,9 +291,26 @@ class Console:
             pygame.K_RETURN: lambda: self.actions.add("ENTER"),
             pygame.K_KP_ENTER: lambda: self.actions.add("ENTER"),
             pygame.K_F3: lambda: setattr(self, "debug", not self.debug),
+            pygame.K_F2: self.flip_page,
+            pygame.K_F4: self.auto_solve,
         }
         if k in actions:
             actions[k]()
+
+    def flip_page(self):
+        self.crt_page = "TMA" if self.crt_page == "SONAR" else "SONAR"
+        self.actions.add("PAGE_" + self.crt_page)
+
+    def auto_solve(self):
+        """Least-squares fit of the bearing history: fitted on Cadet / Training consoles only."""
+        if not self.diff["ping_warning"]:
+            return self.say("AUTO-SOLVE NOT FITTED - PLOT IT YOURSELF")
+        result = self.tma.auto_solve(self.world.time, self.world.player, self.tdc)
+        self.actions.add("AUTOSOLVE")
+        if isinstance(result, str):
+            return self.say(result)
+        fit, ambiguous = result
+        self.say(f"AUTO-SOLVE: FIT {fit:.1f} DEG" + (". AMBIGUOUS - CHANGE COURSE, NEW LEG" if ambiguous else ". CHECK IT"))
 
     def cycle_scope(self):
         self.scope_range = SCOPE_RANGES[(SCOPE_RANGES.index(self.scope_range) + 1) % len(SCOPE_RANGES)]
@@ -408,6 +431,9 @@ class Console:
             b = math.radians(brg + p.heading)
             self.echoes.append((p.x + rng * math.sin(b), p.y + rng * math.cos(b), world.time))
             self.last_echo = (brg, rng / YARD)
+            tdc_true = math.degrees(math.atan2(self.tdc.x, self.tdc.y)) % 360
+            if abs(angle_diff(brg + p.heading, tdc_true)) < 3:  # an echo on the plotted target: range for TMA
+                self.tma.add(world.time, brg + p.heading, "ECHO", rng)
             self.say(f"ECHO {brg:05.1f}R {rng / YARD:,.0f} YD")
         self.echoes = [e for e in self.echoes if world.time - e[2] < ECHO_FADE]
         rain = world.ocean.rain
@@ -419,6 +445,7 @@ class Console:
         self.signal = float((gains * levels / 160).max(initial=0.0)) / (1 + 2 * rain)
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
         self.audio.set_hydrophone(self.signal)
+        self.tma.update(world.time, p, self.signal > 0.5, self.dial + p.heading)
         self.torpedo_warning = bool(np.any(hostile & (levels > 30)))
 
         self.flash = max(0.0, self.flash - dt * 2.5)

@@ -18,6 +18,7 @@ from layout import (ANNUNCIATORS, BLOW_BTN, CONSOLE, CRT_RECT, DEPTH_C, DEPTH_R,
                     SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H, TDC_ROW_Y0,
                     TELEGRAPH_BTNS, TELEGRAPH_RECT, TELETYPE, TUBE_SW, W, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
 from sensors import SCOPE_FOV
+from tma import PLOT_WINDOW as TMA_WINDOW
 from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, SCOPE_TOP, SOUND_SPEED,
                  TELEGRAPH, TORP_MAX_RUN, YARD)
 
@@ -282,16 +283,19 @@ class Workstation:
 
     def _crt_sonar(self, s, crt, con):
         x0, y0 = WF_POS
-        crt.text(s, "PASSIVE WATERFALL  BRG REL", (x0 + 14, 12), DIM, small=True)
-        s.blit(con.waterfall.draw(), WF_POS)
-        crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
-        for b in (0, 90, 180, 270, 359):
-            crt.text(s, f"{b:03d}", (x0 + b / 360 * WF_W - 10, y0 + WF_H + 3), DIM, small=True)
-        dx = x0 + con.dial / 360 * WF_W
-        crt.line(s, (dx, y0), (dx, y0 + WF_H - 1), RED)
-        tx = x0 + con.tdc.get("BRG") / 360 * WF_W  # TDC estimate tick: stays on the trace if TMA is right
-        crt.line(s, (tx, y0 - 5), (tx, y0 + 8), PHOSPHOR, 2)
-        crt.line(s, (tx, y0 + WF_H - 8), (tx, y0 + WF_H + 1), PHOSPHOR, 2)
+        if con.crt_page == "TMA":
+            self._crt_tma(s, crt, con)
+        else:
+            crt.text(s, "PASSIVE WATERFALL  BRG REL     F2: TMA PLOT", (x0 + 14, 12), DIM, small=True)
+            s.blit(con.waterfall.draw(), WF_POS)
+            crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
+            for b in (0, 90, 180, 270, 359):
+                crt.text(s, f"{b:03d}", (x0 + b / 360 * WF_W - 10, y0 + WF_H + 3), DIM, small=True)
+            dx = x0 + con.dial / 360 * WF_W
+            crt.line(s, (dx, y0), (dx, y0 + WF_H - 1), RED)
+            tx = x0 + con.tdc.get("BRG") / 360 * WF_W  # TDC estimate tick: stays on the trace if TMA is right
+            crt.line(s, (tx, y0 - 5), (tx, y0 + 8), PHOSPHOR, 2)
+            crt.line(s, (tx, y0 + WF_H - 8), (tx, y0 + WF_H + 1), PHOSPHOR, 2)
         self._spectrum(s, crt, con)
 
         for i, msg in enumerate(con.log):
@@ -319,6 +323,54 @@ class Workstation:
             crt.rect(s, (x0 + 10, y0 + 90, WF_W - 20, 34), (0, 0, 0))
             crt.frame(s, (x0 + 10, y0 + 90, WF_W - 20, 34), color=RED)
             crt.text(s, text, (x0 + WF_W / 2, y0 + 107), RED, big=True, center=True)
+
+    def _crt_tma(self, s, crt, con):
+        """Bearing (true) across, time down: your bearings as dots, the TDC's estimate as a curve. When course,
+        speed and range are right, the curve runs through the dots."""
+        x0, y0 = WF_POS
+        now, own, tdc, log = con.world.time, con.world.player, con.tdc, con.tma
+        centre = math.degrees(math.atan2(tdc.x, tdc.y)) % 360
+        span = 40.0
+
+        def X(b):
+            return x0 + WF_W / 2 + ((b - centre + 180) % 360 - 180) / span * WF_W
+
+        def Y(t):
+            return y0 + (now - t) / TMA_WINDOW * WF_H
+
+        crt.text(s, "TMA  BRG TRUE vs TIME      F2: WATERFALL", (x0 + 14, 12), DIM, small=True)
+        crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
+        grid = (12, 46, 22)
+        for k in range(-20, 21, 10):
+            gx = X(centre + k)
+            crt.line(s, (gx, y0), (gx, y0 + WF_H - 1), grid)
+            crt.text(s, f"{(centre + k) % 360:03.0f}", (gx - 10, y0 + WF_H + 3), DIM, small=True)
+        for m in range(1, int(TMA_WINDOW // 60)):
+            gy = Y(now - 60 * m)
+            crt.line(s, (x0, gy), (x0 + WF_W - 1, gy), grid)
+            crt.text(s, f"-{m}M", (x0 + 2, gy - 12), DIM, small=True)
+        times = np.linspace(max(now - TMA_WINDOW, log.track[0][0] if log.track else now), now, 48)
+        pred = log.predicted(times, now, own, tdc)
+        if pred is not None:
+            crt.lines(s, [(X(b), Y(t)) for b, t in zip(pred[0], times) if abs((b - centre + 180) % 360 - 180) < span / 2],
+                      PHOSPHOR, 2)
+        for t, b, kind, rng in log.recent(now, TMA_WINDOW):
+            if abs((b - centre + 180) % 360 - 180) > span / 2:
+                continue
+            px, py = X(b), Y(t)
+            if kind == "HYD":
+                crt.circle(s, (px, py), 1, DIM, 0)
+            elif kind == "MARK":
+                crt.circle(s, (px, py), 3, PHOSPHOR, 0)
+            elif kind == "SCOPE":
+                crt.rect(s, (px - 3, py - 3, 7, 7), (220, 255, 220), 0)
+            else:  # ECHO: ranged
+                crt.circle(s, (px, py), 4, RED, 1)
+        fit = log.fit(now, own, tdc)
+        verdict = ("NO DATA", DIM) if fit is None else (f"FIT {fit:4.1f} DEG", PHOSPHOR if fit < 1.0 else RED if fit > 3 else DIM)
+        crt.text(s, verdict[0], (x0 + WF_W - 100, y0 + 4), verdict[1], small=True)
+        if con.diff["ping_warning"]:
+            crt.text(s, "F4: AUTO-SOLVE", (x0 + WF_W - 100, y0 + 18), DIM, small=True)
 
     def _spectrum(self, s, crt, con):
         r, sp = SPEC_RECT, con.spectrum
@@ -562,7 +614,7 @@ class Workstation:
             f.blit(font.render(tag, True, color), (x + 4, y - 7))
 
     def draw_help(self, f):
-        card = pygame.Rect(0, 0, 600, 562)
+        card = pygame.Rect(0, 0, 600, 588)
         card.center = (W // 2, H // 2)
         f.blit(art.texture(card.size, art.PAPER, grain=3), card.topleft)
         pygame.draw.rect(f, (40, 44, 48), card, 4)
@@ -576,6 +628,7 @@ class Workstation:
                 ("G", "periscope depth (15 m)", "P.D. button"), ("U / K", "periscope / snorkel up-down", "levers"),
                 ("V", "look through the periscope", "LOOK button"),
                 ("A/D TAB M", "scope: train / power / mark", "drag / wheel"),
+                ("F2 / F4", "TMA plot / auto-solve (cadet)", ""),
                 ("P / F1 / ESC", "pause / this card / quit", ""))
         for i, (keys, what, mouse) in enumerate(rows):
             y = card.y + 58 + i * 26
