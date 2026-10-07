@@ -11,6 +11,7 @@ from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
 from layout import WF_W
 from sensors import PeriscopeOptics, cone_gain
+from tma import TMALog
 from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
                  bearing)
 from tuning import DIFFICULTY
@@ -258,6 +259,25 @@ if __name__ == "__main__":
     w.player.z = 40.0
     w.step(0.1)
     assert PeriscopeOptics(w).look() is None, "masts struck below periscope depth: blind"
+
+    # TMA: noisy bearings across an own-ship leg change plus one echo let auto-solve recover the target
+    random.seed(7)
+    own, tgt = Vessel(0, 0, 0, 5 * KNOT), Vessel(3000, 6000, 250, 10 * KNOT)
+    log, tdc = TMALog(), TargetDataComputer(own)
+    t = 0.0
+    while t < 300:
+        if t == 150:
+            own.heading = 90.0  # leg change: makes range observable from bearings
+        log.update(t, own, True, bearing(own.x, own.y, tgt.x, tgt.y) + random.gauss(0, 0.5))
+        if t == 200:
+            log.add(t, bearing(own.x, own.y, tgt.x, tgt.y), "ECHO", own.range_to(tgt))
+        own.step(0.5), tgt.step(0.5), tdc.update(0.5)
+        t += 0.5
+    result = log.auto_solve(t, own, tdc)
+    assert result[1] is False, "two legs and an echo: the solution should be well conditioned"
+    assert abs(angle_diff(tdc.get("CRS"), 250)) <= 15 and abs(tdc.get("SPD") - 10) <= 2, (tdc.get("CRS"), tdc.get("SPD"), result)
+    assert abs(tdc.get("RNG") * YARD - own.range_to(tgt)) / own.range_to(tgt) < 0.15, tdc.get("RNG")
+    assert log.fit(t, own, tdc) < 1.5
 
     wf = WaterfallDisplay()
     wf.update(ROW_INTERVAL, np.array([90.0, 0.0]), np.array([200.0, 200.0]))
