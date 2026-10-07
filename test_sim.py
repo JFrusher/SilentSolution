@@ -15,7 +15,7 @@ from sensors import PeriscopeOptics, cone_gain
 from tma import TMALog
 from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
                  bearing)
-from tuning import DIFFICULTY
+from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME
 
 
 def calm_or_storm(w, rain):
@@ -260,6 +260,25 @@ if __name__ == "__main__":
     w.player.z = 40.0
     w.step(0.1)
     assert PeriscopeOptics(w).look() is None, "masts struck below periscope depth: blind"
+
+    # damage control: a hit breaks systems; one party repairs them in the order set, one at a time
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [], systems_damage=True)
+    w.damage(75, ev := [])
+    assert ev[0][0] == "DAMAGE" and len(w.player.damaged) == 3, ev
+    p = Submarine(0, 0, 0, 0, z=60)
+    w = WorldSimulation(p, [])
+    p.break_systems(["PLANES", "MOTORS"])
+    p.repair_first("MOTORS")
+    assert list(p.damaged) == ["MOTORS", "PLANES"]
+    p.ordered_speed, p.ordered_depth = 15 * KNOT, 160
+    run(w, 60)
+    assert abs(p.speed / KNOT - DAMAGED_MOTOR_KT) < 0.1 and p.z < 100, (p.speed / KNOT, p.z)  # one motor, jammed planes
+    assert "REPAIRED" in run(w, REPAIR_TIME["MOTORS"] - 59) and list(p.damaged) == ["PLANES"]
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.world.player.break_systems(["ACTIVE SONAR", "TUBE 1"])
+    con.ping()
+    con.fire()
+    assert con.ping_time < 0 and [t.tube for t in con.world.torpedoes] == [2], con.world.torpedoes
 
     # spread salvo: F with SPREAD set fires every ready tube, fanned symmetrically about the solution, on the wire
     con = Console("COMMANDER", AudioSynthesizer())

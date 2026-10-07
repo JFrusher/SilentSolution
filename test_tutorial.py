@@ -106,6 +106,14 @@ def act(tut, con, once):
             con.click(layout.TUBE_SW[con.tubes.index(0)])
     elif g.startswith("CHANGE SCOPE"):
         do("t", lambda: con.key(pygame.K_t))
+    elif g.startswith("F5, PLANES"):
+        def board():
+            con.key(pygame.K_F5)
+            k = con.damage_rows().index("PLANES")
+            wf = layout.CRT_RECT.x + layout.WF_POS[0], layout.CRT_RECT.y + layout.WF_POS[1]
+            con.click((wf[0] + 60, wf[1] + layout.DC_ROW_Y0 + k * layout.DC_ROW_H + layout.DC_ROW_H // 2))
+            con.key(pygame.K_F5)
+        do("dc", board)
     elif g.startswith("DIVE BELOW"):
         do("deep", lambda: (con.order_depth(150), con.telegraph(1)))
     elif g.startswith("CLASSIFY") and hostile:

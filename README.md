@@ -32,7 +32,7 @@ World side (truth, never drawn directly):
 
 | Path | What |
 |---|---|
-| `sim.py` | vessels, torpedoes, ocean and weather, masts, ship classes, the world step |
+| `sim.py` | vessels, torpedoes, ocean and weather, masts, damage and repairs, ship classes, the world step |
 | `ai.py` | ship behaviour (merchants, escorts, submarines), convoys, the wave director |
 
 Operator side (only sees the world through sensors):

@@ -49,3 +49,12 @@ WAVE_GAP = 30.0           # s of quiet between waves
 TONNAGE = {"MERCHANT": 6500, "ESCORT": 1600, "SUB": 1100}
 WAVE_TIME_LIMIT = 900.0       # s; after this a wave's far-off stragglers count as gone
 LATE_DESPAWN_RANGE = 9000.0   # m, the despawn range once a wave is over its time limit
+
+# Damage control: seconds one repair party needs per system. It works the top of the list first.
+REPAIR_TIME = {"HYDROPHONES": 90.0, "ACTIVE SONAR": 60.0, "PLANES": 75.0, "RUDDER": 60.0, "TUBE 1": 90.0,
+               "TUBE 2": 90.0, "PERISCOPE": 120.0, "SNORKEL": 90.0, "BATTERY": 150.0, "MOTORS": 120.0}
+DAMAGED_HYDROPHONES = 0.3  # passive levels with a hydrophone array knocked out
+DAMAGED_PLANES = 0.25      # dive rate with the planes jammed
+DAMAGED_RUDDER = 0.3       # turn rate with the steering gear damaged
+DAMAGED_MOTOR_KT = 5.0     # top speed on one motor
+DAMAGED_BATTERY = 2.0      # drain with cracked cells

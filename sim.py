@@ -7,7 +7,8 @@ from typing import Any
 
 import numpy as np
 
-from tuning import CHARGE_LETHAL, CHARGE_REACH, SPOT_BASE, SPOT_REACH
+from tuning import (CHARGE_LETHAL, CHARGE_REACH, DAMAGED_BATTERY, DAMAGED_MOTOR_KT, DAMAGED_PLANES, DAMAGED_RUDDER,
+                    REPAIR_TIME, SPOT_BASE, SPOT_REACH)
 
 SOUND_SPEED = 1500.0  # m/s
 KNOT = 0.514444       # m/s
@@ -44,7 +45,6 @@ AUTO_LOWER_DEPTH = 20.0  # m, ordering deeper than this strikes the masts
 FEATHER_KT = 6.0         # kt, scope up faster than this throws a feather
 SCOPE_DAMAGE_KT = 10.0   # kt, scope up faster than this can bend it (if the difficulty says so)
 SNORKEL_FLOOD_KT = 8.0   # kt, snorkel head floods faster than this
-SCOPE_REPAIR = 120.0     # s to free a damaged scope
 DIESEL_TRIP = 10.0       # s the diesels stay stalled after the snorkel floods
 WIRE_LENGTH = 8000.0     # m of guidance wire on the spool
 WIRE_MAX_KT = 12.0       # kt; faster than this and the wire parts
@@ -171,14 +171,14 @@ class Submarine(Vessel):
     lower_delay: float = 0.0   # difficulty: seconds to strike masts once ordered deep
     scope_up: bool = False
     snorkel_up: bool = False
-    scope_damage: float = 0.0  # s until the scope is freed
     diesel_trip: float = 0.0   # s the diesels stay stalled
     head_valve: bool = False   # snorkel head shut by a wave
     scope_clear: bool = False  # scope head out of the water right now
     snorkel_clear: bool = False
     wave: float = 0.0          # sea surface elevation over the boat, m
     lowering: float = -1.0     # countdown while the masts are being struck
-    alerts: list = field(default_factory=list)  # mast events for the world to report
+    alerts: list = field(default_factory=list)  # own-ship events for the world to report: kind or (kind, detail)
+    damaged: dict = field(default_factory=dict)  # system -> s of repair left, in the party's work order
 
     def __post_init__(self):
         self.ordered_depth, self.ordered_speed = self.z, self.speed
@@ -202,12 +202,33 @@ class Submarine(Vessel):
         if self.z > MAST_DEPTH:
             return "TOO DEEP FOR MASTS"
         if mast == "scope":
-            if self.scope_damage > 0:
+            if "PERISCOPE" in self.damaged:
                 return "PERISCOPE JAMMED"
             self.scope_up = True
         else:
+            if "SNORKEL" in self.damaged:
+                return "SNORKEL DAMAGED"
             self.snorkel_up = True
         return None
+
+    def break_systems(self, names):
+        for name in names:
+            self.damaged.setdefault(name, REPAIR_TIME[name])
+        self.scope_up = self.scope_up and "PERISCOPE" not in self.damaged
+        self.snorkel_up = self.snorkel_up and "SNORKEL" not in self.damaged
+
+    def repair_first(self, name):
+        """Send the damage-control party to `name` next."""
+        if name in self.damaged:
+            self.damaged = {name: self.damaged.pop(name), **self.damaged}
+
+    def _repair(self, dt):
+        if self.damaged:
+            first = next(iter(self.damaged))
+            self.damaged[first] -= dt
+            if self.damaged[first] <= 0:
+                del self.damaged[first]
+                self.alerts.append(("REPAIRED", first))
 
     def lower_masts(self):
         self.scope_up = self.snorkel_up = False
@@ -230,12 +251,11 @@ class Submarine(Vessel):
                     self.lower_masts()
                     self.alerts.append("MASTS_LOWERED")
         if self.scope_up and self.mast_damage and kt > SCOPE_DAMAGE_KT:
-            self.scope_up, self.scope_damage = False, SCOPE_REPAIR
+            self.break_systems(["PERISCOPE"])
             self.alerts.append("SCOPE_DAMAGED")
         if self.snorkel_up and kt > SNORKEL_FLOOD_KT and self.diesel_trip <= 0:
             self.diesel_trip = DIESEL_TRIP
             self.alerts.append("SNORKEL_FLOODED")
-        self.scope_damage = max(0.0, self.scope_damage - dt)
         self.diesel_trip = max(0.0, self.diesel_trip - dt)
         shut = self.snorkel_up and not self.snorkel_clear
         if shut and not self.head_valve:
@@ -247,8 +267,11 @@ class Submarine(Vessel):
         kt = self.speed / KNOT
         self.cavitating = kt > 8 + self.z / 15  # pressure suppresses cavitation: deeper boats can run faster quietly
         self._masts(dt, kt)
+        self._repair(dt)
+        hurt = self.damaged
         if self.uses_battery:
-            self.battery = max(0.0, self.battery - (0.005 + 0.0006 * kt * kt) * dt)
+            drain = (0.005 + 0.0006 * kt * kt) * (DAMAGED_BATTERY if "BATTERY" in hurt else 1.0)
+            self.battery = max(0.0, self.battery - drain * dt)
             if self.snorkeling:
                 self.battery = min(100.0, self.battery + 0.35 * dt)
         if self.uses_oxygen:
@@ -256,15 +279,17 @@ class Submarine(Vessel):
             self.o2 = min(100.0, self.o2 + dt) if fresh else max(0.0, self.o2 - 100 / 1200 * dt)
 
         dv = ACCEL * dt
-        self.speed += clamp((self.ordered_speed if self.battery > 0 else 0.0) - self.speed, -dv, dv)
+        top = DAMAGED_MOTOR_KT * KNOT if "MOTORS" in hurt else math.inf
+        self.speed += clamp((min(self.ordered_speed, top) if self.battery > 0 else 0.0) - self.speed, -dv, dv)
         if self.blowing:
             self.z = max(PERISCOPE_DEPTH, self.z - BLOW_RATE * dt)
             if self.z <= PERISCOPE_DEPTH:
                 self.blowing, self.ordered_depth = False, PERISCOPE_DEPTH
         else:
-            self.z += clamp(self.ordered_depth - self.z, -DIVE_RATE * dt, DIVE_RATE * dt)
+            rate = DIVE_RATE * (DAMAGED_PLANES if "PLANES" in hurt else 1.0) * dt
+            self.z += clamp(self.ordered_depth - self.z, -rate, rate)
         self.z = clamp(self.z + len(self.leaks) * LEAK_SINK * dt, 0.0, 400.0)  # flooding makes her heavy
-        steerage = min(1.0, self.speed / (4 * KNOT))
+        steerage = min(1.0, self.speed / (4 * KNOT)) * (DAMAGED_RUDDER if "RUDDER" in hurt else 1.0)
         self.heading = (self.heading + self.rudder / MAX_RUDDER * TURN_RATE * steerage * dt) % 360
         self.leaks = [t - dt for t in self.leaks if t > dt]  # damage control works through them
         self.noise = 0.25 + 0.035 * kt + 0.9 * self.cavitating + 0.8 * self.snorkeling + 1.5 * self.blowing
@@ -428,6 +453,7 @@ class WorldSimulation:
     hull: float = 100.0  # own boat integrity, %
     min_hull: float = 0.0  # training floor: shaken, never sunk
     leaks_enabled: bool = False
+    systems_damage: bool = False  # hits knock out own-boat systems for damage control to repair
     torp_damage: float = 75.0
     spot_mult: float = 1.0  # difficulty: how sharp enemy lookouts are
     sunk: list = field(default_factory=list)
@@ -445,7 +471,7 @@ class WorldSimulation:
         for v in [self.player, *self.targets, *self.torpedoes, *self.charges]:
             v.step(dt)
         if isinstance(p, Submarine) and p.alerts:
-            events += [(a, p, None) for a in p.alerts]
+            events += [(a, p, None) if isinstance(a, str) else (a[0], p, a[1]) for a in p.alerts]
             p.alerts.clear()
         self.effects = [e for e in self.effects if self.time - e[3] < 20]
         self.targets = [t for t in self.targets if not (isinstance(t, Decoy) and t.ttl <= 0)]
@@ -504,6 +530,13 @@ class WorldSimulation:
 
     def damage(self, dmg, events):
         self.hull = max(self.min_hull, self.hull - dmg)
+        p = self.player
+        if self.systems_damage and dmg >= 8 and isinstance(p, Submarine):
+            pool = [s for s in REPAIR_TIME if s not in p.damaged]
+            hit = random.sample(pool, min(len(pool), 1 + int(dmg // 30)))
+            p.break_systems(hit)
+            if hit:
+                events.append(("DAMAGE", p, hit))
         if self.leaks_enabled and dmg >= 8 and isinstance(self.player, Submarine):
             self.player.leaks.append(LEAK_REPAIR)
             events.append(("LEAK", self.player, len(self.player.leaks)))

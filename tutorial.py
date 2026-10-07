@@ -37,6 +37,8 @@ def _clear(world):
     world.ais.clear()
     world.torpedoes.clear()
     world.charges.clear()
+    if hasattr(world.player, "damaged"):
+        world.player.damaged.clear()
 
 
 def _kt(con):
@@ -53,6 +55,7 @@ class Tutorial:
         con.tutorial = self
         con.world.director = None  # the tutorial places every contact itself
         con.world.min_hull = HULL_FLOOR
+        con.world.systems_damage = False  # only the damage-control drill breaks things
         o = con.world.ocean
         o.rain = o.front = 0.0
         o.timer = 1e9  # the instructor orders the weather
@@ -248,6 +251,16 @@ class Tutorial:
             S("COME BACK UP TO 60 METRES AND RING UP SLOW FOR THE NEXT EXERCISE.", "ORDER 60 M AND SLOW",
               lambda t, c: c.world.player.z <= 70 and _kt(c) == 4, setup=lambda t, c: _clear(c.world),
               highlight=("depth", "telegraph")),
+            S("DAMAGE CONTROL: THAT PATTERN SPRANG THE BOAT - HYDROPHONES, PLANES AND TUBE 2 ARE OUT. ONE PARTY "
+              "WORKS DOWN THE LIST, TOP FIRST. F5 OPENS THE DAMAGE BOARD: CLICK A LINE TO SEND THE PARTY THERE "
+              "FIRST. JAMMED PLANES CAN'T PULL YOU OUT OF A DIVE - PUT THEM FIRST, THEN F5 BACK TO THE WATERFALL.",
+              "F5, PLANES FIRST, F5 BACK",
+              lambda t, c: "REPAIR_FIRST" in c.actions and c.crt_page == "SONAR" and
+              next(iter(c.world.player.damaged), None) == "PLANES",
+              setup=lambda t, c: c.world.player.break_systems(["HYDROPHONES", "PLANES", "TUBE 2"]),
+              highlight=("waterfall",),
+              outro="INSTRUCTOR: GOOD. FOR THE EXERCISE THE DAMAGE IS MADE GOOD; ON PATROL HITS BREAK SYSTEMS AT "
+                    "RANDOM AND THE PARTY TAKES MINUTES OVER EACH."),
             S("TORPEDO IN THE WATER! AN ENEMY SUBMARINE HAS FIRED ON YOU. THE TORPEDO LAMP FLASHES AND ITS TRACE IS "
               "BRIGHT AND NARROW, BEARING MOVING FAST. PUT THE DIAL ON IT: THE PROFILE SHOWS A SHARP HIGH SPIKE.",
               "CLASSIFY THE INCOMING FISH: CLASS = TORPEDO",
@@ -267,7 +280,8 @@ class Tutorial:
 
             # --- graduation ---
             S("DRILL COMPLETE: YOU HAVE WORKED EVERY STATION. ON PATROL, CONVOYS ARRIVE IN WAVES WITH ESCORTS "
-              "(DEPTH CHARGES, NOISEMAKERS) AND SUBMARINES (RETURN FIRE). YOU ARE RESUPPLIED BETWEEN WAVES. "
+              "(DEPTH CHARGES, NOISEMAKERS) AND SUBMARINES (RETURN FIRE). HITS BREAK SYSTEMS FOR THE DAMAGE PARTY "
+              "(F5). YOU ARE RESUPPLIED BETWEEN WAVES. "
               "COMMANDER ADDS A REAL BATTERY YOU MUST SNORKEL TO CHARGE; IRON CAPTAIN ADDS OXYGEN, FLOODING LEAKS, "
               "SHARPER LOOKOUTS, A SCOPE THAT BENDS AT SPEED AND A LAYER THAT HIDES CONTACTS COMPLETELY. "
               "GOOD HUNTING.",
@@ -321,6 +335,7 @@ class Tutorial:
 
     def _spawn_sub_and_fire(self, t, con):
         w = con.world
+        w.player.damaged.clear()  # the damage-control drill's damage is made good
         self.sub = _spawn(w, 300.0, 1800.0, w.player.heading + 120, 0.0, z=60.0)
         ai = SubmarineAI(self.sub, self.sub.heading, stealth=0.5, top_speed=12 * KNOT, aggression=0.8,
                          detect_radius=4000.0, layer_sensitivity=0.0, torpedo_speed=TRAINING["enemy_torp_kt"] * KNOT,
