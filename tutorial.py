@@ -134,24 +134,24 @@ class Tutorial:
             S("ENGINEERING GAUGES, TOP RIGHT: DEPTH WITH HULL PRESSURE IN PSI (RED PAST 250 M IS CRUSH DEPTH), "
               "BATTERY, SELF NOISE (RED MEANS CAVITATION - ENEMIES HEAR IT), HULL INTEGRITY.",
               "STUDY THE GAUGES - ENTER", lambda t, c: "ENTER" in c.actions, highlight=("gauges",)),
-            S("WARNING LAMPS LIGHT FOR EVERY SOUND CUE: ENEMY SONAR, TORPEDO, CAVITATION, DIESEL, MASTS UP (RED "
+            S("THE ALARM PANEL HAS A LIT TILE FOR EVERY SOUND CUE, LEGEND PRINTED ON IT: ENEMY SONAR, TORPEDO, CAVITATION, DIESEL, MASTS UP (RED "
               "WHEN YOU ARE LIKELY TO BE SEEN), BROACH, LEAK, HULL STRESS, BELOW LAYER. THIS BOAT CAN BE FOUGHT "
               "WITH THE SOUND OFF.",
               "STUDY THE LAMPS - ENTER", lambda t, c: "ENTER" in c.actions, highlight=("lamps",)),
-            S("ENGINE TELEGRAPH, BOTTOM LEFT: Z / X OR CLICK A SECTOR. RING UP HALF AHEAD.",
-              "RING UP HALF  (X, CLICK SECTOR)", lambda t, c: _kt(c) == 8, highlight=("telegraph",)),
+            S("ENGINE ORDER, BOTTOM LEFT: Z / X OR PRESS A LIT BUTTON. THE LEDS SHOW ORDERED AND ACTUAL KNOTS. RING UP HALF.",
+              "RING UP HALF  (X, PRESS HALF)", lambda t, c: _kt(c) == 8, highlight=("telegraph",)),
             S("SPEED IS NOISE. RING UP FLANK AND WATCH THE SELF NOISE NEEDLE SWING INTO THE RED AS THE SCREWS "
               "CAVITATE. DEEPER WATER LETS YOU RUN FASTER BEFORE THEY BOIL.",
               "RING UP FLANK UNTIL CAVITATING", lambda t, c: c.world.player.cavitating,
               highlight=("telegraph", "noise", "lamps"), outro="CAVITATING: EVERY ENEMY IN RANGE CAN HEAR YOU NOW."),
             S("QUIET AGAIN: RING DOWN TO SLOW.", "RING DOWN TO SLOW  (Z)",
               lambda t, c: _kt(c) == 4 and not c.world.player.cavitating, highlight=("telegraph", "noise")),
-            S("HELM: LEFT / RIGHT ARROWS OR DRAG THE WHEEL. PUT ON RUDDER AND COME ROUND 30 DEGREES. "
+            S("HELM: LEFT / RIGHT ARROWS OR DRAG THE CONTROL YOKE. PUT ON RUDDER AND COME ROUND 30 DEGREES. "
               "THE BOAT ONLY ANSWERS THE HELM WITH WAY ON.",
-              "TURN 30 DEG  (LEFT/RIGHT, DRAG WHEEL)",
+              "TURN 30 DEG  (LEFT/RIGHT, DRAG YOKE)",
               lambda t, c: abs(angle_diff(c.world.player.heading, t.memo["h0"])) >= 30,
               setup=lambda t, c: t.memo.update(h0=c.world.player.heading), highlight=("wheel",)),
-            S("RUDDER AMIDSHIPS: PRESS C OR CENTRE THE WHEEL.", "RUDDER AMIDSHIPS  (C)",
+            S("RUDDER AMIDSHIPS: PRESS C OR CENTRE THE YOKE.", "RUDDER AMIDSHIPS  (C)",
               lambda t, c: abs(c.world.player.rudder) < 1, highlight=("wheel",)),
             S("DIVING STATION: Q / E OR CLICK THE ORDER DIAL. THE RED POINTER IS YOUR ORDER, THE THIN ONE THE "
               "ACTUAL DEPTH. ORDER 90 METRES.", "ORDER 90 M AND REACH IT  (E)",
@@ -197,7 +197,7 @@ class Tutorial:
             S("PERISCOPE DEPTH: G OR THE P.D. BUTTON ORDERS 15 METRES. MASTS CAN ONLY BE RAISED AT 18 M OR "
               "SHALLOWER.", "PERISCOPE DEPTH  (G, P.D. BUTTON)", lambda t, c: c.world.player.z <= 16,
               highlight=("depth",)),
-            S("UP SCOPE: U OR THE SCOPE LEVER. THEN V OR LOOK PUTS YOUR EYE TO IT. AT THE EYEPIECE YOU CANNOT SEE "
+            S("UP SCOPE: U OR THE SCOPE SWITCH. THEN V OR LOOK PUTS YOUR EYE TO IT. AT THE EYEPIECE YOU CANNOT SEE "
               "THE STATION - THE STRIP ALONG THE BOTTOM STILL CARRIES THE WARNINGS.",
               "UP SCOPE (U) AND LOOK (V)", lambda t, c: c.looking, highlight=("masts",)),
             S(lambda c: f"TRAIN THE SCOPE: A / D OR DRAG ACROSS THE EYEPIECE. TAB OR THE MOUSE WHEEL SWITCHES TO "
@@ -216,7 +216,7 @@ class Tutorial:
               "1 / 2, OR FLIP A TUBE SWITCH. TUBES RELOAD FROM THE RACKS (UNLIMITED IN TRAINING). THE RUN TAKES A MINUTE OR TWO - WATCH YOUR FISH AS RED DOTS ON THE SCOPE.",
               "SINK THE MERCHANT  (F, TUBE SWITCH)", lambda t, c: t.merchant in c.world.sunk,
               highlight=("tdc", "tubes"), outro="INSTRUCTOR: TARGET DESTROYED. WELL SHOT."),
-            S("BATTERY IS DOWN TO 55%. AT PERISCOPE DEPTH (G), RAISE THE SNORKEL: K OR THE SNORT LEVER. THE DIESELS "
+            S("BATTERY IS DOWN TO 55%. AT PERISCOPE DEPTH (G), RAISE THE SNORKEL: K OR THE SNORT SWITCH. THE DIESELS "
               "CHARGE THE BATTERY, BUT THEIR ROAR DEAFENS YOUR OWN SONAR - WATCH THE WATERFALL FOG OVER - AND THE "
               "EXHAUST CAN BE SEEN. KEEP UNDER 8 KNOTS OR THE HEAD FLOODS.",
               "SNORKEL (K): CHARGE TO 60%", lambda t, c: c.world.player.snorkeling and c.world.player.battery >= 60,

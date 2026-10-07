@@ -25,7 +25,8 @@ GAUGE_SPECS = {
     "NOISE": dict(title="SELF NOISE", lo=0, hi=3, major=0.5, minor=0.1, red=(1.2, 3), units="CAVITATION"),
     "HULL": dict(title="HULL", lo=0, hi=100, major=20, minor=5, red=(0, 30), units="% INTEGRITY"),
 }
-TELEGRAPH_C, TELEGRAPH_R = (118, 650), 94
+TELEGRAPH_RECT = pygame.Rect(18, 492, 204, 176)  # engine order telegraph section
+TELEGRAPH_BTNS = tuple(pygame.Rect(26 + i * 39, 606, 34, 44) for i in range(5))  # STOP .. FLANK, backlit
 WHEEL_C, WHEEL_R = (330, 578), 56
 RUDDER_BAR = pygame.Rect(250, 656, 160, 9)
 DEPTH_C, DEPTH_R = (530, 566), 60
@@ -35,7 +36,7 @@ LOOK_BTN = pygame.Rect(422, 562, 48, 22)
 TUBE_SW = ((672, 540), (752, 540))
 NMKR_BTN, PING_BTN = pygame.Rect(642, 640, 140, 24), pygame.Rect(642, 674, 140, 24)
 LAMPS = ("ENEMY SONAR", "TORPEDO", "CAVITATION", "DIESEL", "MASTS UP", "BROACH", "LEAK", "HULL STRESS", "BELOW LAYER")
-LAMP_X, LAMP_Y0, LAMP_DY = 814, 506, 22
+ANNUNCIATORS = tuple(pygame.Rect(802, 498 + i * 22, 102, 18) for i in range(len(LAMPS)))  # warning panel tiles
 TDC_ROW_Y0, TDC_ROW_H = 296, 21
 
 # inside the CRT (local coordinates)
@@ -54,13 +55,13 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
     "gauges": GAUGES.inflate(-4, -4),
     "noise": (GAUGE_POS["NOISE"], GAUGE_R + 4),
     "battery": (GAUGE_POS["BATTERY"], GAUGE_R + 4),
-    "telegraph": pygame.Rect(TELEGRAPH_C[0] - TELEGRAPH_R - 6, TELEGRAPH_C[1] - TELEGRAPH_R - 6, 2 * TELEGRAPH_R + 12, TELEGRAPH_R + 36),
+    "telegraph": TELEGRAPH_RECT.inflate(6, 6),
     "wheel": pygame.Rect(WHEEL_C[0] - 90, WHEEL_C[1] - 78, 180, 168),
     "depth": pygame.Rect(DEPTH_C[0] - 86, DEPTH_C[1] - DEPTH_R - 8, 172, 140),
     "tubes": pygame.Rect(636, 494, 156, 136),
     "nmkr": NMKR_BTN.inflate(10, 10),
     "ping": PING_BTN.inflate(10, 10),
-    "lamps": pygame.Rect(798, 496, 112, 204),
+    "lamps": pygame.Rect(796, 492, 114, 206),
     "masts": pygame.Rect(416, 492, 228, 96),
 }
 
