@@ -1,20 +1,13 @@
 [project]
 name = "silent-solution"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Submarine sonar and fire-control simulator: you never see the ocean, only the instruments."
 readme = "README.md"
 authors = [
     { name = "Jacob Frusher", email = "jacob.frusher@cil-uk.co.uk" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
-    "numpy>=2.5.3",
+    "numpy>=1.26",
     "pygame-ce>=2.5.8",
 ]
-
-[project.scripts]
-silent-solution = "silent_solution:main"
-
-[build-system]
-requires = ["uv_build>=0.12.23,<0.13.0"]
-build-backend = "uv_build"
