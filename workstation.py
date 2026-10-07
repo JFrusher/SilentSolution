@@ -211,6 +211,8 @@ class Workstation:
             self.draw_teletype(f, con)
             if con and con.tutorial and not con.tutorial.finished:
                 self.draw_tutorial(f, con.tutorial)
+        if con and con.debug:
+            self.draw_debug(f, con, dt)
         if show_help:
             self.draw_help(f)
         jitter = con.shake * 6 if con else 0
@@ -507,6 +509,41 @@ class Workstation:
         font = brass.mono(13, True)
         for i, line in enumerate(textwrap.wrap(tut.goal, 34)[:2]):
             f.blit(font.render(line, True, brass.INK), (slip.x + 8, slip.y + 22 + i * 17))
+
+    def draw_debug(self, f, con, dt):
+        """Playtest overlay: frame rate, ocean and own-boat state, and the truth about every contact."""
+        self.fps = 0.9 * getattr(self, "fps", 60.0) + 0.1 * (1.0 / max(dt, 1e-3))
+        w, p, o = con.world, con.world.player, con.world.ocean
+        font = brass.mono(12, True)
+        states = {}
+        for ai in w.ais:
+            key = f"{ai.ship.kind[:3]}:{ai.state}"
+            states[key] = states.get(key, 0) + 1
+        lines = [f"FPS {self.fps:5.1f}   T+ {w.time:7.1f} s   WAVE {con.wave}",
+                 f"SEA {o.sea_state}  HS {o.wave_height:3.1f} m  WIND {o.wind:4.1f}  RAIN {o.rain:3.2f}  VIS {o.visibility:5.0f}",
+                 f"OWN z {p.z:5.1f} kt {p.speed / KNOT:4.1f} noise {p.noise:4.2f} cav {int(p.cavitating)} "
+                 f"exp {p.exposed or '-'}",
+                 f"EXPOSURE/MIN {con.exposure * 100:4.1f}%   HULL {w.hull:5.1f}   BATT {p.battery:5.1f}",
+                 f"TARGETS {len(w.targets)}  TORPS {len(w.torpedoes)}  CHARGES {len(w.charges)}",
+                 *[f"  {k:14s} x{n}" for k, n in sorted(states.items())]]
+        box = pygame.Surface((420, 18 * len(lines) + 12), pygame.SRCALPHA)
+        box.fill((0, 0, 0, 190))
+        for i, line in enumerate(lines):
+            box.blit(font.render(line, True, (255, 230, 120)), (8, 6 + i * 18))
+        f.blit(box, (W - 430, H - box.get_height() - 10))
+        if con.looking:
+            return
+        scale = (SCOPE_R - 6) / (con.scope_range * YARD)  # truth on the tactical scope, same projection
+        state = {id(ai.ship): ai.state for ai in w.ais}
+        for t in [*w.targets, *w.torpedoes]:
+            x, y = SCOPE_C[0] + (t.x - p.x) * scale, SCOPE_C[1] - (t.y - p.y) * scale
+            if math.hypot(x - SCOPE_C[0], y - SCOPE_C[1]) > SCOPE_R:
+                continue
+            hostile = getattr(t, "hostile", False)
+            color = (255, 80, 60) if hostile else (255, 230, 120)
+            pygame.draw.circle(f, color, (int(x), int(y)), 3, 1)
+            tag = t.kind[0] + (":" + state[id(t)][:3] if id(t) in state else "") + (f" {t.z:.0f}m" if t.z > 20 else "")
+            f.blit(font.render(tag, True, color), (x + 4, y - 7))
 
     def draw_help(self, f):
         card = pygame.Rect(0, 0, 600, 562)

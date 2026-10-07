@@ -15,8 +15,9 @@ from layout import (BLOW_BTN, CRT_RECT, DEPTH_C, DEPTH_R, HOLD_BTN, LOOK_BTN, NM
                     PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER, SCOPE_R, SNORT_LEVER, TDC_PANEL, TDC_ROW_H,
                     TDC_ROW_Y0, TELEGRAPH_C, TELEGRAPH_R, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
-from sim import (CRUSH_DEPTH, DIFFICULTY, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
+from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
                  YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
+from tuning import DIFFICULTY
 
 
 DIAL_RATE = 60.0          # hydrophone dial deg/s
@@ -86,6 +87,7 @@ class Console:
         self.scope_fix = None    # (true bearing, range m, time) from the last scope mark
         self.exposure = 0.0      # estimated chance of being spotted per minute, 0..1
         self.last_valve = -99.0
+        self.debug = False       # F3: truth overlay for playtesting and tuning
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
@@ -282,6 +284,7 @@ class Console:
             pygame.K_t: self.cycle_scope,
             pygame.K_RETURN: lambda: self.actions.add("ENTER"),
             pygame.K_KP_ENTER: lambda: self.actions.add("ENTER"),
+            pygame.K_F3: lambda: setattr(self, "debug", not self.debug),
         }
         if k in actions:
             actions[k]()

@@ -11,8 +11,9 @@ from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
 from layout import WF_W
 from sensors import PeriscopeOptics, cone_gain
-from sim import (DIFFICULTY, EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
+from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
                  bearing)
+from tuning import DIFFICULTY
 
 
 def calm_or_storm(w, rain):

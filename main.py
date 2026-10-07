@@ -4,9 +4,9 @@ import pygame
 from audio import AudioSynthesizer
 from console import Console
 from layout import H, W
-from sim import DIFFICULTY
 from tutorial import TRAINING, Tutorial
 from workstation import Workstation
+from tuning import DIFFICULTY
 
 FPS = 60
 

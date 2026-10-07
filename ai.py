@@ -3,6 +3,10 @@ World side: reads ground truth; the console only hears the results."""
 import math
 import random
 
+from tuning import (ALARM_HEARING, BLIND_RANGE, CALM_TIME, DESPAWN_RANGE, EXPLOSION_HEARING, GIVE_UP,
+                    LATE_DESPAWN_RANGE, LAUNCH_HEARING, LOOKOUT_ALERT, LOOKOUT_IDLE, LOOKOUT_MERCHANT, PING_HEARING,
+                    PING_INTERVAL, RUN_OUT, SCATTER_RANGE, SCATTER_TIME, SEARCH_TIME, SONAR_RANGE, TONNAGE,
+                    TORPEDO_HEARING, WAKE_SIGHTING, WAVE_GAP, WAVE_TIME_LIMIT)
 from sim import (KNOT, LAYER_DEPTH, YARD, Decoy, DepthCharge, Vessel, angle_diff, bearing, clamp, intercept,
                  spot_probability)
 
@@ -13,36 +17,17 @@ CRUISE, ALARMED, SCATTER = "CRUISE", "ALARMED", "SCATTER"
 
 SHIP_ACCEL = 0.4          # m/s^2
 ZIG_LEG, ZIG_ANGLE = 60.0, 30.0
-PING_HEARING = 15000.0    # m, warships hear our ping
-LAUNCH_HEARING = 6000.0   # m, torpedo launch transient
-TORPEDO_HEARING = 2000.0  # m, an incoming fish
-EXPLOSION_HEARING = 12000.0  # m, a ship going up is heard a long way off
-GIVE_UP = 150.0           # s without contact (once on scene) before searching instead
-WAKE_SIGHTING = 1200.0    # m, lookouts spot a torpedo wake
-LOOKOUT_IDLE, LOOKOUT_ALERT, LOOKOUT_MERCHANT = 1.5, 2.5, 0.7  # alertness: escort unaware / hunting, merchant
 
 # escorts
 ESCORT_PATROL, ESCORT_FULL, SEARCH_SPEED = 8 * KNOT, 24 * KNOT, 15 * KNOT
-PING_INTERVAL = 8.0       # s between escort pings while searching or hunting
-SONAR_RANGE = 4000.0      # m escort active sonar holds a sub on its side of the layer
 DROP_RANGE = 100.0        # m from datum: roll charges
-BLIND_RANGE = 300.0       # m from datum: hull sonar loses a sub this close, final run is blind
 PATTERN = ((0, 0), (60, 0), (-60, 0), (0, 60), (0, -60))  # (along, across) charge offsets, m
-RUN_OUT = 45.0            # s holding course after a pattern before coming round again
 SEARCH_LEG = 500.0        # m, first leg of the expanding square; grows each pair of legs
-SEARCH_TIME = 300.0       # s of searching once at the datum, then back to the screen
 
 # merchants
-ALARM_HEARING = 10000.0   # m, merchants hear a ping
-SCATTER_RANGE = 6000.0    # m, a sinking this close scatters a convoy
-SCATTER_TIME = (300.0, 600.0)  # s of running before settling to an independent course
-CALM_TIME = 600.0         # s without new alarms before revs come down
 CONVOY_ZIG, CONVOY_LEG = (0, 30, 0, -30), 90.0  # alarmed convoy zig-zag plan
 
 # waves
-DESPAWN_RANGE = 18000.0   # m, contacts beyond this have slipped away
-WAVE_GAP = 30.0           # s of quiet between waves
-TONNAGE = {"MERCHANT": 6500, "ESCORT": 1600, "SUB": 1100}
 
 
 def frame_point(x, y, course, along, across):
@@ -542,10 +527,13 @@ class ThreatDirector:
         self.diff = difficulty
         self.wave = 0
         self.timer = 8.0
+        self.wave_started = 0.0
 
     def update(self, world, dt):
         events, p = [], world.player
-        for t in [t for t in world.targets if not isinstance(t, Decoy) and p.range_to(t) > DESPAWN_RANGE]:
+        late = self.wave and world.time - self.wave_started > WAVE_TIME_LIMIT  # don't let stragglers stall the patrol
+        reach = LATE_DESPAWN_RANGE if late else DESPAWN_RANGE
+        for t in [t for t in world.targets if not isinstance(t, Decoy) and p.range_to(t) > reach]:
             world.targets.remove(t)
             events.append(("ESCAPED", t, None))
         if any(not isinstance(t, Decoy) for t in world.targets):
@@ -562,6 +550,7 @@ class ThreatDirector:
 
     def _spawn(self, world, events):
         self.wave += 1
+        self.wave_started = world.time
         n, d, p = self.wave, self.diff, world.player
         brg = random.uniform(0, 360)
         dist = random.uniform(7000, 9500)

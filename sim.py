@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 
+from tuning import CHARGE_LETHAL, CHARGE_REACH, SPOT_BASE, SPOT_REACH
+
 SOUND_SPEED = 1500.0  # m/s
 KNOT = 0.514444       # m/s
 YARD = 0.9144         # m
@@ -27,8 +29,6 @@ ACCEL = 0.15             # m/s^2, own boat
 MAX_RUDDER = 30.0        # deg
 TURN_RATE = 3.5          # deg/s at full rudder with steerage way
 CHARGE_SINK_RATE = 4.0   # m/s
-CHARGE_LETHAL = 12.0     # m, inside this the hull goes
-CHARGE_REACH = 120.0     # m, damage falls to zero here
 LEAK_SINK = 0.2          # m/s of extra weight per leak
 LEAK_HULL = 0.02         # % hull per second per leak
 LEAK_REPAIR = 60.0       # s for damage control to plug one
@@ -49,22 +49,9 @@ DIESEL_TRIP = 10.0       # s the diesels stay stalled after the snorkel floods
 R_EFF = 7.6e6            # m, effective earth radius with refraction (hull-down maths)
 
 # being seen: per-second chance at zero range for an alertness-1 observer, and how far it can reach in clear air
-SPOT_BASE = {"scope": 0.06, "snorkel": 0.12, "both": 0.15, "broach": 1.0}
-SPOT_REACH = {"scope": 3000.0, "snorkel": 6000.0, "both": 6000.0, "broach": 8000.0}
 
 TELEGRAPH = (("STOP", 0.0), ("SLOW", 4.0), ("HALF", 8.0), ("FULL", 14.0), ("FLANK", 20.0))  # order, knots
 
-DIFFICULTY = {
-    "CADET": dict(layer_loss=0.3, enemy_torp_kt=28, enemy_seeker_yd=0, reload=30.0, battery=False, oxygen=False,
-                  leaks=False, beam_width=3.0, cone=35.0, ping_warning=True, zigzag=False, sub_decoys=0,
-                  cavitation_instant=False, torp_damage=50.0, spot_mult=0.5, mast_damage=False, lower_delay=0.0),
-    "COMMANDER": dict(layer_loss=0.3, enemy_torp_kt=40, enemy_seeker_yd=600, reload=45.0, battery=True, oxygen=False,
-                      leaks=False, beam_width=1.5, cone=25.0, ping_warning=False, zigzag=True, sub_decoys=2,
-                      cavitation_instant=False, torp_damage=75.0, spot_mult=1.0, mast_damage=False, lower_delay=0.0),
-    "IRON CAPTAIN": dict(layer_loss=0.0, enemy_torp_kt=45, enemy_seeker_yd=1200, reload=60.0, battery=True, oxygen=True,
-                         leaks=True, beam_width=1.5, cone=20.0, ping_warning=False, zigzag=True, sub_decoys=3,
-                         cavitation_instant=True, torp_damage=90.0, spot_mult=1.5, mast_damage=True, lower_delay=4.0),
-}
 
 SHIP_CLASSES = {  # ship families as a lookout or recognition manual knows them: (length, beam, mast top, freeboard) m - the recognition manual's numbers
     "merchant": (130.0, 17.0, 30.0, 8.0),
