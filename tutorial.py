@@ -229,8 +229,9 @@ class Tutorial:
             S("SECURE SNORKELLING WITH K - OR JUST ORDER DEEP: THE MASTS ARE HOUSED AUTOMATICALLY BELOW 20 M. "
               "ORDER 60 METRES.", "SNORKEL DOWN, ORDER 60 M",
               lambda t, c: not c.world.player.snorkel_up and c.world.player.z >= 55, highlight=("masts", "depth")),
-            S("THE SCOPE RANGE: T OR CLICK THE SCOPE CYCLES 5,000 / 10,000 / 20,000 YARDS.",
-              "CHANGE SCOPE RANGE  (T, CLICK SCOPE)", lambda t, c: "SCOPE" in c.actions, highlight=("scope",)),
+            S("THE SCOPE RANGE: T CYCLES 5,000 / 10,000 / 20,000 YARDS. CLICKING THE SCOPE DOES TOO, UNLESS A FISH "
+              "IS ON THE WIRE - THEN THE CLICK STEERS IT.",
+              "CHANGE SCOPE RANGE  (T)", lambda t, c: "SCOPE" in c.actions, highlight=("scope",)),
 
             # --- live exercises ---
             S("WEATHER: A STORM IS PASSING OVERHEAD. RAIN HISS FLOODS THE WATERFALL AND THE PROFILE; WEAK CONTACTS "

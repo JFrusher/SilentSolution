@@ -90,6 +90,8 @@ class Console:
         self.last_valve = -99.0
         self.debug = False       # F3: truth overlay for playtesting and tuning
         self.tma = TMALog()      # bearing history for the TMA plot
+        self.wire_sel = None     # the wired fish the scope clicks steer
+        self.wire_hint = False
         self.crt_page = "SONAR"  # F2 flips the left of the monitor between waterfall and TMA plot
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
@@ -220,18 +222,69 @@ class Console:
         self.say("PING OUT. POSITION EXPOSED")
 
     def fire(self, tube=None):
-        if tube is None:
-            tube = next((i for i, r in enumerate(self.tubes) if r == 0), None)
-        if tube is None or self.tubes[tube] != 0:
+        """F: a salvo from every ready tube, fanned across SPREAD (one fish if SPREAD is 0); 1/2: that tube."""
+        ready = [i for i, r in enumerate(self.tubes) if r == 0]
+        if tube is not None:
+            ready = [tube] if tube in ready else []
+        elif self.tdc.values["SPR"] <= 0:
+            ready = ready[:1]
+        if not ready:
             return self.say("NO TUBE READY")
         sol = self.tdc.solve()
         if sol is None:
             return self.say("NO FIRING SOLUTION")
-        self.world.fire(sol.gyro, arm_distance=self.tdc.values["ARM"] * YARD, run_depth=self.tdc.values["DEP"],
-                        tube=tube + 1)
-        self.tubes[tube] = math.inf
+        spread = self.tdc.values["SPR"]
+        for k, i in enumerate(ready):
+            gyro = (sol.gyro + (k - (len(ready) - 1) / 2) * spread) % 360
+            fish = self.world.fire(gyro, arm_distance=self.tdc.values["ARM"] * YARD, run_depth=self.tdc.values["DEP"],
+                                   tube=i + 1, wired=True)
+            self.tubes[i] = math.inf
+            self.say(f"T{i + 1} AWAY. GYRO {gyro:05.1f}")
+            self.wire_sel = fish
         self.actions.add("FIRE")
-        self.say(f"T{tube + 1} AWAY. GYRO {sol.gyro:05.1f}")
+        if not self.wire_hint:
+            self.wire_hint = True
+            self.teletype.print("WEAPONS: FISH ARE ON THE WIRE. CLICK ONE ON THE TACTICAL SCOPE, THEN CLICK WHERE TO "
+                                "SEND IT. [ ] NUDGE, BACKSLASH NEXT FISH, L CUTS THE WIRE. OVER 12 KNOTS THE WIRE "
+                                "PARTS.")
+
+    # --- wire guidance ---
+    def wired_fish(self):
+        return [t for t in self.world.torpedoes if t.wired and not t.hostile]
+
+    def next_fish(self):
+        fish = self.wired_fish()
+        if fish:
+            self.wire_sel = fish[(fish.index(self.wire_sel) + 1) % len(fish)] if self.wire_sel in fish else fish[0]
+            self.say(f"T{self.wire_sel.tube} SELECTED ON THE WIRE")
+
+    def nudge_fish(self, d):
+        t = self.wire_sel
+        if t in self.wired_fish():
+            h = math.radians(t.heading + d * 10)
+            t.wire_aim = (t.x + 4000 * math.sin(h), t.y + 4000 * math.cos(h))
+            self.actions.add("WIRE")
+
+    def cut_wire(self):
+        t = self.wire_sel
+        if t in self.wired_fish():
+            t.wired, t.wire_aim = False, None
+            self.say(f"T{t.tube} WIRE CUT")
+
+    def scope_click(self, pos):
+        """Tactical scope: click a wired fish to take it, click the water to send it there; else change range."""
+        own = self.world.player
+        scale = (SCOPE_R - 6) / (self.scope_range * YARD)
+        for t in self.wired_fish():
+            sx, sy = SCOPE_C[0] + (t.x - own.x) * scale, SCOPE_C[1] - (t.y - own.y) * scale
+            if math.hypot(pos[0] - sx, pos[1] - sy) <= 10:
+                self.wire_sel = t
+                return self.say(f"T{t.tube} SELECTED ON THE WIRE")
+        if self.wire_sel in self.wired_fish():
+            self.wire_sel.wire_aim = (own.x + (pos[0] - SCOPE_C[0]) / scale, own.y - (pos[1] - SCOPE_C[1]) / scale)
+            self.actions.add("WIRE")
+            return self.say(f"T{self.wire_sel.tube} STEERING")
+        self.cycle_scope()
 
     def noisemaker(self):
         p = self.world.player
@@ -288,6 +341,10 @@ class Console:
             pygame.K_c: lambda: setattr(p, "rudder", 0.0),
             pygame.K_n: self.noisemaker,
             pygame.K_t: self.cycle_scope,
+            pygame.K_LEFTBRACKET: lambda: self.nudge_fish(-1),
+            pygame.K_RIGHTBRACKET: lambda: self.nudge_fish(1),
+            pygame.K_BACKSLASH: self.next_fish,
+            pygame.K_l: self.cut_wire,
             pygame.K_RETURN: lambda: self.actions.add("ENTER"),
             pygame.K_KP_ENTER: lambda: self.actions.add("ENTER"),
             pygame.K_F3: lambda: setattr(self, "debug", not self.debug),
@@ -335,7 +392,7 @@ class Console:
         elif wf.collidepoint(pos):
             self.dial = (x - wf.x) / WF_W * 360
         elif math.hypot(x - SCOPE_C[0], y - SCOPE_C[1]) <= SCOPE_R:
-            self.cycle_scope()
+            self.scope_click(pos)
         elif any(b.collidepoint(pos) for b in TELEGRAPH_BTNS):
             self.telegraph(next(i for i, b in enumerate(TELEGRAPH_BTNS) if b.collidepoint(pos)))
         elif math.hypot(x - WHEEL_C[0], y - WHEEL_C[1]) <= WHEEL_R + 18 or RUDDER_BAR.inflate(0, 16).collidepoint(pos):
@@ -411,6 +468,8 @@ class Console:
             self.report(kind, a, b)
         self.tdc.update(dt)
         self.view = self.optics.look() if p.scope_up else None
+        if self.wire_sel is not None and self.wire_sel not in world.torpedoes:
+            self.wire_sel = None
         self.looking = self.looking and p.scope_up
         self.exposure = self.estimate_exposure()
         self.audio.set_diesel(p.snorkeling)
@@ -480,6 +539,9 @@ class Console:
         if kind == "ESCAPED":
             if a.kind == "MERCHANT":
                 tt("CONVOY STRAGGLER HAS SLIPPED OUT OF RANGE.")
+            return
+        if kind == "WIRE_CUT":
+            self.say(f"T{a.tube} WIRE PARTED - " + ("TOO FAST" if b == "SPEED" else "END OF SPOOL"))
             return
         if kind == "LEAK":
             tt(f"DAMAGE CONTROL: FLOODING. {b} LEAK(S). PUMPS ON.")

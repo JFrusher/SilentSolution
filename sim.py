@@ -46,6 +46,8 @@ SCOPE_DAMAGE_KT = 10.0   # kt, scope up faster than this can bend it (if the dif
 SNORKEL_FLOOD_KT = 8.0   # kt, snorkel head floods faster than this
 SCOPE_REPAIR = 120.0     # s to free a damaged scope
 DIESEL_TRIP = 10.0       # s the diesels stay stalled after the snorkel floods
+WIRE_LENGTH = 8000.0     # m of guidance wire on the spool
+WIRE_MAX_KT = 12.0       # kt; faster than this and the wire parts
 R_EFF = 7.6e6            # m, effective earth radius with refraction (hull-down maths)
 
 # being seen: per-second chance at zero range for an alertness-1 observer, and how far it can reach in clear air
@@ -304,6 +306,8 @@ class Torpedo(Vessel):
     run: float = 0.0
     state: str = RUNNING
     lock: Vessel | None = None
+    wired: bool = False                # still on the guidance wire: we can steer it
+    wire_aim: tuple | None = None      # (x, y) the wire is steering it toward
     ox: float = field(init=False)  # launch point: escorts back-plot the track to it
     oy: float = field(init=False)
 
@@ -314,6 +318,11 @@ class Torpedo(Vessel):
         super().step(dt)
         self.z += clamp(self.run_depth - self.z, -TORP_DIVE_RATE * dt, TORP_DIVE_RATE * dt)
         self.run += self.speed * dt
+
+    def steer_to(self, x, y, dt):
+        turn = angle_diff(bearing(self.x, self.y, x, y), self.heading)
+        limit = self.turn_rate * dt
+        self.heading = (self.heading + clamp(turn, -limit, limit)) % 360
 
     def hits(self, other):
         return self.range_to(other) <= HIT_RADIUS and abs(self.z - other.z) <= HIT_DEPTH
@@ -344,9 +353,7 @@ class Torpedo(Vessel):
                 return "LOST"
             return None
         self.run_depth = self.lock.z
-        turn = angle_diff(bearing(self.x, self.y, self.lock.x, self.lock.y), self.heading)
-        limit = self.turn_rate * dt
-        self.heading = (self.heading + clamp(turn, -limit, limit)) % 360
+        self.steer_to(self.lock.x, self.lock.y, dt)
         if self.state != HOMING:
             self.state = HOMING
             return "HOMING"
@@ -447,6 +454,16 @@ class WorldSimulation:
         theirs = [self.player] + [t for t in self.targets if getattr(t, "owner", "") == "PLAYER"]
         for torp in self.torpedoes[:]:
             contacts = theirs if torp.hostile else ours
+            if torp.wired:  # wire guidance: steer toward the aim point until the seeker has something
+                why = "LENGTH" if torp.run > WIRE_LENGTH else "SPEED" if p.speed > WIRE_MAX_KT * KNOT else None
+                if why:
+                    torp.wired, torp.wire_aim = False, None
+                    events.append(("WIRE_CUT", torp, why))
+                elif torp.wire_aim and torp.state != HOMING:
+                    if math.hypot(torp.wire_aim[0] - torp.x, torp.wire_aim[1] - torp.y) < 60:
+                        torp.wire_aim = None  # arrived: run on straight
+                    else:
+                        torp.steer_to(*torp.wire_aim, dt)
             ev = torp.seek(contacts, self.ocean, dt)
             if ev:
                 events.append((ev, torp, torp.lock))

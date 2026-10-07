@@ -105,7 +105,7 @@ def act(tut, con, once):
             aim(con, tut.merchant)
             con.click(layout.TUBE_SW[con.tubes.index(0)])
     elif g.startswith("CHANGE SCOPE"):
-        do("t", lambda: con.click(layout.SCOPE_C))
+        do("t", lambda: con.key(pygame.K_t))
     elif g.startswith("DIVE BELOW"):
         do("deep", lambda: (con.order_depth(150), con.telegraph(1)))
     elif g.startswith("CLASSIFY") and hostile:
