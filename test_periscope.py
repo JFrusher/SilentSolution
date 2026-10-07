@@ -13,7 +13,7 @@ pygame.init()
 pygame.display.set_mode((1280, 720))
 
 from graphics.periscope import EYE, PeriscopeRenderer, View  # noqa: E402
-from main import PeriscopeOptics  # noqa: E402
+from sensors import PeriscopeOptics  # noqa: E402
 from sim import KNOT, Submarine, Vessel, WorldSimulation  # noqa: E402
 
 

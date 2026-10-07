@@ -20,18 +20,32 @@ picture.
 ## Checks
 
 ```
-uv run test_sim.py        # world, AI, masts, spotting, optics
-uv run test_tutorial.py   # a scripted trainee plays the whole training patrol
-uv run test_periscope.py  # eyepiece renderer
+uv run checks.py          # every suite, headless
 ```
+
+Or one at a time: `test_sim.py` (world, AI, masts, spotting, optics), `test_tutorial.py` (a scripted trainee
+plays the whole training patrol), `test_periscope.py` (eyepiece renderer).
 
 ## Layout
 
+World side (truth, never drawn directly):
+
 | Path | What |
 |---|---|
-| `sim.py` | hidden world: vessels, torpedoes, ocean, masts, the world step |
+| `sim.py` | vessels, torpedoes, ocean and weather, masts, ship classes, the world step |
 | `ai.py` | ship behaviour (merchants, escorts, submarines), convoys, the wave director |
-| `main.py` | operator console, sensors, TDC, audio, workstation rendering, game loop |
+
+Operator side (only sees the world through sensors):
+
+| Path | What |
+|---|---|
+| `sensors.py` | passive and active sonar, periscope optics |
+| `fire_control.py` | Torpedo Data Computer |
+| `displays.py` | waterfall, acoustic profile analyser, teleprinter |
+| `audio.py` | procedural sound |
+| `console.py` | operator state, input and event reporting |
+| `layout.py` | screen geometry |
+| `workstation.py` | draws the station, CRTs and periscope eyepiece |
+| `graphics/` | CRT post-processing, brass/paper art, periscope renderer |
 | `tutorial.py` | the training patrol |
-| `graphics/` | CRT post-processing, procedural brass/paper art, periscope renderer |
-| `docs/plans/` | design plans |
+| `main.py` | game loop and screen states |

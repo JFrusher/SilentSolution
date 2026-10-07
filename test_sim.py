@@ -6,8 +6,11 @@ import numpy as np
 
 from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
                 frame_point)
-from main import (TEMPLATES, WF_W, ROW_INTERVAL, PeriscopeOptics, SpectrumAnalyzer, TargetDataComputer,
-                  WaterfallDisplay, build_world, cone_gain)
+from console import build_world
+from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
+from fire_control import TargetDataComputer
+from layout import WF_W
+from sensors import PeriscopeOptics, cone_gain
 from sim import (DIFFICULTY, EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
                  bearing)
 

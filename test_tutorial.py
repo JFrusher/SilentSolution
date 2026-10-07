@@ -8,7 +8,9 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame  # noqa: E402
 
-import main  # noqa: E402
+import layout  # noqa: E402
+from audio import AudioSynthesizer  # noqa: E402
+from console import Console  # noqa: E402
 from sim import KNOT, YARD, bearing  # noqa: E402
 from tutorial import TRAINING, Tutorial  # noqa: E402
 
@@ -51,19 +53,19 @@ def act(tut, con, once):
     if g.startswith(("PRESS ENTER", "STUDY", "WATCH THE NOISE", "TRAINING COMPLETE")):
         do("enter", lambda: con.key(pygame.K_RETURN))
     elif g.startswith("RING UP HALF"):
-        do("half", lambda: con.click((main.TELEGRAPH_C[0], main.TELEGRAPH_C[1] - 60)))  # click the HALF sector
+        do("half", lambda: con.click((layout.TELEGRAPH_C[0], layout.TELEGRAPH_C[1] - 60)))  # click the HALF sector
     elif g.startswith("RING UP FLANK"):
         do("flank", lambda: (con.key(pygame.K_x), con.key(pygame.K_x)))
     elif g.startswith("RING DOWN TO SLOW"):
         do("slow", lambda: con.telegraph(1))
     elif g.startswith("TURN 30"):
-        do("wheel", lambda: (con.click((main.WHEEL_C[0] + 70, main.WHEEL_C[1])), setattr(con, "dragging", None)))
+        do("wheel", lambda: (con.click((layout.WHEEL_C[0] + 70, layout.WHEEL_C[1])), setattr(con, "dragging", None)))
     elif g.startswith("RUDDER AMIDSHIPS"):
         do("c", lambda: con.key(pygame.K_c))
     elif g.startswith("ORDER 90"):
         do("e", lambda: [con.key(pygame.K_e) for _ in range(3)])
     elif g.startswith("HOLD DEPTH"):
-        do("hold", lambda: con.click(main.HOLD_BTN.center))
+        do("hold", lambda: con.click(layout.HOLD_BTN.center))
     elif g.startswith("BLOW"):
         do("b", lambda: con.key(pygame.K_b))
     elif g.startswith("PERISCOPE DEPTH"):
@@ -90,7 +92,7 @@ def act(tut, con, once):
     elif g.startswith("MARK"):
         do("m", lambda: con.key(pygame.K_m))
     elif g.startswith("PING"):
-        do("ping", lambda: con.click(main.PING_BTN.center))
+        do("ping", lambda: con.click(layout.PING_BTN.center))
     elif g.startswith("SET TGT RNG"):
         con.tdc.selected = 1
         con.tdc.set("RNG", p.range_to(tut.merchant) / YARD)
@@ -99,9 +101,9 @@ def act(tut, con, once):
     elif g.startswith("SINK THE MERCHANT"):
         if not ours_running and 0 in con.tubes:
             aim(con, tut.merchant)
-            con.click(main.TUBE_SW[con.tubes.index(0)])
+            con.click(layout.TUBE_SW[con.tubes.index(0)])
     elif g.startswith("CHANGE SCOPE"):
-        do("t", lambda: con.click(main.SCOPE_C))
+        do("t", lambda: con.click(layout.SCOPE_C))
     elif g.startswith("DIVE BELOW"):
         do("deep", lambda: (con.order_depth(150), con.telegraph(1)))
     elif g.startswith("CLASSIFY") and hostile:
@@ -116,9 +118,9 @@ def act(tut, con, once):
 
 def play(seed):
     random.seed(seed)
-    con = main.Console("TRAINING", main.AudioSynthesizer(), TRAINING)
+    con = Console("TRAINING", AudioSynthesizer(), TRAINING)
     tut = Tutorial(con)
-    once, step, times, outros = set(), tut.i, {}, []
+    once, step, times = set(), tut.i, {}
     start = 0.0
     while not tut.finished and con.world.time < 3600:
         if tut.i != step:
@@ -132,7 +134,7 @@ def play(seed):
 
 if __name__ == "__main__":
     pygame.init()
-    pygame.display.set_mode((main.W, main.H))
+    pygame.display.set_mode((layout.W, layout.H))
     for seed in (1, 2, 3):
         tut, con, times = play(seed)
         assert tut.finished, f"seed {seed}: stuck on drill {tut.progress}: {tut.goal}"
