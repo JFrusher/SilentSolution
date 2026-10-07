@@ -62,6 +62,10 @@ class Workstation:
             band = pygame.Surface((size[0] - 28, 15), pygame.SRCALPHA)
             band.fill((*art.PAPER_BAND, 120))
             paper.blit(band, (14, y))
+        ring = pygame.Surface(size, pygame.SRCALPHA)  # somebody's mug
+        for k, a in ((30, 70), (28, 40), (24, 18)):
+            pygame.draw.circle(ring, (120, 84, 44, a), (size[0] - 70, 60), k, 2)
+        paper.blit(ring, (0, 0))
         return paper
 
     # --- periscope screen ---
@@ -85,6 +89,7 @@ class Workstation:
         for rect in (pygame.Rect(30, 120, 230, 300), pygame.Rect(W - 260, 120, 230, 300)):
             art.faceplate(bg, rect)
         art.label_plate(bg, (145, 136), "SCOPE DATA", 12)
+        art.tape(bg, (150, 404), "TRUE = REL + SHIP'S HEAD", 2, 11)
         art.label_plate(bg, (W - 145, 136), "SHIP CONTROL", 12)
         keys = ("A / D  or drag   TRAIN", "TAB  or wheel   POWER", "M     MARK TO FIRE CONTROL", "V     BACK TO STATION",
                 "U     LOWER SCOPE")
@@ -157,7 +162,7 @@ class Workstation:
         bg = art.texture((W, H), art.WALL, grain=3)
         for rect in (TDC_PANEL, CONSOLE, GAUGES):
             art.panel(bg, rect)
-        art.panel(bg, TELETYPE, base=(150, 146, 134))  # the printer's beige enamel
+        art.panel(bg, TELETYPE, base=(146, 140, 124))  # the printer's beige enamel, nicotine-stained
         art.faceplate(bg, TDC_PANEL.inflate(-12, -12))
         art.faceplate(bg, GAUGES.inflate(-14, -14))
         for plate in (TELEGRAPH_RECT, HELM_PLATE, DIVE_PLATE, WEAPONS_PLATE, ALARM_PLATE):
@@ -193,6 +198,11 @@ class Workstation:
         art.dymo(bg, (SNORT_LEVER[0] - 22, SNORT_LEVER[1] - 44), "SNORT")
         art.engrave(bg, "L30", (RUDDER_BAR.left - 22, RUDDER_BAR.top - 3), 9, art.LEGEND_DIM)
         art.engrave(bg, "R30", (RUDDER_BAR.right + 4, RUDDER_BAR.top - 3), 9, art.LEGEND_DIM)
+        # the crew's amendments to the manual
+        art.tape(bg, (226, 274), "CHECK BRG!", 7, 10)
+        art.tape(bg, (598, 604), "MAX 8 KTS ON SNORT", -6, 9)
+        art.tape(bg, (1200, 366), "HULL GAUGE LOW", -3, 10)
+        art.tape(bg, (122, 688), "NO FLANK UNDER 60M", 2, 10)
         art.engrave(bg, "WAVE", (TELETYPE.x + 150, TELETYPE.y + 10), 10, art.INK)
         art.engrave(bg, "GRT", (TELETYPE.x + 210, TELETYPE.y + 10), 10, art.INK)
         return bg.convert()
@@ -207,6 +217,8 @@ class Workstation:
         g = art.glint(DEPTH_R)
         ov.blit(g, (DEPTH_C[0] - g.get_width() / 2, DEPTH_C[1] - g.get_height() / 2))
         art.label_plate(ov, (MONITOR.centerx, MONITOR.bottom - 13), "SONAR  -  PASSIVE / ACTIVE / ACOUSTIC ANALYSIS", 11)
+        art.tape(ov, (MONITOR.right - 70, MONITOR.top + 14), "DO NOT ADJUST", 3, 11)
+        art.tape(ov, (MONITOR.right - 96, MONITOR.bottom - 12), "TUBE 2 STICKS - HIT IT TWICE", -2, 10)
         art.label_plate(ov, (SCOPE_C[0], SCOPE_PANEL.bottom - 12), "TACTICAL PPI", 10)
         return ov
 
