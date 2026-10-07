@@ -12,7 +12,7 @@ import layout  # noqa: E402
 from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
 from sim import KNOT, YARD, bearing  # noqa: E402
-from tutorial import TRAINING, Tutorial  # noqa: E402
+from tutorial import CHAPTERS, TRAINING, Tutorial  # noqa: E402
 
 DT = 0.05
 
@@ -126,10 +126,10 @@ def act(tut, con, once):
             con.key(pygame.K_f)
 
 
-def play(seed):
+def play(seed, chapter=0):
     random.seed(seed)
     con = Console("TRAINING", AudioSynthesizer(), TRAINING)
-    tut = Tutorial(con)
+    tut = Tutorial(con, chapter)
     once, step, times = set(), tut.i, {}
     start = 0.0
     while not tut.finished and con.world.time < 3600:
@@ -154,4 +154,14 @@ if __name__ == "__main__":
         slowest = max(times, key=times.get)
         print(f"seed {seed}: {len(tut.steps)} drills in {con.world.time / 60:.1f} sim min; sunk {sorted(sunk)}; "
               f"slowest drill {slowest} ({times[slowest]:.0f} s)")
+    for chapter in range(1, len(CHAPTERS)):  # every chapter stands on its own
+        tut, con, _ = play(4, chapter)
+        assert tut.finished and not con.dead, f"chapter {chapter}: stuck on drill {tut.progress}: {tut.goal}"
+    con = Console("TRAINING", AudioSynthesizer(), TRAINING)  # skipping every drill must never trip a later one
+    tut = Tutorial(con)
+    for _ in range(len(tut.steps)):
+        con.key(pygame.K_F6)
+        con.update(DT, NoKeys())
+        tut.update(DT)
+    assert tut.finished, tut.progress
     print("ok")

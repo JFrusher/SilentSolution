@@ -1,21 +1,27 @@
 """Silent Solution: game loop and screen states (title, settings, career, play, pause, debrief, game over)."""
+import datetime
+import traceback
+from pathlib import Path
+
 import pygame
 
 import campaign
 from audio import AudioSynthesizer
 from console import Console
 from layout import CRT_RECT, H, W
-from tutorial import TRAINING, Tutorial
+from tutorial import CHAPTERS, TRAINING, Tutorial
+from version import __version__
 from workstation import Workstation
 import settings
 from tuning import DIFFICULTY
 
 FPS = 60
+CRASH_LOG = Path.home() / ".silent_solution" / "crash.log"
 
 def main():
     pygame.init()
     screen = pygame.display.set_mode((W, H), pygame.SCALED | pygame.RESIZABLE)
-    pygame.display.set_caption("SILENT SOLUTION")
+    pygame.display.set_caption(f"SILENT SOLUTION {__version__}")
     clock = pygame.time.Clock()
     audio = AudioSynthesizer()
     settings.load()
@@ -27,7 +33,7 @@ def main():
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.1)
         for e in pygame.event.get():
-            pages = ("SETTINGS", "CAREER", "DEBRIEF")  # Esc means "back" on these
+            pages = ("SETTINGS", "CAREER", "DEBRIEF", "CHAPTERS")  # Esc means "back" on these
             quit_key = e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state not in pages
             if e.type == pygame.QUIT or quit_key:
                 pygame.quit()
@@ -44,6 +50,17 @@ def main():
                     station.menu.scroll(e.y)
                 if back:
                     state = "TITLE"
+            elif state == "CHAPTERS":
+                choice = None
+                if e.type == pygame.KEYDOWN:
+                    choice = "BACK" if e.key == pygame.K_ESCAPE else e.key - pygame.K_1
+                elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                    choice = next((name for rect, name in station.buttons if rect.collidepoint(e.pos)), None)
+                if choice == "BACK":
+                    state = "TITLE"
+                elif isinstance(choice, int) and 0 <= choice < len(CHAPTERS):
+                    console, state = Console("TRAINING", audio, TRAINING), "PLAY"
+                    Tutorial(console, choice)
             elif state in ("CAREER", "DEBRIEF"):
                 choice = None
                 if e.type == pygame.KEYDOWN:
@@ -87,8 +104,7 @@ def main():
                 elif choice == "SETTINGS":
                     station.menu, state = settings.SettingsMenu(), "SETTINGS"
                 elif choice == "TRAINING":
-                    console, state = Console(choice, audio, TRAINING), "PLAY"
-                    Tutorial(console)
+                    state = "CHAPTERS"
                 elif choice:
                     console, state = Console(choice, audio), "PLAY"
             elif state == "OVER":
@@ -125,4 +141,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:  # the packaged build has no console: leave the trace where a player can send it
+        CRASH_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with CRASH_LOG.open("a", encoding="utf-8") as f:
+            f.write(f"--- {datetime.datetime.now():%Y-%m-%d %H:%M:%S}  v{__version__}\n{traceback.format_exc()}\n")
+        raise
