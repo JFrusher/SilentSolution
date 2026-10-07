@@ -383,7 +383,7 @@ class Console:
         if isinstance(result, str):
             return self.say(result)
         fit, ambiguous = result
-        self.say(f"AUTO-SOLVE: FIT {fit:.1f} DEG" + (". AMBIGUOUS - CHANGE COURSE, NEW LEG" if ambiguous else ". CHECK IT"))
+        self.say(f"AUTO-SOLVE: FIT {fit:.1f} DEG. " + ("AMBIGUOUS - NEW LEG" if ambiguous else "CHECK IT"))
 
     def cycle_scope(self):
         self.scope_range = SCOPE_RANGES[(SCOPE_RANGES.index(self.scope_range) + 1) % len(SCOPE_RANGES)]
