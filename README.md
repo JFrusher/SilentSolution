@@ -50,4 +50,5 @@ Operator side (only sees the world through sensors):
 | `workstation.py` | draws the station, CRTs and periscope eyepiece |
 | `graphics/` | CRT post-processing, 1970s/80s control-room art kit, periscope renderer |
 | `tutorial.py` | the training patrol |
+| `campaign.py` | six patrols, debriefs, ranks, refits, career save, patrol log and high scores (`~/.silent_solution/career.json`) |
 | `main.py` | game loop and screen states |

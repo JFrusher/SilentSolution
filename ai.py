@@ -523,8 +523,11 @@ class ThreatDirector:
     """Endless patrol: each wave rolls a convoy (merchant column + escort screen), sometimes a lone independent
     merchant, and submarines - harder every time. A wave ends when every hull is sunk or beyond DESPAWN_RANGE."""
 
-    def __init__(self, difficulty):
+    def __init__(self, difficulty, boost=0, waves=None):
         self.diff = difficulty
+        self.boost = boost  # campaign: waves' worth of escalation to start with
+        self.waves = waves  # campaign: the patrol ends when this wave clears; None = endless
+        self.done = False
         self.wave = 0
         self.timer = 8.0
         self.wave_started = 0.0
@@ -536,12 +539,13 @@ class ThreatDirector:
         for t in [t for t in world.targets if not isinstance(t, Decoy) and p.range_to(t) > reach]:
             world.targets.remove(t)
             events.append(("ESCAPED", t, None))
-        if any(not isinstance(t, Decoy) for t in world.targets):
+        if self.done or any(not isinstance(t, Decoy) for t in world.targets):
             return events
         if self.timer == WAVE_GAP and self.wave:  # first quiet tick after a wave: resupply
             p.torpedoes = min(p.torpedoes + 4, 12)
             p.noisemakers = min(p.noisemakers + 2, 6)
             events.append(("WAVE_CLEAR", self.wave, None))
+            self.done = self.wave == self.waves
         self.timer -= dt
         if self.timer <= 0:
             self._spawn(world, events)
@@ -551,7 +555,7 @@ class ThreatDirector:
     def _spawn(self, world, events):
         self.wave += 1
         self.wave_started = world.time
-        n, d, p = self.wave, self.diff, world.player
+        n, d, p = self.wave + self.boost, self.diff, world.player
         brg = random.uniform(0, 360)
         dist = random.uniform(7000, 9500)
         cx, cy = p.x + dist * math.sin(math.radians(brg)), p.y + dist * math.cos(math.radians(brg))
@@ -594,7 +598,7 @@ class ThreatDirector:
                 layer_sensitivity=random.uniform(0.3, 1.0),
                 torpedo_speed=d["enemy_torp_kt"] * KNOT, seeker_range=d["enemy_seeker_yd"] * YARD,
                 zigzag=d["zigzag"], decoys=d["sub_decoys"], cavitation_instant=d["cavitation_instant"]))
-        events.append(("WAVE", n, (merchants + lone, escorts, subs, brg)))
+        events.append(("WAVE", self.wave, (merchants + lone, escorts, subs, brg)))
 
     @staticmethod
     def score(world):

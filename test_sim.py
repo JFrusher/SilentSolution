@@ -5,7 +5,7 @@ import random
 import numpy as np
 
 from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
-                frame_point)
+                ThreatDirector, frame_point)
 from audio import AudioSynthesizer
 from console import Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
@@ -260,6 +260,16 @@ if __name__ == "__main__":
     w.player.z = 40.0
     w.step(0.1)
     assert PeriscopeOptics(w).look() is None, "masts struck below periscope depth: blind"
+
+    # campaign patrol: escalation starts at the boost; the last wave clearing ends the patrol and nothing more spawns
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [])
+    w.director = ThreatDirector(DIFFICULTY["CADET"], boost=4, waves=1)
+    run(w, 9)
+    assert w.director.wave == 1 and sum(t.kind == "ESCORT" for t in w.targets) == 3  # wave 5's screen
+    w.targets.clear()
+    w.ais.clear()
+    assert run(w, 0.2).count("WAVE_CLEAR") == 1 and w.director.done
+    assert "WAVE" not in run(w, 30) and not w.targets
 
     # damage control: a hit breaks systems; one party repairs them in the order set, one at a time
     w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [], systems_damage=True)
