@@ -8,7 +8,7 @@ from functools import lru_cache
 import numpy as np
 import pygame
 
-from sim import R_EFF, angle_diff, horizon_distance
+from sim import R_EFF, SHIP_CLASSES, angle_diff, horizon_distance
 
 EYE = 600                  # eyepiece diameter, px
 SEA_DIV = 3                # sky and sea are shaded at 1/SEA_DIV resolution, then smooth-scaled
@@ -16,10 +16,10 @@ SUN_BRG, SUN_ELEV = 205.0, 28.0
 CLOUD_W, CLOUD_H = 1440, 160  # cloud strip: 0.25 deg per texel in azimuth and elevation (0-40 deg)
 RIPPLE_N, RIPPLE_TILE, RIPPLE_SLOPE = 128, 24.0, 0.22  # short chop texture: texels, metres per tile, peak slope
 
-# side profiles in recognition-manual style: (fraction of length from the stern, height above waterline m)
+# side profiles in recognition-manual style: (fraction of length from the stern, height above waterline m);
+# length and beam come from sim.SHIP_CLASSES
 SHAPES = {
     "merchant": dict(
-        L=130.0, B=17.0,
         hull=[(0.02, 0.0), (0.0, 7.5), (0.02, 8.5), (0.11, 8.5), (0.12, 7.0), (0.80, 7.0), (0.82, 10.0),
               (1.0, 10.8), (0.96, 0.0)],
         blocks=[(0.42, 0.58, 7.0, 14.0), (0.45, 0.56, 14.0, 17.5)],
@@ -27,14 +27,12 @@ SHAPES = {
         masts=[(0.22, 30.0), (0.72, 29.0)],
         booms=[(0.22, 9.0, 0.12, 7.5), (0.72, 9.0, 0.83, 10.0)]),
     "tanker": dict(
-        L=150.0, B=20.0,
         hull=[(0.01, 0.0), (0.0, 7.0), (0.25, 7.0), (0.26, 6.0), (0.93, 6.5), (1.0, 8.0), (0.97, 0.0)],
         blocks=[(0.05, 0.22, 6.0, 13.0), (0.07, 0.18, 13.0, 16.0), (0.55, 0.62, 6.0, 10.0)],
         funnel=(0.08, 0.14, 16.0, 23.0),
         masts=[(0.58, 26.0), (0.90, 20.0)],
         booms=[]),
     "escort": dict(
-        L=95.0, B=11.0,
         hull=[(0.01, 0.0), (0.0, 4.5), (0.55, 5.0), (0.60, 6.5), (0.92, 7.5), (1.0, 8.2), (0.94, 0.0)],
         blocks=[(0.56, 0.72, 6.5, 12.0), (0.60, 0.68, 12.0, 14.0), (0.80, 0.86, 7.5, 9.0), (0.12, 0.18, 5.0, 6.5)],
         funnel=(0.40, 0.48, 6.0, 12.5),
@@ -275,7 +273,7 @@ class PeriscopeRenderer:
 
     def _ship(self, f, v, roll, pitch, s, hor):
         shape = SHAPES[s.cls]
-        L, B = shape["L"], shape["B"]
+        L, B = SHIP_CLASSES[s.cls][:2]
         asp = math.radians(s.aspect)
         proj = L * abs(math.sin(asp)) + B * abs(math.cos(asp))
         bow = -1 if math.sin(asp) > 0 else 1  # +1: bow toward screen right

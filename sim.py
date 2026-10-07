@@ -66,6 +66,17 @@ DIFFICULTY = {
                          cavitation_instant=True, torp_damage=90.0, spot_mult=1.5, mast_damage=True, lower_delay=4.0),
 }
 
+SHIP_CLASSES = {  # ship families as a lookout or recognition manual knows them: (length, beam, mast top, freeboard) m - the recognition manual's numbers
+    "merchant": (130.0, 17.0, 30.0, 8.0),
+    "tanker": (150.0, 20.0, 26.0, 6.0),
+    "escort": (95.0, 11.0, 24.0, 5.0),
+}
+def silhouette_class(ship):
+    if ship.kind == "ESCORT":
+        return "escort"
+    return "tanker" if id(ship) % 3 == 0 else "merchant"
+
+
 # torpedo lifecycle
 RUNNING, ACQUIRING, HOMING, EXHAUSTED = "RUNNING", "ACQUIRING", "HOMING", "EXHAUSTED"
 
