@@ -7,6 +7,7 @@ import numpy as np
 
 from sim import (R_EFF, SCOPE_TOP, SHIP_CLASSES, Decoy, angle_diff, bearing, horizon_distance, ping_delay,
                  range_from_delay, silhouette_class)
+from tuning import DAMAGED_HYDROPHONES
 
 
 MAX_ECHO_RANGE = 12000.0  # m; beyond this the return is lost in noise
@@ -45,6 +46,8 @@ class PassiveSonar:
         rel = (np.round(rel / self.resolution) * self.resolution) % 360
         rng = np.maximum(np.hypot(dx, dy), 1.0)
         level = 160 * src[:, 2] * np.minimum(1.0, 3000 / rng) * np.random.uniform(0.75, 1.0, len(src))
+        if "HYDROPHONES" in getattr(p, "damaged", ()):
+            level *= DAMAGED_HYDROPHONES
         return rel, level, src[:, 3], src[:, 4].astype(int), src[:, 5].astype(bool)
 
     def bearing_of(self, source):

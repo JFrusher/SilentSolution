@@ -11,14 +11,15 @@ from displays import CLASSES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from graphics import console_art as art
 from graphics.periscope import EYE
-from layout import (BLOW_BTN, CRT_RECT, DEPTH_C, DEPTH_R, HOLD_BTN, LOOK_BTN, NMKR_BTN, ORDER_SLIP, PD_BTN,
-                    PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER, SCOPE_R, SNORT_LEVER, TDC_PANEL, TDC_ROW_H,
-                    TDC_ROW_Y0, TELEGRAPH_BTNS, TELEGRAPH_RECT, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
+from layout import (BLOW_BTN, CRT_RECT, DC_ROW_H, DC_ROW_Y0, DEPTH_C, DEPTH_R, HOLD_BTN, LOOK_BTN, NMKR_BTN,
+                    ORDER_SLIP, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER, SCOPE_R, SNORT_LEVER, TDC_PANEL,
+                    TDC_ROW_H, TDC_ROW_Y0, TELEGRAPH_BTNS, TELEGRAPH_RECT, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C,
+                    WHEEL_R)
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
 from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
                  YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
 from tma import TMALog
-from tuning import DIFFICULTY
+from tuning import DIFFICULTY, REPAIR_TIME
 
 
 DIAL_RATE = 60.0          # hydrophone dial deg/s
@@ -31,7 +32,7 @@ MAST_MESSAGES = {  # own mast events: (sonar log line, teleprinter line or "")
     "HEAD_VALVE": ("HEAD VALVE SHUT - WAVE OVER SNORKEL", ""),
     "SNORKEL_FLOODED": ("SNORKEL FLOODED - DIESELS TRIPPED", "ENGINE ROOM: SNORKEL HEAD FLOODED AT SPEED. DIESELS "
                         "STOPPED FOR TEN SECONDS. KEEP UNDER EIGHT KNOTS WHILE SNORKELLING."),
-    "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. FREEING IT - TWO MINUTES."),
+    "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST (F5)."),
 }
 ECHO_FADE = 40.0          # s an echo blip glows on the scope
 SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
@@ -44,6 +45,7 @@ def build_world(d):
                                       mast_damage=d["mast_damage"], lower_delay=d["lower_delay"]), [])
     world.ocean.layer_loss = d["layer_loss"]
     world.leaks_enabled, world.torp_damage, world.spot_mult = d["leaks"], d["torp_damage"], d["spot_mult"]
+    world.systems_damage = True
     world.director = ThreatDirector(d)
     return world
 
@@ -92,7 +94,7 @@ class Console:
         self.tma = TMALog()      # bearing history for the TMA plot
         self.wire_sel = None     # the wired fish the scope clicks steer
         self.wire_hint = False
-        self.crt_page = "SONAR"  # F2 flips the left of the monitor between waterfall and TMA plot
+        self.crt_page = "SONAR"  # left of the monitor: waterfall, F2 TMA plot, F5 damage board
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
@@ -215,6 +217,8 @@ class Console:
         return 1 - (1 - min(1.0, per_s * mult)) ** 60
 
     def ping(self):
+        if "ACTIVE SONAR" in self.world.player.damaged:
+            return self.say("ACTIVE SONAR DAMAGED")
         self.active.ping()
         self.audio.play_ping()
         self.ping_time = self.world.time
@@ -223,7 +227,7 @@ class Console:
 
     def fire(self, tube=None):
         """F: a salvo from every ready tube, fanned across SPREAD (one fish if SPREAD is 0); 1/2: that tube."""
-        ready = [i for i, r in enumerate(self.tubes) if r == 0]
+        ready = [i for i, r in enumerate(self.tubes) if r == 0 and f"TUBE {i + 1}" not in self.world.player.damaged]
         if tube is not None:
             ready = [tube] if tube in ready else []
         elif self.tdc.values["SPR"] <= 0:
@@ -350,6 +354,7 @@ class Console:
             pygame.K_F3: lambda: setattr(self, "debug", not self.debug),
             pygame.K_F2: self.flip_page,
             pygame.K_F4: self.auto_solve,
+            pygame.K_F5: self.damage_board,
         }
         if k in actions:
             actions[k]()
@@ -357,6 +362,15 @@ class Console:
     def flip_page(self):
         self.crt_page = "TMA" if self.crt_page == "SONAR" else "SONAR"
         self.actions.add("PAGE_" + self.crt_page)
+
+    def damage_board(self):
+        self.crt_page = "SONAR" if self.crt_page == "DAMAGE" else "DAMAGE"
+        self.actions.add("PAGE_" + self.crt_page)
+
+    def damage_rows(self):
+        """Damage board lines: the repair list in work order, then the systems that are fine."""
+        hurt = self.world.player.damaged
+        return [*hurt, *(s for s in REPAIR_TIME if s not in hurt)]
 
     def auto_solve(self):
         """Least-squares fit of the bearing history: fitted on Cadet / Training consoles only."""
@@ -389,6 +403,13 @@ class Console:
             return self.toggle_snorkel()
         if self.tutorial and ORDER_SLIP.collidepoint(pos):
             self.actions.add("ENTER")
+        elif wf.collidepoint(pos) and self.crt_page == "DAMAGE":
+            rows = self.damage_rows()
+            k = (y - wf.y - DC_ROW_Y0) // DC_ROW_H
+            if 0 <= k < len(rows) and rows[k] in self.world.player.damaged:
+                self.world.player.repair_first(rows[k])
+                self.actions.add("REPAIR_FIRST")
+                self.say(f"PARTY TO THE {rows[k]}")
         elif wf.collidepoint(pos):
             self.dial = (x - wf.x) / WF_W * 360
         elif math.hypot(x - SCOPE_C[0], y - SCOPE_C[1]) <= SCOPE_R:
@@ -542,6 +563,12 @@ class Console:
             return
         if kind == "WIRE_CUT":
             self.say(f"T{a.tube} WIRE PARTED - " + ("TOO FAST" if b == "SPEED" else "END OF SPOOL"))
+            return
+        if kind == "DAMAGE":
+            tt(f"DAMAGE CONTROL: {', '.join(b)} DAMAGED. ONE PARTY WORKS THE LIST TOP FIRST - F5 TO SET IT.")
+            return
+        if kind == "REPAIRED":
+            self.say(f"{b} REPAIRED")
             return
         if kind == "LEAK":
             tt(f"DAMAGE CONTROL: FLOODING. {b} LEAK(S). PUMPS ON.")

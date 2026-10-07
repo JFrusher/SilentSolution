@@ -12,15 +12,16 @@ from fire_control import FIELDS
 from graphics import console_art as art
 from graphics.crt_renderer import DIM, PHOSPHOR, RED, CRTRenderer
 from graphics.periscope import EYE, PeriscopeRenderer, View
-from layout import (ANNUNCIATORS, BLOW_BTN, CONSOLE, CRT_RECT, DEPTH_C, DEPTH_R, EYEPIECE_C, GAUGES, GAUGE_POS,
-                    GAUGE_R, GAUGE_SPECS, H, HIGHLIGHTS, HOLD_BTN, HYD_POS, LAMPS, LIB_RECT, LOG_POS, LOOK_BTN,
-                    MONITOR, NMKR_BTN, ORDER_SLIP, PAPER_RECT, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER,
-                    SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H, TDC_ROW_Y0,
+from layout import (ANNUNCIATORS, BLOW_BTN, CONSOLE, CRT_RECT, DC_ROW_H, DC_ROW_Y0, DEPTH_C, DEPTH_R, EYEPIECE_C,
+                    GAUGES, GAUGE_POS, GAUGE_R, GAUGE_SPECS, H, HIGHLIGHTS, HOLD_BTN, HYD_POS, LAMPS, LIB_RECT, LOG_POS,
+                    LOOK_BTN, MONITOR, NMKR_BTN, ORDER_SLIP, PAPER_RECT, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C,
+                    SCOPE_LEVER, SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H, TDC_ROW_Y0,
                     TELEGRAPH_BTNS, TELEGRAPH_RECT, TELETYPE, TUBE_SW, W, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
 from sensors import SCOPE_FOV
 from tma import PLOT_WINDOW as TMA_WINDOW
 from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, SCOPE_TOP, SOUND_SPEED,
                  TELEGRAPH, TORP_MAX_RUN, YARD)
+from tuning import REPAIR_TIME
 
 # console sections: black faceplates set into the painted steel
 HELM_PLATE = pygame.Rect(234, 486, 178, 212)
@@ -297,8 +298,10 @@ class Workstation:
         x0, y0 = WF_POS
         if con.crt_page == "TMA":
             self._crt_tma(s, crt, con)
+        elif con.crt_page == "DAMAGE":
+            self._crt_damage(s, crt, con)
         else:
-            crt.text(s, "PASSIVE WATERFALL  BRG REL     F2: TMA PLOT", (x0 + 14, 12), DIM, small=True)
+            crt.text(s, "PASSIVE WATERFALL  BRG REL   F2: TMA  F5: DAMAGE", (x0 + 14, 12), DIM, small=True)
             s.blit(con.waterfall.draw(), WF_POS)
             crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
             for b in (0, 90, 180, 270, 359):
@@ -335,6 +338,29 @@ class Workstation:
             crt.rect(s, (x0 + 10, y0 + 90, WF_W - 20, 34), (0, 0, 0))
             crt.frame(s, (x0 + 10, y0 + 90, WF_W - 20, 34), color=RED)
             crt.text(s, text, (x0 + WF_W / 2, y0 + 107), RED, big=True, center=True)
+
+    def _crt_damage(self, s, crt, con):
+        """Damage board: the repair list in the party's work order. Click a line to send them there first."""
+        x0, y0 = WF_POS
+        p, w = con.world.player, con.world
+        crt.text(s, "DAMAGE CONTROL  CLICK: WORK IT FIRST  F5: SONAR", (x0 + 14, 12), DIM, small=True)
+        crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
+        leaks = len(getattr(p, "leaks", ()))
+        crt.text(s, f"HULL {w.hull:3.0f}%" + (f"   LEAKS {leaks}" if leaks else ""), (x0 + 10, y0 + 6),
+                 RED if leaks or w.hull < 40 else PHOSPHOR, small=True)
+        for k, name in enumerate(con.damage_rows()):
+            y = y0 + DC_ROW_Y0 + k * DC_ROW_H
+            left = p.damaged.get(name)
+            if left is None:
+                crt.text(s, f"   {name:<14}OK", (x0 + 10, y + 3), DIM, small=True)
+                continue
+            state = "WORKING" if k == 0 else f"QUEUED {k}"
+            crt.text(s, f"{k + 1:>2} {name:<14}{state:<10}{int(left) // 60}:{int(left) % 60:02d}", (x0 + 10, y + 3),
+                     PHOSPHOR if k == 0 else RED, small=True)
+            if k == 0:  # the party's progress on the job in hand
+                done = 1 - left / REPAIR_TIME[name]
+                crt.frame(s, (x0 + 250, y + 5, 100, 8), color=DIM)
+                crt.line(s, (x0 + 251, y + 9), (x0 + 251 + 98 * done, y + 9), PHOSPHOR, 6)
 
     def _crt_tma(self, s, crt, con):
         """Bearing (true) across, time down: your bearings as dots, the TDC's estimate as a curve. When course,
@@ -521,7 +547,7 @@ class Workstation:
             art.toggle(f, (lx, ly), up)
             art.lamp(f, (lx, ly + 28), up or (ready and blink and con.tutorial is not None), color, 5)
         art.button(f, LOOK_BTN, "LOOK", lit=p.scope_up, color=art.AMBER)
-        if p.scope_damage > 0:
+        if "PERISCOPE" in p.damaged:
             art.engrave(f, "JAMMED", (SCOPE_LEVER[0], SCOPE_LEVER[1] + 40), 9, art.RED, center=True)
         planes = "BLOWING" if p.blowing else "LEVEL" if holding else "DIVE" if p.ordered_depth > p.z else "RISE"
         art.engrave(f, f"PLANES {planes}   ORDER {p.ordered_depth:.0f} M", (DEPTH_C[0], HOLD_BTN.bottom + 10), 10,
@@ -529,11 +555,12 @@ class Workstation:
         # weapons: guarded firing switches
         for i, (sx, sy) in enumerate(TUBE_SW):
             r = con.tubes[i]
-            ready, empty = r == 0, r == math.inf
+            broken = f"TUBE {i + 1}" in p.damaged
+            ready, empty = r == 0 and not broken, r == math.inf
             art.toggle(f, (sx, sy), ready, guard_color=art.RED)
             art.lamp(f, (sx + 26, sy - 16), ready or (not empty and blink), art.GREEN if ready else art.AMBER, 5)
-            state = "READY" if ready else "EMPTY" if empty else f"{r:2.0f} S"
-            art.engrave(f, state, (sx, sy + 36), 10, art.RED if empty else art.LEGEND, center=True)
+            state = "DAMAGED" if broken else "READY" if ready else "EMPTY" if empty else f"{r:2.0f} S"
+            art.engrave(f, state, (sx, sy + 36), 10, art.RED if empty or broken else art.LEGEND, center=True)
         art.counter(f, (650, 604), f"{p.torpedoes:02d}", 14)
         art.counter(f, (718, 604), f"{p.noisemakers:02d}", 14)
         art.button(f, NMKR_BTN, "NOISEMAKER  [N]", color=art.AMBER)
@@ -649,7 +676,7 @@ class Workstation:
                 ("G", "periscope depth (15 m)", "P.D. button"), ("U / K", "periscope / snorkel up-down", "levers"),
                 ("V", "look through the periscope", "LOOK button"),
                 ("A/D TAB M", "scope: train / power / mark", "drag / wheel"),
-                ("F2 / F4", "TMA plot / auto-solve (cadet)", ""),
+                ("F2 / F4 / F5", "TMA / auto-solve / damage board", ""),
                 ("[ ]  \\  L", "wire: steer / next fish / cut", "click fish, then aim"),
                 ("P / F1 / ESC", "pause / this card / quit", ""))
         for i, (keys, what, mouse) in enumerate(rows):
