@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 
-SUITES = ("test_sim.py", "test_tutorial.py", "test_periscope.py", "settings.py", "audio.py")
+SUITES = ("test_sim.py", "test_tutorial.py", "test_periscope.py", "settings.py", "audio.py", "campaign.py")
 
 if __name__ == "__main__":
     env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy")

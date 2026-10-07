@@ -6,6 +6,7 @@ import textwrap
 import numpy as np
 import pygame
 
+from campaign import PATROLS, UPGRADES, objective
 from console import ECHO_FADE
 from displays import CLASSES, CLASS_TAGS, SPEC_BINS, TEMPLATES
 from fire_control import FIELDS
@@ -46,8 +47,10 @@ class Workstation:
         self.yoke_cache = {}
         self.paper = self._greenbar(PAPER_RECT.size)
         self.needles = {k: art.Needle() for k in ("DEPTH", "BATTERY", "NOISE", "HULL", "O2", "ORDER")}
-        self.title_buttons = []  # (screen rect, difficulty)
-        self.menu = None  # the settings page, while it is open
+        self.buttons = []  # (screen rect, name): what a click on the current CRT page can hit
+        self.menu = None     # the settings page, while it is open
+        self.career = None   # campaign career, for its page
+        self.debrief = None  # the last patrol's debrief
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
         self.scope_surround = self.scope_bg.convert_alpha()  # same art with a round hole: hides the square corners
@@ -257,8 +260,13 @@ class Workstation:
     def draw_crt(self, con, state, paused):
         s, crt = self.crt_surf, self.crt
         s.fill((0, 0, 0))
+        self.buttons = []
         if state == "SETTINGS":
             self._crt_settings(s, crt, self.menu)
+        elif state == "CAREER":
+            self._crt_career(s, crt, self.career)
+        elif state == "DEBRIEF":
+            self._crt_debrief(s, crt, self.debrief)
         elif state == "TITLE" or con is None:
             self._crt_title(s, crt)
         else:
@@ -284,24 +292,88 @@ class Workstation:
 
     def _crt_title(self, s, crt):
         cx = s.get_width() // 2
-        crt.text(s, "SILENT SOLUTION", (cx, 62), PHOSPHOR, huge=True, center=True)
-        crt.text(s, "SUBMARINE OPERATOR WORKSTATION", (cx, 98), DIM, center=True)
-        options = (("TRAINING", "GUIDED DRILL: EVERY STATION, THEN LIVE EXERCISES"),
-                   ("CADET", "CLEAR WARNINGS - SLOW ENEMY FISH - SHORE POWER"),
-                   ("COMMANDER", "REAL ACOUSTICS - ZIG-ZAGS - DECOYS - BATTERY"),
-                   ("IRON CAPTAIN", "CAVITATION HEARD - HOMING COUNTER-FIRE - LEAKS - O2"))
-        self.title_buttons = []
-        for i, (name, blurb) in enumerate(options):
-            box = pygame.Rect(70, 122 + i * 54, 440, 48)
+        crt.text(s, "SILENT SOLUTION", (cx, 50), PHOSPHOR, huge=True, center=True)
+        crt.text(s, "SUBMARINE OPERATOR WORKSTATION", (cx, 84), DIM, center=True)
+        options = (("T", "TRAINING", "GUIDED DRILL: EVERY STATION, THEN LIVE EXERCISES"),
+                   ("C", "CAMPAIGN", "SIX PATROLS - BRIEFINGS - RANKS - REFITS - CAREER SAVE"),
+                   ("1", "CADET", "CLEAR WARNINGS - SLOW ENEMY FISH - SHORE POWER"),
+                   ("2", "COMMANDER", "REAL ACOUSTICS - ZIG-ZAGS - DECOYS - BATTERY"),
+                   ("3", "IRON CAPTAIN", "CAVITATION HEARD - HOMING COUNTER-FIRE - LEAKS - O2"))
+        for i, (key, name, blurb) in enumerate(options):
+            box = pygame.Rect(70, 108 + i * 46, 440, 42)
             crt.frame(s, box, color=PHOSPHOR)
-            crt.text(s, f"[{i or 'T'}]  {name}", (box.x + 16, box.y + 6), PHOSPHOR, big=True)
-            crt.text(s, blurb, (box.x + 16, box.y + 31), DIM, small=True)
-            self.title_buttons.append((box.move(CRT_RECT.topleft), name))
+            crt.text(s, f"[{key}]  {name}", (box.x + 16, box.y + 4), PHOSPHOR, big=True)
+            if key.isdigit():
+                crt.text(s, "ENDLESS", (box.right - 70, box.y + 8), DIM, small=True)
+            crt.text(s, blurb, (box.x + 16, box.y + 26), DIM, small=True)
+            self.buttons.append((box.move(CRT_RECT.topleft), name))
         box = pygame.Rect(70, 342, 440, 24)
         crt.frame(s, box, color=DIM)
         crt.text(s, "[S]  SETTINGS - SOUND, KEYS, MOUSE, TEXT, LAMPS", (box.x + 16, box.y + 5), PHOSPHOR, small=True)
-        self.title_buttons.append((box.move(CRT_RECT.topleft), "SETTINGS"))
+        self.buttons.append((box.move(CRT_RECT.topleft), "SETTINGS"))
         crt.text(s, "NEW? START WITH [T]  -  F1 STATION DRILL  -  ESC QUIT", (cx, 380), DIM, small=True, center=True)
+
+    def _crt_button(self, s, crt, rect, label, name, color=PHOSPHOR):
+        rect = pygame.Rect(rect)
+        crt.frame(s, rect, color=color)
+        crt.text(s, label, rect.center, color, small=True, center=True)
+        self.buttons.append((rect.move(CRT_RECT.topleft), name))
+
+    def _crt_career(self, s, crt, career):
+        cx = s.get_width() // 2
+        crt.text(s, career.rank, (cx, 24), PHOSPHOR, big=True, center=True)
+        if career.finished:
+            crt.text(s, "CAMPAIGN COMPLETE. SIX PATROLS - FLAG RANK. ENJOY THE SHORE.", (cx, 60), PHOSPHOR, small=True,
+                     center=True)
+            y = 84
+        else:
+            p = PATROLS[career.patrol]
+            crt.text(s, f"PATROL {career.patrol + 1} OF {len(PATROLS)}:  {p['name']}", (40, 50), PHOSPHOR)
+            lines = textwrap.wrap(p["brief"], 70)
+            for i, line in enumerate(lines):
+                crt.text(s, line, (40, 74 + i * 15), DIM, small=True)
+            y = 78 + len(lines) * 15
+            crt.text(s, f"OBJECTIVE: {objective(p)} IN {p['waves']} WAVES - {p['rules']} RULES", (40, y), PHOSPHOR,
+                     small=True)
+            y += 20
+        crt.text(s, "REFITS: " + (", ".join(career.upgrades) or "NONE YET"), (40, y), DIM, small=True)
+        crt.text(s, "PATROL LOG", (40, y + 26), PHOSPHOR, small=True)
+        crt.text(s, "HIGH SCORES (ENDLESS TOO)", (300, y + 26), PHOSPHOR, small=True)
+        for i, e in enumerate(career.log[-6:][::-1]):
+            crt.text(s, f"{e['patrol'][:14]:<14} {e['result']:<7} {e['grt']:>6,}", (40, y + 44 + i * 15),
+                     RED if e["result"] == "LOST" else DIM, small=True)
+        for i, e in enumerate(career.scores[:6]):
+            crt.text(s, f"{e['grt']:>7,}  {e['mode'][:19]}", (300, y + 44 + i * 15), DIM, small=True)
+        if not career.finished:
+            self._crt_button(s, crt, (40, 340, 150, 26), "[ENTER] SAIL", "SAIL")
+        self._crt_button(s, crt, (210, 340, 170, 26), "[N] NEW CAREER", "NEW CAREER", RED if career.note else DIM)
+        self._crt_button(s, crt, (400, 340, 140, 26), "[ESC] TITLE", "BACK", DIM)
+        if career.note:
+            crt.text(s, career.note, (cx, 378), RED, small=True, center=True)
+
+    def _crt_debrief(self, s, crt, d):
+        cx = s.get_width() // 2
+        p, ok = d["patrol"], d["result"] == "SUCCESS"
+        title = {"SUCCESS": "PATROL COMPLETE", "FAILED": "PATROL FAILED", "LOST": "BOAT LOST"}[d["result"]]
+        crt.text(s, title, (cx, 28), PHOSPHOR if ok else RED, huge=True, center=True)
+        crt.text(s, f"{p['name']}  -  OBJECTIVE {objective(p)}", (cx, 64), DIM, small=True, center=True)
+        kinds = {k: d["sunk"].count(k) for k in dict.fromkeys(d["sunk"])}
+        rows = [f"SUNK: {d['grt']:,} GRT" + (" - " + ", ".join(f"{n} {k}" for k, n in kinds.items()) if kinds else ""),
+                f"HULL {d['hull']:.0f}%    TIME ON PATROL {int(d['time'] // 60)} MIN"]
+        if d["promoted"]:
+            rows.append(f"PROMOTED: {d['promoted']}")
+        elif d["result"] == "LOST":
+            rows.append("THE FLOTILLA HAS ANOTHER BOAT FOR YOU. THE PATROL STANDS.")
+        elif not ok:
+            rows.append("OBJECTIVES NOT MET. THE PATROL STANDS - SAIL AGAIN.")
+        for i, row in enumerate(rows):
+            crt.text(s, row, (cx, 100 + i * 24), PHOSPHOR, center=True)
+        if d["offer"]:
+            crt.text(s, "CHOOSE A REFIT FOR THE NEXT PATROL", (cx, 196), PHOSPHOR, small=True, center=True)
+            for i, name in enumerate(d["offer"]):
+                self._crt_button(s, crt, (60, 216 + i * 44, 460, 36), f"[{i + 1}]  {name} - {UPGRADES[name]}", name)
+        else:
+            self._crt_button(s, crt, (190, 330, 200, 30), "[ENTER] CONTINUE", "CONTINUE")
 
     def _crt_settings(self, s, crt, menu):
         cx = s.get_width() // 2

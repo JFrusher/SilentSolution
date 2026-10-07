@@ -179,6 +179,7 @@ class Submarine(Vessel):
     lowering: float = -1.0     # countdown while the masts are being struck
     alerts: list = field(default_factory=list)  # own-ship events for the world to report: kind or (kind, detail)
     damaged: dict = field(default_factory=dict)  # system -> s of repair left, in the party's work order
+    quiet: float = 1.0  # refit: self-noise multiplier
 
     def __post_init__(self):
         self.ordered_depth, self.ordered_speed = self.z, self.speed
@@ -292,7 +293,8 @@ class Submarine(Vessel):
         steerage = min(1.0, self.speed / (4 * KNOT)) * (DAMAGED_RUDDER if "RUDDER" in hurt else 1.0)
         self.heading = (self.heading + self.rudder / MAX_RUDDER * TURN_RATE * steerage * dt) % 360
         self.leaks = [t - dt for t in self.leaks if t > dt]  # damage control works through them
-        self.noise = 0.25 + 0.035 * kt + 0.9 * self.cavitating + 0.8 * self.snorkeling + 1.5 * self.blowing
+        self.noise = self.quiet * (0.25 + 0.035 * kt + 0.9 * self.cavitating + 0.8 * self.snorkeling
+                                   + 1.5 * self.blowing)
         super().step(dt)
 
 
@@ -454,6 +456,7 @@ class WorldSimulation:
     min_hull: float = 0.0  # training floor: shaken, never sunk
     leaks_enabled: bool = False
     systems_damage: bool = False  # hits knock out own-boat systems for damage control to repair
+    armour: float = 1.0  # refit: share of hit damage the hull takes
     torp_damage: float = 75.0
     spot_mult: float = 1.0  # difficulty: how sharp enemy lookouts are
     sunk: list = field(default_factory=list)
@@ -529,6 +532,7 @@ class WorldSimulation:
         return events
 
     def damage(self, dmg, events):
+        dmg *= self.armour
         self.hull = max(self.min_hull, self.hull - dmg)
         p = self.player
         if self.systems_damage and dmg >= 8 and isinstance(p, Submarine):

@@ -1,6 +1,7 @@
-"""Silent Solution: game loop and screen states (title, play, pause, game over)."""
+"""Silent Solution: game loop and screen states (title, settings, career, play, pause, debrief, game over)."""
 import pygame
 
+import campaign
 from audio import AudioSynthesizer
 from console import Console
 from layout import CRT_RECT, H, W
@@ -19,12 +20,15 @@ def main():
     audio = AudioSynthesizer()
     settings.load()
     station = Workstation()
+    station.career = career = campaign.Career()
     console, state, paused, show_help = None, "TITLE", False, False
+    run = None  # the campaign patrol at sea, if any
 
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.1)
         for e in pygame.event.get():
-            quit_key = e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state != "SETTINGS"
+            pages = ("SETTINGS", "CAREER", "DEBRIEF")  # Esc means "back" on these
+            quit_key = e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state not in pages
             if e.type == pygame.QUIT or quit_key:
                 pygame.quit()
                 return
@@ -40,6 +44,32 @@ def main():
                     station.menu.scroll(e.y)
                 if back:
                     state = "TITLE"
+            elif state in ("CAREER", "DEBRIEF"):
+                choice = None
+                if e.type == pygame.KEYDOWN:
+                    offer = station.debrief["offer"] if state == "DEBRIEF" else []
+                    picks = {pygame.K_1: 0, pygame.K_2: 1}
+                    choice = (offer[picks[e.key]] if e.key in picks and picks[e.key] < len(offer) else
+                              {pygame.K_RETURN: "SAIL" if state == "CAREER" else "CONTINUE", pygame.K_n: "NEW CAREER",
+                               pygame.K_ESCAPE: "BACK"}.get(e.key))
+                elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                    choice = next((name for rect, name in station.buttons if rect.collidepoint(e.pos)), None)
+                if state == "DEBRIEF":
+                    if choice in campaign.UPGRADES:
+                        career.fit(choice)
+                        state = "CAREER"
+                    elif choice == "CONTINUE" and not station.debrief["offer"]:
+                        state = "CAREER"
+                elif choice == "NEW CAREER" and not career.note:
+                    career.note = "PRESS N AGAIN TO RESIGN AND START A NEW CAREER (HIGH SCORES ARE KEPT)"
+                elif choice:
+                    if choice == "NEW CAREER":
+                        career.new()
+                    elif choice == "BACK":
+                        state = "TITLE"
+                    elif choice == "SAIL" and not career.finished:
+                        (console, run), state = campaign.sail(career, audio), "PLAY"
+                    career.note = ""
             elif state == "TITLE":
                 choice = None
                 if e.type == pygame.KEYDOWN and e.key in (pygame.K_1, pygame.K_2, pygame.K_3):
@@ -48,9 +78,13 @@ def main():
                     choice = "TRAINING"
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
                     choice = "SETTINGS"
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
+                    choice = "CAMPAIGN"
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                    choice = next((name for rect, name in station.title_buttons if rect.collidepoint(e.pos)), None)
-                if choice == "SETTINGS":
+                    choice = next((name for rect, name in station.buttons if rect.collidepoint(e.pos)), None)
+                if choice == "CAMPAIGN":
+                    state = "CAREER"
+                elif choice == "SETTINGS":
                     station.menu, state = settings.SettingsMenu(), "SETTINGS"
                 elif choice == "TRAINING":
                     console, state = Console(choice, audio, TRAINING), "PLAY"
@@ -79,8 +113,13 @@ def main():
                 console.tutorial.update(dt)
                 if console.tutorial.finished:
                     console, state = None, "TITLE"
+            elif run:
+                if run.update(console):
+                    station.debrief = career.record(run, console)
+                    console, run, state = None, None, "DEBRIEF"
             elif console.dead and state == "PLAY":
                 state = "OVER"
+                career.add_score(console.level, console.score, console.wave)
         station.draw(screen, console, state, paused, show_help, dt)
         pygame.display.flip()
 
