@@ -1,4 +1,7 @@
-"""Procedural audio: every sound is synthesised from NumPy buffers at start-up."""
+"""Procedural audio: every sound is synthesised from NumPy buffers at start-up.
+Sounds from the sea are panned by bearing; sounds inside the boat ring through a convolved steel hull;
+every buffer is normalised to its category's RMS so the volume sliders mix like with like."""
+import math
 import random
 
 import numpy as np
@@ -8,6 +11,9 @@ from settings import volume
 
 
 SAMPLE_RATE = 44100
+MIX_RMS = {"SONAR": 0.16, "EFFECTS": 0.2, "AMBIENCE": 0.14}  # buffer loudness per category before play strength
+HULL_WET = 0.4   # reverb share on interior sounds
+PAN_WIDTH = 0.8  # how hard a beam bearing pans (1 = one ear only)
 
 
 # ---------- procedural audio ----------
@@ -21,6 +27,40 @@ def lowpass(wave, taps):
     return np.convolve(wave, np.ones(taps) / taps, "same")
 
 
+def rms(wave):
+    return max(float(np.sqrt(np.mean(wave ** 2))), 1e-9)
+
+
+def normalise(wave, target):
+    """Scale to a target RMS, then pull the peak back under full scale."""
+    wave = wave * target / rms(wave)
+    return wave / max(1.0, np.abs(wave).max() / 0.98)
+
+
+def pan_gains(rel_brg):
+    """(left, right) gains for a relative bearing: ahead and astern centre, the beams to one side."""
+    p = PAN_WIDTH * math.sin(math.radians(rel_brg))
+    return min(1.0, 1 - p), min(1.0, 1 + p)
+
+
+def hull_ir(rate, dur=0.9):
+    """Impulse response of the pressure hull: a few ringing steel modes over a diffuse low tail."""
+    t = np.arange(int(rate * dur)) / rate
+    ring = ((96, 0.35), (151, 0.28), (233, 0.2), (347, 0.14))  # Hz, decay s
+    modes = sum(np.sin(2 * np.pi * f * t) * np.exp(-t / d) for f, d in ring)
+    ir = 0.5 * modes + lowpass(np.random.uniform(-1, 1, t.size), 8) * np.exp(-t / 0.2)
+    return ir / np.sqrt(np.sum(ir ** 2))
+
+
+def reverb(wave, ir, wet=HULL_WET, loop=False):
+    """FFT convolution. A loop wraps its tail round (circular convolution) so it still loops without a seam."""
+    n = wave.size if loop else wave.size + ir.size - 1
+    size = n if loop else 1 << (n - 1).bit_length()
+    tail = np.fft.irfft(np.fft.rfft(wave, size) * np.fft.rfft(ir[:size], size), size)[:n]
+    dry = np.pad(wave, (0, n - wave.size))
+    return (1 - wet) * dry + wet * tail * rms(wave) / rms(tail)
+
+
 class AudioSynthesizer:
     def __init__(self):
         try:
@@ -31,35 +71,40 @@ class AudioSynthesizer:
         self.enabled = True
         pygame.mixer.set_num_channels(32)
         self.rate, _, self.channels = pygame.mixer.get_init()
+        self.ir = hull_ir(self.rate)
         ping = self._ping_wave()
-        self.ping = self._sound(ping)
-        self.echo = self._sound(ping * 0.5)
-        self.enemy_ping = self._sound(self._ping_wave(950.0, 900.0, 0.9))  # flat ASDIC tone, not our sweep
+        self.ping = self._sound(ping, "SONAR")
+        self.echo = self._sound(ping, "SONAR", 0.5)
+        self.enemy_ping = self._sound(self._ping_wave(950.0, 900.0, 0.9), "SONAR")  # flat ASDIC tone, not our sweep
         self.explosion = self._sound(self._explosion_wave())
         self.hiss = self._sound(self._hiss_wave())
-        self.blow = self._sound(lowpass(np.random.uniform(-1, 1, int(self.rate * 3)), 30) * 4 * np.exp(-0.5 * self._t(3)))
+        rush = lowpass(np.random.uniform(-1, 1, int(self.rate * 3)), 30) * np.exp(-0.5 * self._t(3))
+        self.blow = self._sound(reverb(rush, self.ir))
         self.clack = self._sound(np.random.uniform(-1, 1, int(self.rate * 0.02)) * np.exp(-300 * self._t(0.02)) * 0.5)
-        self.creaks = [self._sound(self._creak_wave(f)) for f in (38.0, 52.0, 67.0, 85.0)]
-        self.thrum_channel = self._sound(self._thrum_wave()).play(loops=-1)
+        self.creaks = [self._sound(reverb(self._creak_wave(f), self.ir)) for f in (38.0, 52.0, 67.0, 85.0)]
+        self.thrum_channel = self._sound(self._thrum_wave(), "SONAR").play(loops=-1)
         self.thrum_channel.set_volume(0.0)
         t = self._t(1.2)  # hydraulic mast ram: a rising whine over a hiss
-        self.mast = self._sound(0.35 * (np.sin(sweep_phase(180.0, 320.0, 1.2, t)) * 0.6
+        self.mast = self._sound(reverb((np.sin(sweep_phase(180.0, 320.0, 1.2, t)) * 0.6
                                         + lowpass(np.random.uniform(-1, 1, t.size), 6) * 0.5)
-                                * np.minimum(1.0, t / 0.1) * np.minimum(1.0, (1.2 - t) / 0.2))
+                                       * np.minimum(1.0, t / 0.1) * np.minimum(1.0, (1.2 - t) / 0.2), self.ir))
         t = self._t(0.4)
-        self.thunk = self._sound(0.9 * np.sin(2 * np.pi * 55 * t) * np.exp(-14 * t)
-                                 + 0.3 * lowpass(np.random.uniform(-1, 1, t.size), 40) * np.exp(-20 * t))
+        thunk = (0.9 * np.sin(2 * np.pi * 55 * t) * np.exp(-14 * t)
+                 + 0.3 * lowpass(np.random.uniform(-1, 1, t.size), 40) * np.exp(-20 * t))
+        self.thunk = self._sound(reverb(thunk, self.ir))
         t = self._t(2.0)  # diesel: 25 Hz firing pulses (whole cycles in 2 s -> seamless) through the hull
         chug = np.maximum(0, np.sin(2 * np.pi * 25 * t)) ** 4 - 0.25
-        self.diesel_channel = self._sound(0.6 * lowpass(chug + 0.3 * np.random.uniform(-1, 1, t.size), 12)).play(loops=-1)
+        diesel = reverb(lowpass(chug + 0.3 * np.random.uniform(-1, 1, t.size), 12), self.ir, loop=True)
+        self.diesel_channel = self._sound(diesel, "AMBIENCE").play(loops=-1)
         self.diesel_channel.set_volume(0.0)
         t = self._t(4.0)  # surface: wind hiss with slow wave slaps
         slap = 0.5 + 0.5 * np.sin(2 * np.pi * 0.5 * t) ** 8
-        self.surface_channel = self._sound(0.5 * lowpass(np.random.uniform(-1, 1, t.size), 8) * slap).play(loops=-1)
+        surface = lowpass(np.random.uniform(-1, 1, t.size), 8) * slap
+        self.surface_channel = self._sound(surface, "AMBIENCE").play(loops=-1)
         self.surface_channel.set_volume(0.0)
 
-    def _sound(self, wave):
-        pcm = (np.clip(wave, -1, 1) * 32767).astype(np.int16)
+    def _sound(self, wave, category="EFFECTS", level=1.0):
+        pcm = (np.clip(normalise(wave, MIX_RMS[category] * level), -1, 1) * 32767).astype(np.int16)
         if self.channels > 1:
             pcm = np.repeat(pcm[:, None], self.channels, axis=1)
         return pygame.sndarray.make_sound(np.ascontiguousarray(pcm))
@@ -100,40 +145,46 @@ class AudioSynthesizer:
         metal = square * (0.6 + 0.4 * np.sin(2 * np.pi * f0 * 4.3 * t))           # ring-mod partial: steel, not wood
         return 0.6 * lowpass(metal, 24) * np.sin(np.pi * t / dur) ** 3
 
-    def _play(self, sound, strength, category="EFFECTS"):
+    def _play(self, sound, strength, category="EFFECTS", rel_brg=None):
+        """rel_brg: where it is outside the hull, for the pan; None plays it centred (inside the boat)."""
         if self.enabled:
             ch = sound.play()
             if ch:
-                ch.set_volume(float(np.clip(strength, 0.05, 1.0)) * volume(category))
+                v = float(np.clip(strength, 0.05, 1.0)) * volume(category)
+                left, right = pan_gains(rel_brg) if rel_brg is not None else (1.0, 1.0)
+                ch.set_volume(v * left, v * right)
 
     def play_ping(self):
         self._play(self.ping, 1.0, "SONAR")
 
-    def play_echo(self, strength):
-        self._play(self.echo, strength, "SONAR")
+    def play_echo(self, strength, rel_brg=None):
+        self._play(self.echo, strength, "SONAR", rel_brg)
 
-    def play_enemy_ping(self, strength):
-        self._play(self.enemy_ping, strength, "SONAR")
+    def play_enemy_ping(self, strength, rel_brg=None):
+        self._play(self.enemy_ping, strength, "SONAR", rel_brg)
 
-    def play_explosion(self, strength):
-        self._play(self.explosion, strength)
+    def play_explosion(self, strength, rel_brg=None):
+        self._play(self.explosion, strength, rel_brg=rel_brg)
 
-    def play_hiss(self, strength):
-        self._play(self.hiss, strength)
+    def play_hiss(self, strength, rel_brg=None):
+        self._play(self.hiss, strength, rel_brg=rel_brg)
 
     def play_blow(self):
         self._play(self.blow, 0.8)
 
     def play_clack(self):
-        self._play(self.clack, 0.12)
+        self._play(self.clack, 0.06)
 
     def play_creak(self, strength):
         if self.enabled:
             self._play(random.choice(self.creaks), strength)
 
-    def set_hydrophone(self, signal):
+    def set_hydrophone(self, signal, rel_brg=0.0):
+        """The trained hydrophone in the headphones: louder on a contact, panned to where the dial points."""
         if self.enabled:
-            self.thrum_channel.set_volume(float(np.clip(0.03 + signal, 0.0, 1.0)) * volume("SONAR"))
+            v = float(np.clip(0.03 + signal, 0.0, 1.0)) * volume("SONAR")
+            left, right = pan_gains(rel_brg)
+            self.thrum_channel.set_volume(v * left, v * right)
 
     def play_mast(self):
         self._play(self.mast, 0.6)
@@ -148,3 +199,15 @@ class AudioSynthesizer:
     def set_surface(self, looking, sea_state):
         if self.enabled:
             self.surface_channel.set_volume((0.15 + 0.08 * sea_state if looking else 0.0) * volume("AMBIENCE"))
+
+
+if __name__ == "__main__":  # self-check: mix levels, pan law, reverb lengths and seamless loops
+    w = np.random.uniform(-1, 1, 4000)
+    assert abs(rms(normalise(w, 0.2)) - 0.2) < 1e-6 and np.abs(normalise(w * 50, 0.9)).max() <= 0.98 + 1e-9
+    assert pan_gains(0) == (1.0, 1.0) and pan_gains(90)[0] < 0.3 < pan_gains(90)[1] == 1.0
+    ir = hull_ir(SAMPLE_RATE)
+    assert reverb(w, ir).size == w.size + ir.size - 1
+    hum = np.sin(2 * np.pi * 50 * np.arange(8820) / SAMPLE_RATE)  # whole cycles: a seamless loop
+    out = reverb(hum, ir, loop=True)
+    assert out.size == hum.size and abs(out[0] - out[-1]) < 0.1, (out[0], out[-1])
+    print("audio ok")

@@ -508,7 +508,7 @@ class Console:
                 self.waterfall.blip(0.0, 60, WF_W)  # layer reverb smears every bearing
                 self.say(f"LAYER RETURN {rng:.0f} M")
                 continue
-            self.audio.play_echo(2500 / rng)
+            self.audio.play_echo(2500 / rng, brg)
             self.waterfall.blip(brg, 230)
             b = math.radians(brg + p.heading)
             self.echoes.append((p.x + rng * math.sin(b), p.y + rng * math.cos(b), world.time))
@@ -526,7 +526,7 @@ class Console:
         gains = cone_gain(self.dial, bearings, self.diff["cone"])
         self.signal = float((gains * levels / 160).max(initial=0.0)) / (1 + 2 * rain)
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
-        self.audio.set_hydrophone(self.signal)
+        self.audio.set_hydrophone(self.signal, self.dial)
         self.tma.update(world.time, p, self.signal > 0.5, self.dial + p.heading)
         self.torpedo_warning = bool(np.any(hostile & (levels > 30)))
 
@@ -604,7 +604,7 @@ class Console:
             return
         if kind == "CHARGE":
             loud = self.passive.loudness(a, ref=400.0)
-            self.audio.play_explosion(loud)
+            self.audio.play_explosion(loud, self.passive.bearing_of(a))
             self.jolt(loud * 0.7)
             if b >= 1:
                 self.audio.play_creak(1.0)
@@ -613,7 +613,7 @@ class Console:
         brg = self.passive.bearing_of(a)
         if isinstance(a, Torpedo) and a.hostile:
             if kind == "DECOYED":
-                self.audio.play_explosion(self.passive.loudness(a))
+                self.audio.play_explosion(self.passive.loudness(a), brg)
                 self.jolt(0.3)
                 self.say(f"DETONATION {brg:05.1f}R. DECOY TOOK IT")
             return  # nothing else about their fish is observable
@@ -622,7 +622,7 @@ class Console:
                 self.say(f"LAUNCH TRANSIENT {brg:05.1f}R!")
                 tt(f"CONN, SONAR: TORPEDO IN THE WATER, BEARING {brg:03.0f} RELATIVE.")
         elif kind == "ESCORT_PING":
-            self.audio.play_enemy_ping(self.passive.loudness(a, ref=5000.0))
+            self.audio.play_enemy_ping(self.passive.loudness(a, ref=5000.0), brg)
             self.waterfall.blip(brg, 200)
             self.enemy_pings.append(((brg + world.player.heading) % 360, world.time))
             self.lamp_enemy = 1.5
@@ -651,14 +651,14 @@ class Console:
             self.say(f"SPLASHES {brg:05.1f}R. CHARGES")
             tt("CONN, SONAR: DEPTH CHARGES IN THE WATER.")
         elif kind == "DECOY_DROP":
-            self.audio.play_hiss(max(0.4, self.passive.loudness(a)))
+            self.audio.play_hiss(max(0.4, self.passive.loudness(a)), brg)
             self.say(f"HISS {brg:05.1f}R. COUNTERMEASURE")
         elif kind in ("ARMED", "HOMING", "LOST"):
             self.say(f"T{a.tube} " + {"ARMED": "SEEKER ACTIVE", "HOMING": "HOMING", "LOST": "LOST LOCK"}[kind])
         elif kind == "EXHAUSTED":
             self.say(f"T{a.tube} FUEL OUT. " + ("DECOYED" if isinstance(b, Decoy) else "MISS"))
         elif kind in ("HIT", "DECOYED"):
-            self.audio.play_explosion(self.passive.loudness(a, ref=4000.0))
+            self.audio.play_explosion(self.passive.loudness(a, ref=4000.0), brg)
             self.waterfall.blip(brg, 255)
             self.jolt(0.25)
             self.say(f"T{a.tube} DETONATION {brg:05.1f}R")
