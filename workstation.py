@@ -21,6 +21,7 @@ from sensors import SCOPE_FOV
 from tma import PLOT_WINDOW as TMA_WINDOW
 from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, SCOPE_TOP, SOUND_SPEED,
                  TELEGRAPH, TORP_MAX_RUN, YARD)
+from settings import BAR_W, BAR_X, ROW_H, ROW_Y0, SETTINGS, VISIBLE
 from tuning import REPAIR_TIME
 
 # console sections: black faceplates set into the painted steel
@@ -46,6 +47,7 @@ class Workstation:
         self.paper = self._greenbar(PAPER_RECT.size)
         self.needles = {k: art.Needle() for k in ("DEPTH", "BATTERY", "NOISE", "HULL", "O2", "ORDER")}
         self.title_buttons = []  # (screen rect, difficulty)
+        self.menu = None  # the settings page, while it is open
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
         self.scope_surround = self.scope_bg.convert_alpha()  # same art with a round hole: hides the square corners
@@ -226,6 +228,7 @@ class Workstation:
     # --- frame ---
     def draw(self, screen, con, state, paused, show_help, dt):
         f = self.frame
+        art.SAFE_LAMPS = SETTINGS["colorblind"]
         if con and con.looking and state == "PLAY":
             self.draw_periscope(f, con, paused)
         else:
@@ -254,7 +257,9 @@ class Workstation:
     def draw_crt(self, con, state, paused):
         s, crt = self.crt_surf, self.crt
         s.fill((0, 0, 0))
-        if state == "TITLE" or con is None:
+        if state == "SETTINGS":
+            self._crt_settings(s, crt, self.menu)
+        elif state == "TITLE" or con is None:
             self._crt_title(s, crt)
         else:
             self._crt_sonar(s, crt, con)
@@ -287,12 +292,37 @@ class Workstation:
                    ("IRON CAPTAIN", "CAVITATION HEARD - HOMING COUNTER-FIRE - LEAKS - O2"))
         self.title_buttons = []
         for i, (name, blurb) in enumerate(options):
-            box = pygame.Rect(70, 124 + i * 58, 440, 50)
+            box = pygame.Rect(70, 122 + i * 54, 440, 48)
             crt.frame(s, box, color=PHOSPHOR)
             crt.text(s, f"[{i or 'T'}]  {name}", (box.x + 16, box.y + 6), PHOSPHOR, big=True)
             crt.text(s, blurb, (box.x + 16, box.y + 31), DIM, small=True)
             self.title_buttons.append((box.move(CRT_RECT.topleft), name))
-        crt.text(s, "NEW? START WITH [T]  -  F1 STATION DRILL  -  ESC QUIT", (cx, 372), DIM, small=True, center=True)
+        box = pygame.Rect(70, 342, 440, 24)
+        crt.frame(s, box, color=DIM)
+        crt.text(s, "[S]  SETTINGS - SOUND, KEYS, MOUSE, TEXT, LAMPS", (box.x + 16, box.y + 5), PHOSPHOR, small=True)
+        self.title_buttons.append((box.move(CRT_RECT.topleft), "SETTINGS"))
+        crt.text(s, "NEW? START WITH [T]  -  F1 STATION DRILL  -  ESC QUIT", (cx, 380), DIM, small=True, center=True)
+
+    def _crt_settings(self, s, crt, menu):
+        cx = s.get_width() // 2
+        crt.text(s, "SETTINGS", (cx, 22), PHOSPHOR, big=True, center=True)
+        crt.text(s, "UP/DOWN PICK - LEFT/RIGHT CHANGE - ENTER TOGGLE OR REBIND - ESC SAVE AND BACK", (cx, 44), DIM,
+                 small=True, center=True)
+        for k, row in enumerate(menu.rows[menu.top:menu.top + VISIBLE]):
+            y, sel = ROW_Y0 + k * ROW_H, menu.top + k == menu.sel
+            name, bar, text = menu.label(row)
+            color = PHOSPHOR if sel else DIM
+            if sel:
+                crt.rect(s, (40, y, 500, ROW_H - 2), (0, 34, 10))
+            crt.text(s, ("> " if sel else "  ") + name, (48, y + 3), color, small=True)
+            if bar is not None:
+                crt.frame(s, (BAR_X, y + 4, BAR_W, 10), color=DIM)
+                crt.rect(s, (BAR_X + 1, y + 5, int((BAR_W - 2) * bar), 8), color)
+                crt.text(s, text, (BAR_X + BAR_W + 12, y + 3), color, small=True)
+            else:
+                crt.text(s, text, (BAR_X, y + 3), RED if text == "PRESS A KEY..." else color, small=True)
+        crt.text(s, menu.note or f"{menu.sel + 1} / {len(menu.rows)}   WHEEL SCROLLS", (cx, 360), DIM, small=True,
+                 center=True)
 
     def _crt_sonar(self, s, crt, con):
         x0, y0 = WF_POS
@@ -597,14 +627,15 @@ class Workstation:
             for x in (r.x + 7, r.right - 7):
                 pygame.draw.circle(f, (176, 180, 170), (x, int(y)), 3)
         if tt:
-            font = art.mono(12)
-            rows = (r.h - 16 - (ORDER_SLIP.h + 8 if con.tutorial else 0)) // 15
+            big = SETTINGS["large_text"]
+            font, lh = art.mono(15 if big else 12), 19 if big else 15
+            rows = (r.h - 16 - (ORDER_SLIP.h + 8 if con.tutorial else 0)) // lh
             lines = [*list(tt.lines)[-(rows - 1):], tt.typing]
             for i, line in enumerate(lines):
-                f.blit(font.render(line, True, art.INK), (r.x + 20, r.bottom - 12 - (len(lines) - i) * 15))
+                f.blit(font.render(line, True, art.INK), (r.x + 20, r.bottom - 12 - (len(lines) - i) * lh))
             if tt.queue and int(pygame.time.get_ticks() / 150) % 2:
                 cx = r.x + 20 + font.size(tt.typing)[0]
-                pygame.draw.rect(f, art.INK, (cx, r.bottom - 27, 7, 12))
+                pygame.draw.rect(f, art.INK, (cx, r.bottom - 12 - lh, 7, lh - 3))
             art.counter(f, (TELETYPE.x + 184, TELETYPE.y + 8), f"{con.wave:02d}", 13)
             art.counter(f, (TELETYPE.x + 234, TELETYPE.y + 8), f"{con.score:6d}", 12)
         pygame.draw.rect(f, (60, 58, 52), r, 2)

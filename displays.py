@@ -7,6 +7,7 @@ import numpy as np
 import pygame
 
 from layout import WF_H, WF_W
+from settings import SETTINGS
 
 
 ROW_INTERVAL = 0.1        # sim seconds per waterfall row
@@ -62,7 +63,6 @@ class SpectrumAnalyzer:
 
 # ---------- teleprinter ----------
 class Teletype:
-    WIDTH = 38
 
     def __init__(self, audio, cps=34.0):
         self.audio, self.cps = audio, cps
@@ -73,7 +73,7 @@ class Teletype:
         self.fed = 0  # lines fed through, for the paper's perforations
 
     def print(self, text):
-        self.queue.extend(textwrap.wrap(text, self.WIDTH) + [""])
+        self.queue.extend(textwrap.wrap(text, 30 if SETTINGS["large_text"] else 38) + [""])
 
     def update(self, dt):
         if not self.queue:

@@ -15,6 +15,7 @@ from layout import (BLOW_BTN, CRT_RECT, DC_ROW_H, DC_ROW_Y0, DEPTH_C, DEPTH_R, H
                     ORDER_SLIP, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER, SCOPE_R, SNORT_LEVER, TDC_PANEL,
                     TDC_ROW_H, TDC_ROW_Y0, TELEGRAPH_BTNS, TELEGRAPH_RECT, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C,
                     WHEEL_R)
+import settings
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
 from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
                  YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
@@ -322,42 +323,42 @@ class Console:
             return
         p = self.world.player
         actions = {
-            pygame.K_SPACE: self.ping,
-            pygame.K_f: self.fire,
-            pygame.K_1: lambda: self.fire(0),
-            pygame.K_2: lambda: self.fire(1),
-            pygame.K_w: lambda: self.tdc.cycle(-1),
-            pygame.K_s: lambda: self.tdc.cycle(1),
-            pygame.K_UP: lambda: self.tdc.nudge(1),
-            pygame.K_DOWN: lambda: self.tdc.nudge(-1),
-            pygame.K_m: self.scope_mark if self.looking else self.mark,
-            pygame.K_u: self.toggle_scope,
-            pygame.K_k: self.toggle_snorkel,
-            pygame.K_g: self.periscope_depth,
-            pygame.K_v: self.look,
-            pygame.K_TAB: self.toggle_power,
-            pygame.K_q: lambda: self.order_depth(p.ordered_depth - 10),
-            pygame.K_e: lambda: self.order_depth(p.ordered_depth + 10),
-            pygame.K_h: self.hold_depth,
-            pygame.K_b: self.blow,
-            pygame.K_z: lambda: self.telegraph(self.telegraph_index() - 1),
-            pygame.K_x: lambda: self.telegraph(self.telegraph_index() + 1),
-            pygame.K_c: lambda: setattr(p, "rudder", 0.0),
-            pygame.K_n: self.noisemaker,
-            pygame.K_t: self.cycle_scope,
-            pygame.K_LEFTBRACKET: lambda: self.nudge_fish(-1),
-            pygame.K_RIGHTBRACKET: lambda: self.nudge_fish(1),
-            pygame.K_BACKSLASH: self.next_fish,
-            pygame.K_l: self.cut_wire,
-            pygame.K_RETURN: lambda: self.actions.add("ENTER"),
-            pygame.K_KP_ENTER: lambda: self.actions.add("ENTER"),
-            pygame.K_F3: lambda: setattr(self, "debug", not self.debug),
-            pygame.K_F2: self.flip_page,
-            pygame.K_F4: self.auto_solve,
-            pygame.K_F5: self.damage_board,
+            "PING": self.ping,
+            "FIRE": self.fire,
+            "FIRE TUBE 1": lambda: self.fire(0),
+            "FIRE TUBE 2": lambda: self.fire(1),
+            "TDC ROW UP": lambda: self.tdc.cycle(-1),
+            "TDC ROW DOWN": lambda: self.tdc.cycle(1),
+            "TDC VALUE UP": lambda: self.tdc.nudge(1),
+            "TDC VALUE DOWN": lambda: self.tdc.nudge(-1),
+            "MARK": self.scope_mark if self.looking else self.mark,
+            "RAISE SCOPE": self.toggle_scope,
+            "RAISE SNORKEL": self.toggle_snorkel,
+            "PERISCOPE DEPTH": self.periscope_depth,
+            "LOOK": self.look,
+            "SCOPE POWER": self.toggle_power,
+            "SHALLOWER": lambda: self.order_depth(p.ordered_depth - 10),
+            "DEEPER": lambda: self.order_depth(p.ordered_depth + 10),
+            "HOLD DEPTH": self.hold_depth,
+            "BLOW": self.blow,
+            "SLOWER": lambda: self.telegraph(self.telegraph_index() - 1),
+            "FASTER": lambda: self.telegraph(self.telegraph_index() + 1),
+            "RUDDER AMIDSHIPS": lambda: setattr(p, "rudder", 0.0),
+            "NOISEMAKER": self.noisemaker,
+            "SCOPE RANGE": self.cycle_scope,
+            "WIRE LEFT": lambda: self.nudge_fish(-1),
+            "WIRE RIGHT": lambda: self.nudge_fish(1),
+            "NEXT FISH": self.next_fish,
+            "CUT WIRE": self.cut_wire,
+            "ACKNOWLEDGE": lambda: self.actions.add("ENTER"),
+            "DEBUG": lambda: setattr(self, "debug", not self.debug),
+            "TMA PAGE": self.flip_page,
+            "AUTO-SOLVE": self.auto_solve,
+            "DAMAGE BOARD": self.damage_board,
         }
-        if k in actions:
-            actions[k]()
+        name = settings.action_for(k)
+        if name in actions:
+            actions[name]()
 
     def flip_page(self):
         self.crt_page = "TMA" if self.crt_page == "SONAR" else "SONAR"
@@ -435,7 +436,7 @@ class Console:
     def drag(self, pos):
         if isinstance(self.dragging, tuple):  # training the scope: the scene follows the hand
             dx = pos[0] - self.dragging[1]
-            self.scope_brg = (self.scope_brg - dx * SCOPE_FOV[self.high_power] / EYE) % 360
+            self.scope_brg = (self.scope_brg - dx * settings.SETTINGS["mouse"] * SCOPE_FOV[self.high_power] / EYE) % 360
             self.dragging = ("scope", pos[0])
         elif self.dragging == "wheel":
             self.world.player.rudder = round(clamp((pos[0] - WHEEL_C[0]) / (WHEEL_R + 16) * MAX_RUDDER, -MAX_RUDDER, MAX_RUDDER))
@@ -463,15 +464,16 @@ class Console:
         if self.dead:
             return
         p, world = self.world.player, self.world
-        train = keys[pygame.K_d] - keys[pygame.K_a]
+        held = lambda action: keys[settings.code(action)]
+        train = held("TRAIN RIGHT") - held("TRAIN LEFT")
         if self.looking:  # A/D train the scope; the hydrophone dial stays where it was
             self.scope_brg = (self.scope_brg + train * SCOPE_TRAIN_RATE[self.high_power] * dt) % 360
         else:
             self.dial = (self.dial + train * DIAL_RATE * dt) % 360
-        rudder = keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]
+        rudder = held("RUDDER RIGHT") - held("RUDDER LEFT")
         if rudder:
             p.rudder = clamp(p.rudder + rudder * RUDDER_RATE * dt, -MAX_RUDDER, MAX_RUDDER)
-        adj = keys[pygame.K_UP] - keys[pygame.K_DOWN]
+        adj = held("TDC VALUE UP") - held("TDC VALUE DOWN")
         self.held = self.held + dt if adj else 0.0
         if self.held > HOLD_DELAY:
             self.tdc.hold(adj, dt)

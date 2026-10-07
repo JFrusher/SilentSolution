@@ -24,6 +24,8 @@ AMBER = (255, 190, 86)           # incandescent behind amber glass
 RED = (232, 74, 52)
 GREEN = (132, 214, 112)
 BLUE = (128, 172, 222)
+SAFE_LAMPS = False  # colour-blind lamps: Okabe-Ito blue / vermilion / yellow for green / red / amber
+SAFE = {GREEN: (86, 180, 233), RED: (213, 94, 0), AMBER: (240, 228, 66)}
 WHITE = (238, 232, 214)
 INK = (32, 30, 28)               # print on paper
 INK_RED = (164, 44, 32)
@@ -373,6 +375,7 @@ def _warm(color, on):
 
 def lamp(surf, c, on, color, r=6):
     """Pilot lamp: a domed lens in a knurled bezel."""
+    color = SAFE.get(color, color) if SAFE_LAMPS else color
     x, y = int(c[0]), int(c[1])
     if on:
         surf.blit(_glow(color, r), (x - r * 3, y - r * 3))
@@ -386,6 +389,7 @@ def lamp(surf, c, on, color, r=6):
 
 def annunciator(surf, rect, legend, on, color):
     """Warning annunciator tile: legend engraved on the lens, so it reads lit or dark, in any colour."""
+    color = SAFE.get(color, color) if SAFE_LAMPS else color
     r = pygame.Rect(rect)
     pygame.draw.rect(surf, (10, 10, 9), r.inflate(4, 4))
     lens = _warm(color, on)

@@ -3,9 +3,10 @@ import pygame
 
 from audio import AudioSynthesizer
 from console import Console
-from layout import H, W
+from layout import CRT_RECT, H, W
 from tutorial import TRAINING, Tutorial
 from workstation import Workstation
+import settings
 from tuning import DIFFICULTY
 
 FPS = 60
@@ -16,26 +17,42 @@ def main():
     pygame.display.set_caption("SILENT SOLUTION")
     clock = pygame.time.Clock()
     audio = AudioSynthesizer()
+    settings.load()
     station = Workstation()
     console, state, paused, show_help = None, "TITLE", False, False
 
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.1)
         for e in pygame.event.get():
-            if e.type == pygame.QUIT or (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
+            quit_key = e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state != "SETTINGS"
+            if e.type == pygame.QUIT or quit_key:
                 pygame.quit()
                 return
             if e.type == pygame.KEYDOWN and e.key == pygame.K_F1:
                 show_help = not show_help
+            elif state == "SETTINGS":
+                back = None
+                if e.type == pygame.KEYDOWN:
+                    back = station.menu.key(e.key)
+                elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                    back = station.menu.click(e.pos[0] - CRT_RECT.x, e.pos[1] - CRT_RECT.y)
+                elif e.type == pygame.MOUSEWHEEL:
+                    station.menu.scroll(e.y)
+                if back:
+                    state = "TITLE"
             elif state == "TITLE":
                 choice = None
                 if e.type == pygame.KEYDOWN and e.key in (pygame.K_1, pygame.K_2, pygame.K_3):
                     choice = list(DIFFICULTY)[e.key - pygame.K_1]
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_t:
                     choice = "TRAINING"
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_s:
+                    choice = "SETTINGS"
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                     choice = next((name for rect, name in station.title_buttons if rect.collidepoint(e.pos)), None)
-                if choice == "TRAINING":
+                if choice == "SETTINGS":
+                    station.menu, state = settings.SettingsMenu(), "SETTINGS"
+                elif choice == "TRAINING":
                     console, state = Console(choice, audio, TRAINING), "PLAY"
                     Tutorial(console)
                 elif choice:

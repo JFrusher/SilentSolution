@@ -46,6 +46,7 @@ Operator side (only sees the world through sensors):
 | `audio.py` | procedural sound |
 | `console.py` | operator state, input and event reporting |
 | `layout.py` | screen geometry |
+| `settings.py` | volumes, key bindings, mouse, large text, colour-blind lamps (`~/.silent_solution/settings.json`) |
 | `workstation.py` | draws the station, CRTs and periscope eyepiece |
 | `graphics/` | CRT post-processing, 1970s/80s control-room art kit, periscope renderer |
 | `tutorial.py` | the training patrol |
