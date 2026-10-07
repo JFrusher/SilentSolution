@@ -4,6 +4,8 @@ import random
 import numpy as np
 import pygame
 
+from settings import volume
+
 
 SAMPLE_RATE = 44100
 
@@ -98,20 +100,20 @@ class AudioSynthesizer:
         metal = square * (0.6 + 0.4 * np.sin(2 * np.pi * f0 * 4.3 * t))           # ring-mod partial: steel, not wood
         return 0.6 * lowpass(metal, 24) * np.sin(np.pi * t / dur) ** 3
 
-    def _play(self, sound, strength):
+    def _play(self, sound, strength, category="EFFECTS"):
         if self.enabled:
             ch = sound.play()
             if ch:
-                ch.set_volume(float(np.clip(strength, 0.05, 1.0)))
+                ch.set_volume(float(np.clip(strength, 0.05, 1.0)) * volume(category))
 
     def play_ping(self):
-        self._play(self.ping, 1.0)
+        self._play(self.ping, 1.0, "SONAR")
 
     def play_echo(self, strength):
-        self._play(self.echo, strength)
+        self._play(self.echo, strength, "SONAR")
 
     def play_enemy_ping(self, strength):
-        self._play(self.enemy_ping, strength)
+        self._play(self.enemy_ping, strength, "SONAR")
 
     def play_explosion(self, strength):
         self._play(self.explosion, strength)
@@ -131,7 +133,7 @@ class AudioSynthesizer:
 
     def set_hydrophone(self, signal):
         if self.enabled:
-            self.thrum_channel.set_volume(float(np.clip(0.03 + signal, 0.0, 1.0)))
+            self.thrum_channel.set_volume(float(np.clip(0.03 + signal, 0.0, 1.0)) * volume("SONAR"))
 
     def play_mast(self):
         self._play(self.mast, 0.6)
@@ -141,8 +143,8 @@ class AudioSynthesizer:
 
     def set_diesel(self, running):
         if self.enabled:
-            self.diesel_channel.set_volume(0.55 if running else 0.0)
+            self.diesel_channel.set_volume((0.55 if running else 0.0) * volume("AMBIENCE"))
 
     def set_surface(self, looking, sea_state):
         if self.enabled:
-            self.surface_channel.set_volume(0.15 + 0.08 * sea_state if looking else 0.0)
+            self.surface_channel.set_volume((0.15 + 0.08 * sea_state if looking else 0.0) * volume("AMBIENCE"))
