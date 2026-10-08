@@ -42,6 +42,7 @@ TDC_ROW_Y0, TDC_ROW_H = 290, 20
 WF_POS = (20, 30)
 WF_W, WF_H = 360, 214
 DC_ROW_Y0, DC_ROW_H = 26, 18  # damage board rows, from the top of the waterfall
+DC_ROWS = (WF_H - DC_ROW_Y0) // DC_ROW_H  # lines that fit on the board
 SPEC_RECT = pygame.Rect(392, 30, 172, 146)
 LIB_RECT = pygame.Rect(392, 198, 172, 46)
 LOG_POS = (20, 266)

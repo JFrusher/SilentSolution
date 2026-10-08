@@ -199,7 +199,7 @@ def damage():
     p = con.world.player
     p.break_systems(["PLANES", "HYDROPHONES", "TUBE 2", "BATTERY", "ACTIVE SONAR"])
     p.repair_first("PLANES")
-    p.leaks = [35.0, 50.0]
+    p.damaged.update({"LEAK 1": 35.0, "LEAK 2": 50.0})
     con.world.hull = 58.0
     con.teletype.print("DAMAGE CONTROL: PLANES, HYDROPHONES, TUBE 2, BATTERY, ACTIVE SONAR DAMAGED. ONE PARTY "
                        "WORKS THE LIST TOP FIRST - F5 TO SET IT.")

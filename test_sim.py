@@ -1,9 +1,15 @@
 """Plain-assert checks. Run: uv run test_sim.py"""
+import ast
+import inspect
 import math
+import re
+import sys
+from pathlib import Path
 
 import numpy as np
 import pygame
 
+import replay
 import sim
 from ai import (
     ALARMED,
@@ -22,12 +28,24 @@ from ai import (
     frame_point,
 )
 from audio import AudioSynthesizer
-from console import Console, build_world
+from console import MAST_MESSAGES, Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
 from layout import CRT_RECT, WF_H, WF_POS, WF_W
 from sensors import PeriscopeOptics, cone_gain
-from sim import EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff, bearing
+from sim import (
+    EXHAUSTED,
+    KNOT,
+    LEAK_REPAIR,
+    YARD,
+    Decoy,
+    Submarine,
+    Torpedo,
+    Vessel,
+    WorldSimulation,
+    angle_diff,
+    bearing,
+)
 from tma import TMALog
 from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME, WAVE_TIME_LIMIT
 
@@ -403,4 +421,38 @@ if __name__ == "__main__":
 
     g = cone_gain(350.0, np.array([350.0, 5.0, 20.0]))
     assert g[0] == 1.0 and 0 < g[1] < 1 and g[2] == 0, g
+
+    # leaks join the damage list: the one party plugs them in turn, and can be sent to one first
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [], systems_damage=True, leaks_enabled=True)
+    p, events = w.player, []
+    w.damage(10, events)
+    w.damage(10, events)
+    assert p.leaks == ["LEAK 1", "LEAK 2"] and [e[0] for e in events].count("LEAK") == 2, (p.damaged, events)
+    p.repair_first("LEAK 2")
+    assert next(iter(p.damaged)) == "LEAK 2"
+    z0 = p.z
+    run(w, LEAK_REPAIR + 1)
+    assert p.leaks == ["LEAK 1"] and p.z > z0, (p.damaged, p.z)  # plugged first; the other still floods her
+    p.spring_leak()
+    assert p.leaks == ["LEAK 1", "LEAK 2"], "a plugged leak's number is free again"
+
+    # events are (kind, a, b) by name: every kind the world can raise reaches Console.report, and the replay
+    # only keeps kinds that exist, so a misspelt name fails here instead of going quiet in play
+    raised = {"ARMED", "HOMING", "LOST", EXHAUSTED}  # the seeker's returns
+    emit = r'(?:events\.append|events \+=|alerts\.append)\(\(?\s*"([A-Z_]+)"'
+    for f in ("sim.py", "ai.py"):
+        raised |= set(re.findall(emit, Path(f).read_text()))
+    told = inspect.getsource(Console.report)
+    unheard = {k for k in raised if f'"{k}"' not in told and k not in MAST_MESSAGES and not k.startswith("AI_")}
+    assert not unheard, f"raised but never reported: {unheard}"
+    assert set(replay.EVENTS) <= raised, f"replay keeps kinds nothing raises: {set(replay.EVENTS) - raised}"
+
+    # the world never reaches for the operator layer, audio or graphics: what the crew hears and sees is Console's
+    world = {"sim", "ai", "sensors", "geometry", "tma", "fire_control", "tuning"}
+    for name in world:
+        tree = ast.parse(Path(f"{name}.py").read_text())
+        mods = {n.name for x in ast.walk(tree) if isinstance(x, ast.Import) for n in x.names}
+        mods |= {x.module for x in ast.walk(tree) if isinstance(x, ast.ImportFrom)}
+        stray = {m for m in mods if m.split(".")[0] not in world | sys.stdlib_module_names | {"numpy"}}
+        assert not stray, f"{name}.py imports {stray}"
     print("ok")

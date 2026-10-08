@@ -80,10 +80,10 @@ from sim import (
     TELEGRAPH,
     TORP_MAX_RUN,
     YARD,
+    repair_time,
 )
 from tma import PLOT_SPAN
 from tma import PLOT_WINDOW as TMA_WINDOW
-from tuning import REPAIR_TIME
 from tutorial import CHAPTERS
 from version import __version__
 
@@ -608,7 +608,7 @@ class Workstation:
             crt.text(s, f"{k + 1:>2} {name:<14}{state:<10}{int(left) // 60}:{int(left) % 60:02d}", (x0 + 10, y + 3),
                      PHOSPHOR if k == 0 else RED, small=True)
             if k == 0:  # the party's progress on the job in hand
-                done = 1 - left / REPAIR_TIME[name]
+                done = 1 - left / repair_time(name)
                 crt.frame(s, (x0 + 250, y + 5, 100, 8), color=DIM)
                 crt.line(s, (x0 + 251, y + 9), (x0 + 251 + 98 * done, y + 9), PHOSPHOR, 6)
 

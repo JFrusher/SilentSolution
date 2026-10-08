@@ -17,6 +17,7 @@ from layout import (
     CRT_RECT,
     DC_ROW_H,
     DC_ROW_Y0,
+    DC_ROWS,
     DEPTH_C,
     DEPTH_R,
     EYE,
@@ -474,9 +475,9 @@ class Console:
         self.actions.add("PAGE_" + self.crt_page)
 
     def damage_rows(self):
-        """Damage board lines: the repair list in work order, then the systems that are fine."""
+        """Damage board lines: the repair list in work order (leaks included), then the systems that are fine."""
         hurt = self.world.player.damaged
-        return [*hurt, *(s for s in REPAIR_TIME if s not in hurt)]
+        return [*hurt, *(s for s in REPAIR_TIME if s not in hurt)][:DC_ROWS]  # healthy systems drop off first
 
     def tma_centre(self):
         """The TMA plot centres on your own recent bearings, so the dots are in view before there is a solution;

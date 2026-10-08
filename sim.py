@@ -97,6 +97,11 @@ def silhouette_class(ship):
 RUNNING, ACQUIRING, HOMING, EXHAUSTED = "RUNNING", "ACQUIRING", "HOMING", "EXHAUSTED"
 
 
+def repair_time(name):
+    """s the damage-control party needs for one job on the list."""
+    return LEAK_REPAIR if name.startswith("LEAK") else REPAIR_TIME[name]
+
+
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
@@ -188,7 +193,6 @@ class Submarine(Vessel):
     blowing: bool = False
     cavitating: bool = False
     snorkeling: bool = False   # diesels running on the snorkel
-    leaks: list = field(default_factory=list)  # seconds until each is plugged
     # masts
     mast_damage: bool = False  # difficulty: speed can bend a raised scope
     lower_delay: float = 0.0   # difficulty: seconds to strike masts once ordered deep
@@ -234,6 +238,14 @@ class Submarine(Vessel):
                 return "SNORKEL DAMAGED"
             self.snorkel_up = True
         return None
+
+    @property
+    def leaks(self):
+        """Open leaks: they sit on the damage list with the systems, and the one party plugs them in turn."""
+        return [k for k in self.damaged if k.startswith("LEAK")]
+
+    def spring_leak(self):
+        self.damaged[next(f"LEAK {n}" for n in itertools.count(1) if f"LEAK {n}" not in self.damaged)] = LEAK_REPAIR
 
     def break_systems(self, names):
         for name in names:
@@ -315,7 +327,6 @@ class Submarine(Vessel):
         self.z = clamp(self.z + len(self.leaks) * LEAK_SINK * dt, 0.0, 400.0)  # flooding makes her heavy
         steerage = min(1.0, self.speed / (4 * KNOT)) * (DAMAGED_RUDDER if "RUDDER" in hurt else 1.0)
         self.heading = (self.heading + self.rudder / MAX_RUDDER * TURN_RATE * steerage * dt) % 360
-        self.leaks = [t - dt for t in self.leaks if t > dt]  # damage control works through them
         self.noise = self.quiet * (0.25 + 0.035 * kt + 0.9 * self.cavitating + 0.8 * self.snorkeling
                                    + 1.5 * self.blowing)
         super().step(dt)
@@ -566,7 +577,7 @@ class WorldSimulation:
             if hit:
                 events.append(("DAMAGE", p, hit))
         if self.leaks_enabled and dmg >= 8 and isinstance(self.player, Submarine):
-            self.player.leaks.append(LEAK_REPAIR)
+            self.player.spring_leak()
             events.append(("LEAK", self.player, len(self.player.leaks)))
 
     def fire(self, heading, speed=TORP_SPEED, **kw):
