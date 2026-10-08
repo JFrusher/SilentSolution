@@ -524,9 +524,9 @@ def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 7
     tip = (rose[0] + (r - 30) * math.sin(v), rose[1] - (r - 30) * math.cos(v))
     pygame.draw.line(chart, MAGENTA, rose, tip, 2)
     pygame.draw.circle(chart, MAGENTA, tip, 4, 1)
-    for k, line in enumerate((f"VAR {abs(VARIATION):.0f}°W (1965)", "DECREASING 10' ANNUALLY")):
+    for i, line in enumerate((f"VAR {abs(VARIATION):.0f}°W (1965)", "DECREASING 10' ANNUALLY")):
         label = tiny.render(line, True, MAGENTA)
-        chart.blit(label, label.get_rect(center=(rose[0], rose[1] + 24 + 13 * k)))
+        chart.blit(label, label.get_rect(center=(rose[0], rose[1] + 24 + 13 * i)))
     paper = art.texture(size, art.PAPER, grain=2, mottle=6)  # tracing paper: the chart shows through
     paper.set_alpha(105)
     chart.blit(paper, (0, 0))
@@ -867,7 +867,7 @@ class RoomRenderer:
             model.render(self.model, place, {"head": head_turn(place, pivot, pose.pos, t, phase, age)}, arms)
         if coxswain is not None:  # he turns to the station he's sending you to and points; otherwise he faces you
             base = np.array(COXSWAIN_AT)
-            goal = crew_places()[coxswain][0][:3, 3] if coxswain else pose.pos
+            goal = next(s.centre for s in cr.STATIONS if s.name == coxswain) if coxswain else pose.pos
             face = np.array([goal[0] - base[0], 0.0, goal[2] - base[2]])
             place = standing_at(base, face / max(np.linalg.norm(face), 1e-6))
             pivot = self.coxswain.parts["head"][0]

@@ -66,35 +66,36 @@ def render(b, size, extent, tilt=22.0):
     """A Builder's model seen head-on from a little above, as an RGBA Surface `size` px; extent: the half-width and
     half-height in metres in frame. The model's x is right, y up, z out of the panel toward you."""
     ctx, prog = _gl()
-    w, h = size
-    ex, ey = extent
-    t = math.radians(tilt)
-    turn = np.array([[1, 0, 0], [0, math.cos(t), -math.sin(t)], [0, math.sin(t), math.cos(t)]])  # look down on it
-    m = np.identity(4)
-    m[:3, :3] = turn
-    proj = np.diag([1 / ex, 1 / ey, -1 / (4 * max(ex, ey)), 1.0])
-    mvp = (proj @ m).T.astype("f4")
-    fbo = ctx.framebuffer(ctx.renderbuffer(size, 4, samples=4), ctx.depth_renderbuffer(size, samples=4))
-    out = ctx.framebuffer(ctx.renderbuffer(size, 4))
-    fbo.use()
-    ctx.enable(moderngl.DEPTH_TEST)
-    ctx.clear(0.0, 0.0, 0.0, 0.0, depth=1.0)
-    prog["mvp"].write(mvp.tobytes())
-    prog["turn"].write(turn.T.astype("f4").tobytes())
-    made = []
-    for _, prims in b.mesh().values():
-        for mat, verts, idx in prims:
-            spec = b.materials[mat]
-            vbo, ibo = ctx.buffer(verts.tobytes()), ctx.buffer(idx.astype("u4").tobytes())
-            vao = ctx.vertex_array(prog, [(vbo, "3f 3f 8x 3f", "in_pos", "in_norm", "in_col")], ibo, 4)
-            prog["kind"].value = 2 if any(spec.get("emissive", (0, 0, 0))) else 1 if spec.get("metal") else 0
-            prog["rough"].value = spec.get("rough", 0.8)
-            vao.render()
-            made += [vao, vbo, ibo]
-    ctx.copy_framebuffer(out, fbo)
-    rgba = np.frombuffer(out.read(components=4), np.uint8).reshape(h, w, 4)[::-1].astype(float)
-    for obj in made + [fbo, out]:
-        obj.release()
+    with ctx:  # the room has its own context, current since it was made: draw in ours
+        w, h = size
+        ex, ey = extent
+        t = math.radians(tilt)
+        turn = np.array([[1, 0, 0], [0, math.cos(t), -math.sin(t)], [0, math.sin(t), math.cos(t)]])  # look down on it
+        m = np.identity(4)
+        m[:3, :3] = turn
+        proj = np.diag([1 / ex, 1 / ey, -1 / (4 * max(ex, ey)), 1.0])
+        mvp = (proj @ m).T.astype("f4")
+        fbo = ctx.framebuffer(ctx.renderbuffer(size, 4, samples=4), ctx.depth_renderbuffer(size, samples=4))
+        out = ctx.framebuffer(ctx.renderbuffer(size, 4))
+        fbo.use()
+        ctx.enable(moderngl.DEPTH_TEST)
+        ctx.clear(0.0, 0.0, 0.0, 0.0, depth=1.0)
+        prog["mvp"].write(mvp.tobytes())
+        prog["turn"].write(turn.T.astype("f4").tobytes())
+        made = []
+        for _, prims in b.mesh().values():
+            for mat, verts, idx in prims:
+                spec = b.materials[mat]
+                vbo, ibo = ctx.buffer(verts.tobytes()), ctx.buffer(idx.astype("u4").tobytes())
+                vao = ctx.vertex_array(prog, [(vbo, "3f 3f 8x 3f", "in_pos", "in_norm", "in_col")], ibo, 4)
+                prog["kind"].value = 2 if any(spec.get("emissive", (0, 0, 0))) else 1 if spec.get("metal") else 0
+                prog["rough"].value = spec.get("rough", 0.8)
+                vao.render()
+                made += [vao, vbo, ibo]
+        ctx.copy_framebuffer(out, fbo)
+        rgba = np.frombuffer(out.read(components=4), np.uint8).reshape(h, w, 4)[::-1].astype(float)
+        for obj in made + [fbo, out]:
+            obj.release()
     a = rgba[..., 3:] / 255.0
     rgba[..., :3] = np.where(a > 0, rgba[..., :3] / np.maximum(a, 1e-3), 0)  # un-premultiply the antialiased edge
     return _surface(np.clip(rgba, 0, 255).astype(np.uint8))

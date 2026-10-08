@@ -120,9 +120,14 @@ stations.hover(hovered, stations.VIEWS["SONAR"], ping.dst.center)
 assert np.abs(pygame.surfarray.array3d(hovered).astype(int) - pygame.surfarray.array3d(plain)).sum() > 0, \
     "hovering a control shows its key"
 
+# a sprite first drawn after the room's GL context exists is lit as it would be alone: its red knob stays red
+knob = pygame.surfarray.array3d(ins.crank_sprite.__wrapped__(5, 64)).astype(int)
+assert (knob[..., 0] - knob[..., 1]).max() > 100, "instrument sprites draw in their own GL context"
+
 # in training the coxswain stands at the conn, turned to the station he sends you to; otherwise he isn't aboard
 look = cr.Pose(np.array([-0.4, 1.65, 3.2]), *cr.facing(np.array(room3d.COXSWAIN_AT) + (0, 1.3, 0) - (-0.4, 1.65, 3.2)))
-seen = [pygame.surfarray.array3d(app.room().render(look, coxswain=c)).astype(int) for c in (None, "SONAR", "")]
+seen = [pygame.surfarray.array3d(app.room().render(look, coxswain=c)).astype(int)
+        for c in (None, "SONAR", "", "HELM AND PLANES")]
 assert np.abs(seen[1] - seen[0]).sum() > 0 and np.abs(seen[2] - seen[1]).sum() > 0, "he's there, and he turns"
 
 # sit at sonar: the last 3D frame and the first 2D frame are the same picture

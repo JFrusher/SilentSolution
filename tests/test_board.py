@@ -52,6 +52,9 @@ track = [(t, 0.0, t * 4.0) for t in range(0, 300, 10)]
 plain = pygame.surfarray.array3d(plot_art(track, 0.0)).astype(int)
 marked = pygame.surfarray.array3d(plot_art(track, 0.0, [(100, 45.0, "MARK", None)], (2000.0, 2000.0, 0.0, -4.0)))
 assert np.abs(marked - plain).sum() > 0, "marks and the solution show on the plot"
+tx, ty = 520 + 2000 * 1040 / 8000, 360 - 2000 * 1040 / 8000  # 8 km across 1040 px, own ship in the middle
+box = marked[int(tx) - 12:int(tx) + 12, int(ty) - 12:int(ty) + 12]
+assert (np.abs(box - (170, 44, 32)).max(axis=2) < 40).any(), "the TDC's target is in red pencil, to scale"
 noted = pygame.surfarray.array3d(plot_art(track, 0.0, notes=[(50, 0.0, 200.0, 90.0, 3000.0, "CONVOY 2M 1E")]))
 assert np.abs(noted - plain).sum() > 0, "a report goes on the plot"
 # the chart is the Iceland-Faroes gap: the patrol's origin at 63°30'N 10°00'W, soundings in fathoms off the ridge
