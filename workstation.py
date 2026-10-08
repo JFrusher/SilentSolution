@@ -10,7 +10,7 @@ from campaign import PATROLS, UPGRADES, objective
 from console import ECHO_FADE
 from displays import CLASS_TAGS, CLASSES, SPEC_BINS, TEMPLATES
 from fire_control import FIELDS
-from geometry import bearing, offset
+from geometry import offset
 from graphics import console_art as art
 from graphics.crt_renderer import DIM, PHOSPHOR, RED, CRTRenderer
 from graphics.periscope import EYE, PeriscopeRenderer, View
@@ -85,6 +85,8 @@ from tma import PLOT_WINDOW as TMA_WINDOW
 from tuning import REPAIR_TIME
 from tutorial import CHAPTERS
 from version import __version__
+
+FX = random.Random()  # presentation-only randomness: never touches the simulation's dice
 
 # console sections: black faceplates set into the painted steel
 HELM_PLATE = pygame.Rect(234, 486, 178, 212)
@@ -325,7 +327,7 @@ class Workstation:
             self.draw_help(f)
         jitter = con.shake * 6 if con else 0
         screen.fill((0, 0, 0))
-        screen.blit(f, (random.uniform(-jitter, jitter), random.uniform(-jitter, jitter)))
+        screen.blit(f, (FX.uniform(-jitter, jitter), FX.uniform(-jitter, jitter)))
 
     # --- centre monitor ---
     def draw_crt(self, con, state, paused):
@@ -577,7 +579,7 @@ class Workstation:
         speed and range are right, the curve runs through the dots."""
         x0, y0 = WF_POS
         now, own, tdc, log = con.world.time, con.world.player, con.tdc, con.tma
-        centre = bearing(0.0, 0.0, tdc.x, tdc.y)
+        centre = con.tma_centre()
         span = PLOT_SPAN
 
         def X(b):
