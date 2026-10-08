@@ -7,10 +7,13 @@ from pathlib import Path
 import pygame
 
 import campaign
+import control_room as cr
 import replay
 import settings
 from audio import AudioSynthesizer
 from console import Console
+from graphics import console_art as art
+from graphics.room3d import RoomRenderer, plot_art
 from graphics.tabletop import ReplayView
 from layout import CRT_RECT, H, W
 from tuning import DIFFICULTY
@@ -32,6 +35,12 @@ class App:
         self.station = Workstation()
         self.station.career = self.career = campaign.Career()
         self.show_help = False
+        self.room3d = None  # the GL renderer, made the first time anyone stands up
+
+    def room(self):
+        if self.room3d is None:
+            self.room3d = RoomRenderer()
+        return self.room3d
 
     def keep_replay(self, con, result, title):
         """Every patrol, however it ends, leaves an after-action replay."""
@@ -221,6 +230,94 @@ class Career(Scene):
         return None
 
 
+class NoKeys(dict):
+    """Nothing held: what the console feels while you're away from it."""
+
+    def __getitem__(self, k):
+        return 0
+
+
+class OnFoot:
+    """Away from the console: walking the control room until you sit down or put your eye to the periscope.
+    The boat fights on meanwhile, and the sonar console keeps showing it, live, on its panel."""
+    PLOT_EVERY = 0.5  # s of sim time between redraws of the plot table
+
+    def __init__(self, app, con, start, to):
+        self.app, self.con = app, con
+        self.room = cr.ControlRoom()
+        self.room.pose = start
+        self.room.carry(to, "ROOM")
+        self.frame = pygame.Surface((W, H))
+        self.plot, self.plot_at = None, -1e9
+        self.note = ("", 0.0)  # a line for the player and when it was said
+        self.log_seen = con.log[-1] if con.log else ""
+        pygame.mouse.set_relative_mode(True)
+
+    def leave(self):
+        pygame.mouse.set_relative_mode(False)
+
+    def event(self, e):
+        if self.room.moving:
+            return
+        if e.type == pygame.MOUSEMOTION:
+            self.room.look(*e.rel, sensitivity=0.12 * settings.SETTINGS["mouse"])
+        elif (e.type == pygame.KEYDOWN and e.key == pygame.K_e) or (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1):
+            self.use()
+
+    def use(self):
+        con, thing = self.con, self.room.target()
+        if thing == "PERISCOPE":
+            if not con.world.player.scope_up:
+                con.toggle_scope()  # take hold of the handles: up scope
+            if con.world.player.scope_up:
+                self.room.carry(cr.at_eyepiece(), "EYEPIECE")
+        elif thing is not None and thing.working:
+            self.room.carry(cr.seated(thing), "SEATED")
+        elif thing is not None:
+            self.say(f"{thing.name}: NOT MANNED THIS PATROL")
+
+    def say(self, text):
+        self.note = (text, pygame.time.get_ticks())
+
+    def update(self, dt):
+        """Walk; returns where a finished camera move has put you ("SEATED", "EYEPIECE" or "ROOM")."""
+        k = pygame.key.get_pressed()
+        shift = k[pygame.K_LSHIFT] or k[pygame.K_RSHIFT]
+        then = self.room.update(dt, k[pygame.K_w] - k[pygame.K_s], k[pygame.K_d] - k[pygame.K_a], shift)
+        if self.con.log and self.con.log[-1] != self.log_seen:  # the crew's reports reach you wherever you stand
+            self.log_seen = self.con.log[-1]
+            self.say(self.log_seen[6:])
+        return then
+
+    def draw(self, screen, paused, question, dt):
+        app, con = self.app, self.con
+        app.station.draw(self.frame, con, "PLAY", paused, False, dt)  # the live console, for its panel
+        w = con.world
+        if w.time - self.plot_at >= self.PLOT_EVERY:
+            track = con.recorder.tracks.get(w.player.uid, [])[-3600:]
+            self.plot, self.plot_at = plot_art([(r[1], r[2]) for r in track], w.player.heading), w.time
+        screen.blit(app.room().render(self.room.pose, self.frame, self.plot), (0, 0))
+        if self.room.moving:
+            return
+        font = art.mono(15, True)
+        pygame.draw.circle(screen, (230, 220, 190), (W // 2, H // 2), 2)
+        thing = self.room.target()
+        if thing is not None:
+            label = "E  LOOK THROUGH THE PERISCOPE" if thing == "PERISCOPE" else (
+                f"E  SIT AT {thing.name}" if thing.working else thing.name)
+            text = font.render(label, True, (240, 226, 190))
+            screen.blit(text, text.get_rect(center=(W // 2, H // 2 + 40)))
+        hint = art.mono(12).render("WASD WALK   SHIFT RUN   MOUSE LOOK   E USE", True, (150, 146, 130))
+        screen.blit(hint, (16, 12))
+        said, at = self.note
+        if said and pygame.time.get_ticks() - at < 5000:
+            text = font.render(said, True, (150, 240, 160))
+            screen.blit(text, text.get_rect(center=(W // 2, H - 40)))
+        for i, line in enumerate(question or (["PATROL PAUSED", "", "[P] RESUME"] if paused else [])):
+            text = art.mono(20, True).render(line, True, (240, 226, 190))
+            screen.blit(text, text.get_rect(center=(W // 2, H // 2 - 90 + i * 28)))
+
+
 class Patrol(Scene):
     """At sea: an endless patrol, a training chapter (console.tutorial) or a campaign patrol (run).
     Esc asks before leaving; once the boat is lost the page turns to OVER."""
@@ -231,6 +328,8 @@ class Patrol(Scene):
         self.over = self.confirm = self.paused = False
         self.lag = 0.0  # real time owed to the sim
         self.lost_at, self.leave_over = 0, False  # a lost campaign boat: when, and whether the player has moved on
+        self.on_foot = None      # OnFoot while you're up and about in the control room
+        self.from_room = False   # at the eyepiece by way of the room: stepping back puts you there again
 
     @property
     def name(self):
@@ -281,6 +380,12 @@ class Patrol(Scene):
                 return app.open_replay(app.station.last_replay, self)
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_p:
             self.paused = not self.paused
+        elif self.on_foot and not self.paused:
+            self.on_foot.event(e)
+        elif (e.type == pygame.KEYDOWN and settings.action_for(e.key) == "STAND UP" and not self.paused
+              and not con.looking):
+            sonar = next(s for s in cr.STATIONS if s.working)
+            self.on_foot = OnFoot(app, con, cr.seated(sonar), cr.standing(sonar))
         elif not self.paused:
             if e.type == pygame.KEYDOWN:
                 con.key(e.key)
@@ -298,9 +403,22 @@ class Patrol(Scene):
         app, con = self.app, self.console
         running = not (self.paused or self.confirm or app.show_help)  # the key card covers the station
         self.lag = self.lag + dt if running else 0.0
+        if self.on_foot and (self.over or con.dead):  # the boat is lost: back to the station for the reckoning
+            self.sit()
+        elif self.on_foot and running:
+            then = self.on_foot.update(dt)
+            if then == "SEATED":
+                self.sit()
+            elif then == "EYEPIECE":
+                self.sit()
+                con.look()
+                self.from_room = con.looking
+        elif self.from_room and not con.looking:  # stepped back from the eyepiece: into the room again
+            self.from_room = False
+            self.on_foot = OnFoot(app, con, cr.at_eyepiece(), cr.by_periscope())
         while self.lag >= SIM_DT:  # fixed sim step: the same seed plays out the same at any frame rate
             self.lag -= SIM_DT
-            con.update(SIM_DT, pygame.key.get_pressed())
+            con.update(SIM_DT, NoKeys() if self.on_foot else pygame.key.get_pressed())
             if con.tutorial:
                 con.tutorial.update(SIM_DT)
                 if con.tutorial.finished:
@@ -320,6 +438,10 @@ class Patrol(Scene):
                 app.career.add_score(con.level, con.score, con.wave)
         return None
 
+    def sit(self):
+        self.on_foot.leave()
+        self.on_foot = None
+
     def draw(self, screen, dt):
         st, con = self.app.station, self.console
         st.over_hint = "ANY KEY: DEBRIEF" if self.run else None
@@ -329,6 +451,11 @@ class Patrol(Scene):
                         ["ABANDON PATROL?", "IT WON'T COUNT FOR OR AGAINST YOU"] if self.run else
                         ["QUIT PATROL?", f"{con.score:,} GRT GOES ON THE SCORES"])
             st.confirm = question + ["", "[Y] YES      [N] NO"]
+        if self.on_foot:
+            self.on_foot.draw(screen, self.paused, st.confirm, dt)
+            if self.app.show_help:
+                st.draw_help(screen)
+            return
         st.draw(screen, con, self.name, self.paused, self.app.show_help, dt)
 
 

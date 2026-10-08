@@ -939,7 +939,7 @@ class Workstation:
         (("NOISEMAKER",), "noisemaker decoy astern", "button"),
         (("SCOPE RANGE",), "tactical scope range", "click scope (no fish)"),
         (("RAISE SCOPE", "RAISE SNORKEL"), "periscope / snorkel up-down", "levers"),
-        (("LOOK", "SCOPE POWER"), "look through scope / power", "LOOK / wheel"),
+        (("LOOK", "SCOPE POWER", "STAND UP"), "scope / power / stand: walk WASD, use E", "LOOK / wheel"),
         (("WIRE LEFT", "WIRE RIGHT", "NEXT FISH", "CUT WIRE"), "wire: nudge / next fish / cut", "click fish, aim"),
         (("TMA PAGE", "AUTO-SOLVE", "DAMAGE BOARD"), "TMA / auto-solve / damage board", ""),
         (("BEARING MODE", "WATERFALL SCALE", "SCOPE TO SONAR"), "true-rel / waterfall time / scope to sonar", ""),

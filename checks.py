@@ -5,8 +5,9 @@ import sys
 import time
 
 SUITES = ("tests/test_sim.py", "tests/test_geometry.py", "tests/test_tutorial.py", "tests/test_periscope.py",
-          "tests/test_ui.py", "tests/test_golden.py",  # and these modules self-check:
+          "tests/test_ui.py", "tests/test_golden.py", "tests/test_room.py",  # and these modules self-check:
           "src/geometry.py", "src/settings.py", "src/audio.py", "src/campaign.py", "src/replay.py",
+          "src/control_room.py",
           "-m graphics.tabletop")
 LINT = ("-m", "ruff", "check", ".")  # ruff is a dev dependency: uv run installs it
 

@@ -10,6 +10,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "moderngl>=5.12",
     "numpy>=1.26",
     "pygame-ce>=2.5.8",
 ]

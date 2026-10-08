@@ -19,6 +19,10 @@ NumPy
     Source: https://github.com/numpy/numpy
     The full NumPy licence texts are copied next to the executable under licenses/numpy/.
 
+ModernGL and glcontext
+    MIT License
+    Source: https://github.com/moderngl/moderngl and https://github.com/moderngl/glcontext
+
 Python
     Python Software Foundation License: https://docs.python.org/3/license.html
 

@@ -11,7 +11,8 @@ sys.path.insert(0, "src")
 from version import __version__  # noqa: E402
 
 PyInstaller.__main__.run(["src/main.py", "--onefile", "--windowed", "--clean", "--noconfirm",
-                          "--name", "SilentSolution", "--exclude-module", "tkinter"])
+                          "--name", "SilentSolution", "--exclude-module", "tkinter",
+                          "--hidden-import", "glcontext"])  # moderngl picks its GL backend at run time
 dist = Path("dist")
 for name in ("LICENSE", "THIRD-PARTY-NOTICES.txt"):
     shutil.copy(name, dist / name)
