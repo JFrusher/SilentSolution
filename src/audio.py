@@ -154,39 +154,40 @@ class AudioSynthesizer:
         metal = square * (0.6 + 0.4 * np.sin(2 * np.pi * f0 * 4.3 * t))           # ring-mod partial: steel, not wood
         return 0.6 * lowpass(metal, 24) * np.sin(np.pi * t / dur) ** 3
 
-    def _play(self, sound, strength, category="EFFECTS", rel_brg=None):
-        """rel_brg: where it is outside the hull, for the pan; None plays it centred (inside the boat)."""
+    def _play(self, name, strength, category="EFFECTS", rel_brg=None):
+        """name: the sound's attribute, looked up only with audio on (silent, none are made); a list plays one at
+        random. rel_brg: where it is outside the hull, for the pan; None plays it centred (inside the boat)."""
         if self.enabled:
-            ch = sound.play()
+            sound = getattr(self, name)
+            ch = (random.choice(sound) if isinstance(sound, list) else sound).play()
             if ch:
                 v = float(np.clip(strength, 0.05, 1.0)) * volume(category)
                 left, right = pan_gains(rel_brg) if rel_brg is not None else (1.0, 1.0)
                 ch.set_volume(v * left, v * right)
 
     def play_ping(self):
-        self._play(self.ping, 1.0, "SONAR")
+        self._play("ping", 1.0, "SONAR")
 
     def play_echo(self, strength, rel_brg=None):
-        self._play(self.echo, strength, "SONAR", rel_brg)
+        self._play("echo", strength, "SONAR", rel_brg)
 
     def play_enemy_ping(self, strength, rel_brg=None):
-        self._play(self.enemy_ping, strength, "SONAR", rel_brg)
+        self._play("enemy_ping", strength, "SONAR", rel_brg)
 
     def play_explosion(self, strength, rel_brg=None):
-        self._play(self.explosion, strength, rel_brg=rel_brg)
+        self._play("explosion", strength, rel_brg=rel_brg)
 
     def play_hiss(self, strength, rel_brg=None):
-        self._play(self.hiss, strength, rel_brg=rel_brg)
+        self._play("hiss", strength, rel_brg=rel_brg)
 
     def play_blow(self):
-        self._play(self.blow, 0.8)
+        self._play("blow", 0.8)
 
     def play_clack(self):
-        self._play(self.clack, 0.06)
+        self._play("clack", 0.06)
 
     def play_creak(self, strength):
-        if self.enabled:
-            self._play(random.choice(self.creaks), strength)
+        self._play("creaks", strength)
 
     def set_hydrophone(self, signal, rel_brg=0.0):
         """The trained hydrophone in the headphones: louder on a contact, panned to where the dial points."""
@@ -196,13 +197,13 @@ class AudioSynthesizer:
             self.thrum_channel.set_volume(v * left, v * right)
 
     def play_mast(self):
-        self._play(self.mast, 0.6)
+        self._play("mast", 0.6)
 
     def play_klaxon(self):
-        self._play(self.klaxon, 0.8)
+        self._play("klaxon", 0.8)
 
     def play_thunk(self):
-        self._play(self.thunk, 0.8)
+        self._play("thunk", 0.8)
 
     def set_diesel(self, running):
         if self.enabled:
@@ -222,4 +223,7 @@ if __name__ == "__main__":  # self-check: mix levels, pan law, reverb lengths an
     hum = np.sin(2 * np.pi * 50 * np.arange(8820) / SAMPLE_RATE)  # whole cycles: a seamless loop
     out = reverb(hum, ir, loop=True)
     assert out.size == hum.size and abs(out[0] - out[-1]) < 0.1, (out[0], out[-1])
+    silent = AudioSynthesizer.__new__(AudioSynthesizer)  # as made with no audio device: no sounds at all
+    silent.enabled = False
+    silent.play_klaxon(), silent.play_creak(0.5), silent.play_echo(0.5, 30.0)
     print("audio ok")

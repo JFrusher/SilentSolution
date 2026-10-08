@@ -103,6 +103,12 @@ con.telegraph(1)
 assert crew.order_for("FASTER", con) == ("ENGINES", 2)
 assert crew.order_for("RUDDER LEFT", con) == ("RUDDER", -10)
 assert crew.order_for("TDC ROW UP", con) is None, "a station's own controls are not orders"
+con.crew.order(*crew.order_for("FASTER", con))
+assert crew.order_for("FASTER", con) == ("ENGINES", 3), "a second press goes on from the order still to be done"
+con.crew.order("COURSE", 90.0)
+con.crew.hand_on_wheel()
+run(con, 5)
+assert con.crew.course is None, "the captain's hand on the wheel cancels a course order not yet carried out"
 
 # the wheel: drag to a heading, let go, drag to an order, let go
 w = OrderWheel()

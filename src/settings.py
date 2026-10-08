@@ -187,7 +187,9 @@ class SettingsMenu:
         if kind == "KEY":
             self.waiting, self.note = True, "PRESS THE NEW KEY - ESC CANCELS"
         elif kind == "RESET DEFAULTS":
+            trained = SETTINGS["trained"]  # progress, not a preference: restoring defaults keeps it
             reset()
+            SETTINGS["trained"] = trained
             self.note = "DEFAULTS RESTORED"
         elif kind == "BACK":
             save()
@@ -256,6 +258,11 @@ if __name__ == "__main__":  # self-check: load/save round trip, rebinding swaps,
     assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
     assert keyed("PRESS {FIRE}, THEN {SLOWER} - {NOT AN ACTION}") == "PRESS SPACE, THEN Z - {NOT AN ACTION}"
     assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
+    SETTINGS["trained"] = True
+    menu = SettingsMenu()
+    menu.sel = menu.rows.index(("RESET DEFAULTS", None))
+    menu._activate()
+    assert SETTINGS["keys"] == DEFAULTS["keys"] and SETTINGS["trained"], "defaults restored, First Watch kept"
     tmp.write_text("not json")
     load(tmp)
     assert SETTINGS == DEFAULTS

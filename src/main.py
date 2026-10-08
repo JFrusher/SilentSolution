@@ -500,9 +500,15 @@ class Patrol(Scene):
         con = self.console
         return stations.VIEWS["PERISCOPE" if con.looking and self.at != "ALL" else self.at]
 
+    def release(self):
+        """Off your feet for good (the patrol is over): the mouse is a pointer again."""
+        if self.on_foot:
+            self.on_foot.leave()
+
     def leave(self):
         """Y to the question: where to depends on what the patrol was."""
         app, con = self.app, self.console
+        self.release()
         if con.tutorial:
             app.keep_replay(con, "TRAINING", "TRAINING")
             return Chapters(app)
@@ -574,7 +580,7 @@ class Patrol(Scene):
         con, view = self.console, self.view
         if e.type == pygame.KEYDOWN:
             action = settings.action_for(e.key)
-            if action == "STAND UP" and self.at != "ALL" and not con.looking:
+            if action == "STAND UP" and self.at not in ("ALL", "PERISCOPE") and not con.looking:
                 station = next(s for s in cr.STATIONS if s.name == self.at)
                 self.on_foot = OnFoot(self.app, con, cr.seated(station), cr.standing(station), focus=self.at)
                 self.at = None
@@ -631,7 +637,7 @@ class Patrol(Scene):
             elif then == "EYEPIECE":
                 self.sit("PERISCOPE")
                 con.look()
-                self.from_room = con.looking
+                self.from_room = True  # if the scope went down on the way in, the next frame puts you back on foot
         elif self.from_room and not con.looking:  # stepped back from the eyepiece: into the room again
             self.from_room = False
             self.at, self.on_foot = None, OnFoot(app, con, cr.at_eyepiece(), cr.by_periscope())
@@ -643,6 +649,7 @@ class Patrol(Scene):
                 con.tutorial.update(SIM_DT)
                 if con.tutorial.finished:
                     app.keep_replay(con, "TRAINING", "TRAINING")
+                    self.release()
                     return Title(app)
             elif self.run:
                 result = self.run.update(con)
@@ -651,6 +658,7 @@ class Patrol(Scene):
                 elif result and (not self.over or self.leave_over or pygame.time.get_ticks() - self.lost_at > 8000):
                     path = app.keep_replay(con, result, self.run.patrol["name"])
                     app.station.debrief = app.career.record(self.run, con, replay=path.name if path else None)
+                    self.release()
                     return Career(app, debrief=True)
             elif con.dead and not self.over:
                 self.over = True
@@ -721,8 +729,8 @@ class Patrol(Scene):
             notice(screen, st.confirm or (["PATROL PAUSED", "", "[P] RESUME"] if self.paused else []))
         if self.at != "ALL":  # the full console has its own log; the eyepiece's strip shows only the last line
             now = pygame.time.get_ticks()
-            pose = self.on_foot.room.pose if self.on_foot else None if full else cr.seated(
-                next(s for s in cr.STATIONS if s.name == self.at))
+            seat = next((s for s in cr.STATIONS if s.name == self.at), None)  # none at the eyepiece
+            pose = self.on_foot.room.pose if self.on_foot else cr.seated(seat) if seat and not full else None
             captions(screen, [(t, min(1.0, (self.CAPTION_TIME - (now - at)) / 1000), turn_to(pose, who)
                                if pose is not None and who else None)
                               for t, at, who in self.captions if now - at < self.CAPTION_TIME],

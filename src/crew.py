@@ -69,9 +69,11 @@ class Crew:
             self.con.world.player.rudder = float(clamp(rudder, -MAX_RUDDER, MAX_RUDDER))
 
     def hand_on_wheel(self):
-        """The captain has taken the wheel himself: any standing course is off."""
-        if self.course is not None:
+        """The captain has taken the wheel himself: any standing course is off, and any helm order not yet done."""
+        helm = [o for o in self.pending if ORDERS[o[1]][0] == "HELM"]
+        if self.course is not None or helm:
             self.course = None
+            self.pending = [o for o in self.pending if o not in helm]
             self.con.say("HELM: COURSE ORDER CANCELLED")
 
     def crash_dive(self):
@@ -136,14 +138,18 @@ class Crew:
 def order_for(action, con):
     """A station key pressed away from the station: the order the captain means by it, or None."""
     p = con.world.player
-    engine = con.telegraph_index()
+
+    def ordered(name, now):  # a step goes on from the last such order still to be carried out, else from now
+        return next((a for _, n, a in reversed(con.crew.pending) if n == name), now)
+    engine, depth, rudder = ordered("ENGINES", con.telegraph_index()), ordered("DEPTH", p.ordered_depth), ordered(
+        "RUDDER", p.rudder)
     steps = {
         "FASTER": ("ENGINES", min(engine + 1, len(TELEGRAPH) - 1)),
         "SLOWER": ("ENGINES", max(engine - 1, 0)),
-        "SHALLOWER": ("DEPTH", p.ordered_depth - 10),
-        "DEEPER": ("DEPTH", p.ordered_depth + 10),
-        "RUDDER LEFT": ("RUDDER", max(p.rudder - 10, -MAX_RUDDER)),
-        "RUDDER RIGHT": ("RUDDER", min(p.rudder + 10, MAX_RUDDER)),
+        "SHALLOWER": ("DEPTH", depth - 10),
+        "DEEPER": ("DEPTH", depth + 10),
+        "RUDDER LEFT": ("RUDDER", max(rudder - 10, -MAX_RUDDER)),
+        "RUDDER RIGHT": ("RUDDER", min(rudder + 10, MAX_RUDDER)),
         "RUDDER AMIDSHIPS": ("RUDDER", 0),
         "PERISCOPE DEPTH": ("PERISCOPE DEPTH", None),
         "HOLD DEPTH": ("HOLD DEPTH", None),

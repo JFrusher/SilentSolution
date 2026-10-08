@@ -120,6 +120,16 @@ stations.hover(hovered, stations.VIEWS["SONAR"], ping.dst.center)
 assert np.abs(pygame.surfarray.array3d(hovered).astype(int) - pygame.surfarray.array3d(plain)).sum() > 0, \
     "hovering a control shows its key"
 
+# at the eyepiece, a dive order lowers the scope in a sim step: that frame still draws, then you're on your feet
+scene.on_foot.leave()
+scene.sit("PERISCOPE")
+con.looking, scene.from_room = False, True
+scene.draw(screen, 1 / 60)
+frames(1)
+assert scene.on_foot and scene.at is None, "stepped back into the room"
+while scene.on_foot.room.moving:  # the step back from the stand
+    frames(1, last=False)
+
 # a sprite first drawn after the room's GL context exists is lit as it would be alone: its red knob stays red
 knob = pygame.surfarray.array3d(ins.crank_sprite.__wrapped__(5, 64)).astype(int)
 assert (knob[..., 0] - knob[..., 1]).max() > 100, "instrument sprites draw in their own GL context"

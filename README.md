@@ -103,7 +103,7 @@ cd SilentSolution
 uv run src/main.py
 ```
 
-[uv](https://docs.astral.sh/uv/) installs Python 3.11+ and the two dependencies (`pygame-ce`, `numpy`) on first run.
+[uv](https://docs.astral.sh/uv/) installs Python 3.11+ and the three dependencies (`pygame-ce`, `numpy`, `moderngl`) on first run.
 Without uv: `pip install -r requirements.txt`, then `python src/main.py`.
 
 > [!TIP]
@@ -198,7 +198,7 @@ flowchart LR
 
 <table>
 <tr><th>Mode</th><th>What you get</th></tr>
-<tr><td><b>Training</b> <kbd>T</kbd></td><td>Four chapters, each of which can be started on its own: <b>Station drill</b> · <b>Sonar and fire control</b> · <b>The periscope</b> · <b>Live exercises</b> (weather, escort attack, damage control, torpedo evasion, sub hunt). Training warheads leave you shaken, never sunk.</td></tr>
+<tr><td><b>Training</b> <kbd>T</kbd></td><td>Six chapters. <b>First watch</b> runs the whole syllabus with the coxswain; once it's done, each drill can be started on its own: <b>The room</b> · <b>Station drill</b> · <b>Sonar and fire control</b> · <b>The periscope</b> · <b>Live exercises</b> (weather, escort attack, damage control, torpedo evasion, sub hunt). Training warheads leave you shaken, never sunk.</td></tr>
 <tr><td><b>Campaign</b> <kbd>C</kbd></td><td>Six patrols, from <i>Shakedown</i> to <i>Last Patrol</i>, with briefings, tonnage objectives (plus a submarine or an escort to sink on some), harder rules and worse weather as you go. Return to base with <kbd>Enter</kbd> once the objectives are met. Rise from Sub-Lieutenant to Rear Admiral and pick refits along the way.</td></tr>
 <tr><td><b>Endless</b> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>Wave after wave of convoys, each harder than the last, with a resupply from the tender between waves. Your best runs go on the high-score table.</td></tr>
 </table>
