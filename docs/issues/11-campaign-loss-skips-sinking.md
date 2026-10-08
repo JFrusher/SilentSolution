@@ -2,6 +2,7 @@
 title: 'Campaign: losing the boat jumps straight to the debrief'
 labels: bug, area:campaign, area:ui, priority:low
 milestone: v0.2.1 Fixes
+fixed_in: b79a395
 ---
 ## Summary
 

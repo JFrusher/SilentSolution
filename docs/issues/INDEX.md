@@ -4,7 +4,8 @@ Drafts from the v0.2.0 repository scan: bugs found and confirmed with headless p
 feature roadmap. Each file is one GitHub issue (front matter: title, labels, milestone). `[[NN]]` in a body is a
 cross-reference to another draft; the script turns it into a real `#number`.
 
-🟢 = good first issue.
+🟢 = good first issue. ✅ = fixed in v0.2.1 (the script creates these and closes them with the fixing
+commit, so the record is on GitHub).
 
 ## Create them on GitHub
 
@@ -24,21 +25,21 @@ Once the issues exist, this folder can be deleted.
 
 | # | Issue | Type | Priority | Areas |
 |:-:|---|---|---|---|
-| 01 | [Waves stall for 40–90+ minutes while an enemy sub or escort lingers nearby](01-waves-stall-lingering-warships.md) | bug | high | ai |
-| 02 | [Enemy sub with no torpedoes left shadows the boat forever (47 m away, same depth)](02-empty-sub-shadows-forever.md) | bug | high | ai |
-| 03 | [Rebinding a held action to a key with no name crashes the game every frame](03-rebind-unnamed-key-crash.md) | bug | high | settings |
-| 04 | [F1 key card drops the game to ~14 FPS and its paper shimmers](04-key-card-fps-shimmer.md) 🟢 | bug | medium | ui |
-| 05 | [Esc quits the whole game instantly mid-patrol, losing the patrol](05-esc-quits-without-confirm.md) | bug | medium | ui |
-| 06 | [Key card and training text ignore rebound keys, and the key card is out of date](06-key-card-ignores-bindings.md) | bug | medium | ui, settings, tutorial |
-| 07 | [Clicking or scrolling on the TMA plot moves the hydrophone dial to a wrong bearing](07-tma-click-moves-dial.md) 🟢 | bug | low | sensors, ui |
-| 08 | ["END OF SPOOL" can never happen: the wire is longer than the torpedo's run](08-end-of-spool-unreachable.md) 🟢 | bug | low | fire-control |
-| 09 | [Firing is allowed when the solution is beyond torpedo range](09-fire-beyond-range.md) 🟢 | enhancement | low | fire-control |
-| 10 | [Misleading messages: resupply amounts and "[R] NEW PATROL"](10-misleading-messages.md) 🟢 | bug | low | ui |
-| 11 | [Campaign: losing the boat jumps straight to the debrief](11-campaign-loss-skips-sinking.md) | bug | low | campaign, ui |
-| 12 | [High-score table fills with 0 GRT failed patrols](12-high-scores-zero-grt.md) 🟢 | bug | low | campaign |
-| 13 | [Add an MIT licence](13-add-mit-license.md) 🟢 | chore | medium | repo |
-| 14 | [CI: run checks.py headless on every push and pull request](14-ci-run-checks.md) | chore | medium | repo |
-| 15 | [Adopt ruff for lint and format, and fix the existing warnings](15-adopt-ruff.md) | tech-debt | low | repo |
+| 01 | ✅ [Waves stall for 40–90+ minutes while an enemy sub or escort lingers nearby](01-waves-stall-lingering-warships.md) | bug | high | ai |
+| 02 | ✅ [Enemy sub with no torpedoes left shadows the boat forever (47 m away, same depth)](02-empty-sub-shadows-forever.md) | bug | high | ai |
+| 03 | ✅ [Rebinding a held action to a key with no name crashes the game every frame](03-rebind-unnamed-key-crash.md) | bug | high | settings |
+| 04 | ✅ [F1 key card drops the game to ~14 FPS and its paper shimmers](04-key-card-fps-shimmer.md) 🟢 | bug | medium | ui |
+| 05 | ✅ [Esc quits the whole game instantly mid-patrol, losing the patrol](05-esc-quits-without-confirm.md) | bug | medium | ui |
+| 06 | ✅ [Key card and training text ignore rebound keys, and the key card is out of date](06-key-card-ignores-bindings.md) | bug | medium | ui, settings, tutorial |
+| 07 | ✅ [Clicking or scrolling on the TMA plot moves the hydrophone dial to a wrong bearing](07-tma-click-moves-dial.md) 🟢 | bug | low | sensors, ui |
+| 08 | ✅ ["END OF SPOOL" can never happen: the wire is longer than the torpedo's run](08-end-of-spool-unreachable.md) 🟢 | bug | low | fire-control |
+| 09 | ✅ [Firing is allowed when the solution is beyond torpedo range](09-fire-beyond-range.md) 🟢 | enhancement | low | fire-control |
+| 10 | ✅ [Misleading messages: resupply amounts and "[R] NEW PATROL"](10-misleading-messages.md) 🟢 | bug | low | ui |
+| 11 | ✅ [Campaign: losing the boat jumps straight to the debrief](11-campaign-loss-skips-sinking.md) | bug | low | campaign, ui |
+| 12 | ✅ [High-score table fills with 0 GRT failed patrols](12-high-scores-zero-grt.md) 🟢 | bug | low | campaign |
+| 13 | ✅ [Add an MIT licence](13-add-mit-license.md) 🟢 | chore | medium | repo |
+| 14 | ✅ [CI: run checks.py headless on every push and pull request](14-ci-run-checks.md) | chore | medium | repo |
+| 15 | ✅ [Adopt ruff for lint and format, and fix the existing warnings](15-adopt-ruff.md) | tech-debt | low | repo |
 
 ### v0.3 Polish & UX (10)
 

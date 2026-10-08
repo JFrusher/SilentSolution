@@ -2,6 +2,7 @@
 title: Clicking or scrolling on the TMA plot moves the hydrophone dial to a wrong bearing
 labels: bug, area:sensors, area:ui, priority:low, good first issue
 milestone: v0.2.1 Fixes
+fixed_in: ae5ea6e
 ---
 ## Summary
 

@@ -2,6 +2,7 @@
 title: Add an MIT licence
 labels: chore, area:repo, priority:medium, good first issue
 milestone: v0.2.1 Fixes
+fixed_in: 2c7ca18
 ---
 ## Summary
 

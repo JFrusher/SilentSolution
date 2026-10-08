@@ -2,6 +2,7 @@
 title: '"END OF SPOOL" can never happen: the wire is longer than the torpedo''s run'
 labels: bug, area:fire-control, priority:low, good first issue
 milestone: v0.2.1 Fixes
+fixed_in: 5d8b863
 ---
 ## Summary
 
