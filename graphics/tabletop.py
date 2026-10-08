@@ -93,8 +93,20 @@ class TabletopRenderer:
 
     def _poly(self, surf, cam, xs, ys, hs, color, width=0, alpha=None):
         sx, sy, d = cam.project(xs, ys, hs)
-        if (d <= 1).any():
-            return
+        near = cam.dist * 0.01
+        if (d <= near).any():  # zoomed in, part of the sheet is behind the eye: keep the part in front
+            v = np.column_stack(np.broadcast_arrays(xs, ys, hs)).astype(float)
+            out = []
+            for i in range(len(v)):  # Sutherland-Hodgman against the near plane
+                j = (i + 1) % len(v)
+                if d[i] > near:
+                    out.append(v[i])
+                if (d[i] > near) != (d[j] > near):
+                    out.append(v[i] + (v[j] - v[i]) * (near - d[i]) / (d[j] - d[i]))
+            if len(out) < 3:
+                return
+            out = np.array(out)
+            sx, sy, _ = cam.project(out[:, 0], out[:, 1], out[:, 2])
         pts = list(zip(sx, sy))
         if alpha is None:
             pygame.draw.polygon(surf, color, pts, width)
@@ -109,9 +121,19 @@ class TabletopRenderer:
         if len(xyz) < 2:
             return
         sx, sy, d = cam.project(xyz[:, 0], xyz[:, 1], xyz[:, 2])
-        ok = d > 1
-        if ok.sum() >= 2:
-            pygame.draw.lines(surf, color, False, list(zip(sx[ok], sy[ok])), width)
+        near = cam.dist * 0.01
+        if (d > near).all():
+            pygame.draw.lines(surf, color, False, list(zip(sx, sy)), width)
+            return
+        keep = (d[:-1] > near) | (d[1:] > near)  # segment by segment, each cut at the near plane
+        a, b, da, db = xyz[:-1][keep], xyz[1:][keep], d[:-1][keep], d[1:][keep]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            a2 = np.where((da <= near)[:, None], a + (b - a) * ((near - da) / (db - da))[:, None], a)
+            b2 = np.where((db <= near)[:, None], b + (a - b) * ((near - db) / (da - db))[:, None], b)
+        ax, ay, _ = cam.project(a2[:, 0], a2[:, 1], a2[:, 2])
+        bx, by, _ = cam.project(b2[:, 0], b2[:, 1], b2[:, 2])
+        for p, q in zip(zip(ax, ay), zip(bx, by)):
+            pygame.draw.line(surf, color, p, q, width)
 
     # ---------- the table ----------
     def _table(self, surf, cam, below):
@@ -460,4 +482,7 @@ if __name__ == "__main__":  # self-check: projection conventions, presets, a smo
         tab.render(60.0, cam, surf)
     ms = (time.perf_counter() - t0) / 4 * 1000
     assert len(tab.labels) == 4, tab.labels
+    cam = Camera(tab.table[:2], tab.span * 0.08, pitch=20.0)  # zoomed in: the table runs behind the eye
+    tab.render(60.0, cam, surf)
+    assert surf.get_at((640, 600))[:3] != WOOD, "a close-up still shows the chart"
     print(f"tabletop ok ({ms:.1f} ms a frame)")
