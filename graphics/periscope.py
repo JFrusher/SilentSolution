@@ -56,6 +56,8 @@ class View:
     bursts: list = field(default_factory=list)
     under: bool = False     # a wave is over the lens
     shake: float = 0.0      # px of vibration (feather, speed)
+    scale_ref: float = 0.0  # subtracted from bearings on the tape: 0 = true, own heading = relative
+    marks: list = field(default_factory=list)  # (true bearing, letter, colour) set into the bearing tape
 
 
 def _mix(a, b, t):
@@ -423,9 +425,27 @@ class PeriscopeRenderer:
                 major = round(b) % label == 0
                 pygame.draw.line(f, (16, 18, 20), (x, y), (x, y + (10 if major else 5)), 1)
                 if major:
-                    img = self._label(f"{round(b) % 360:03d}")
+                    img = self._label(f"{round(b - v.scale_ref) % 360:03d}")
                     f.blit(img, (x - img.get_width() / 2, y - 16))
         pygame.draw.polygon(f, (180, 30, 20), [(EYE / 2, y + 12), (EYE / 2 - 5, y + 20), (EYE / 2 + 5, y + 20)])
+        edge = EYE / 2 - 80
+        for k, (brg, letter, color) in enumerate(v.marks):  # where sonar and the TDC say to look
+            off = angle_diff(brg, v.brg) * ppd
+            inside = abs(off) <= edge
+            x = EYE / 2 + max(-edge, min(edge, off))
+            ty = y + 26 + (0 if inside else 22 * k)  # off the tape they stack at the edge instead of overlapping
+            if inside:  # a pointer under the tape at the bearing
+                pts = [(x, y + 14), (x - 7, y + 26), (x + 7, y + 26)]
+            else:  # an arrow at the edge pointing the way to train
+                d = 1 if off > 0 else -1
+                pts = [(x + 12 * d, ty + 8), (x, ty + 1), (x, ty + 15)]
+            pygame.draw.polygon(f, color, pts)
+            pygame.draw.polygon(f, (12, 14, 16), pts, 1)
+            tag = self._label(letter, (240, 240, 230))
+            side = 0 if inside else 16 * (1 if off > 0 else -1)
+            box = tag.get_rect(center=(x - side, ty + 8 + (12 if inside else 0)))
+            pygame.draw.rect(f, color, box.inflate(6, 2))
+            f.blit(tag, box)
 
     # ---------- frame ----------
     def render(self, v):

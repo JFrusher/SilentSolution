@@ -8,7 +8,7 @@ import pygame
 
 import settings
 from ai import ThreatDirector
-from displays import CLASSES, SpectrumAnalyzer, Teletype, WaterfallDisplay
+from displays import CLASSES, SCALES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from geometry import bearing, offset
 from graphics import console_art as art
@@ -109,7 +109,11 @@ class Console:
         self.waterfall, self.spectrum = WaterfallDisplay(), SpectrumAnalyzer()
         self.tdc = TargetDataComputer(self.world.player)
         self.teletype = Teletype(audio)
-        self.dial = self.signal = self.held = 0.0
+        self.signal = self.held = 0.0
+        self.dial_true = self.scope_true = 0.0  # where the hydrophone and the periscope point, TRUE bearing
+        self.last_heading = self.world.player.heading
+        self.locked = self.tracking = False  # dial on the trace (within lock_deg); dial following it by itself
+        self.brg_err = None  # smoothed bearing of the loudest contact in the cone, relative to the dial
         self.tubes = [0.0, 0.0]  # reload s remaining; 0 = ready; inf = empty, waiting on the racks
         self.log = deque(maxlen=7)
         self.echoes = []         # (x, y, time) absolute fixes for the scope
@@ -127,7 +131,6 @@ class Console:
         self.tutorial = None     # set by tutorial.Tutorial
         self.optics = PeriscopeOptics(self.world)
         self.looking = False     # at the eyepiece (the station is out of sight)
-        self.scope_brg = 0.0     # relative bearing the scope is trained on
         self.high_power = False
         self.view = None         # last optics.look(): (sightings, wakes, bursts) or None
         self.scope_fix = None    # (true bearing, range m, time) from the last scope mark
@@ -143,6 +146,51 @@ class Console:
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
                                 "STAY DEEP, STAY QUIET. F1 FOR STATION DRILL.")
+
+    # --- bearings: stored TRUE; relative is a view of them from the ship's head ---
+    @property
+    def dial(self):
+        return (self.dial_true - self.world.player.heading) % 360
+
+    @dial.setter
+    def dial(self, rel):
+        self.dial_true = (rel + self.world.player.heading) % 360
+
+    @property
+    def scope_brg(self):
+        return (self.scope_true - self.world.player.heading) % 360
+
+    @scope_brg.setter
+    def scope_brg(self, rel):
+        self.scope_true = (rel + self.world.player.heading) % 360
+
+    @staticmethod
+    def true_mode():
+        return settings.SETTINGS["true_bearings"]
+
+    def display_brg(self, true_brg):
+        """A true bearing as the station currently shows bearings (true, or relative to the ship's head)."""
+        return true_brg % 360 if self.true_mode() else (true_brg - self.world.player.heading) % 360
+
+    def from_display(self, b):
+        return b % 360 if self.true_mode() else (b + self.world.player.heading) % 360
+
+    def toggle_bearing_mode(self):
+        settings.SETTINGS["true_bearings"] = not self.true_mode()
+        settings.save()
+        self.say("BEARINGS " + ("TRUE (NORTH-STABILISED)" if self.true_mode() else "RELATIVE (SHIP'S HEAD)"))
+
+    def cycle_waterfall(self):
+        wf = self.waterfall
+        wf.row_interval = SCALES[(SCALES.index(wf.row_interval) + 1) % len(SCALES)] if wf.row_interval in SCALES \
+            else SCALES[0]
+        self.say(f"WATERFALL {wf.row_interval:g} S A LINE")
+
+    def scope_to_sonar(self):
+        self.scope_true = self.dial_true
+        self.actions.add("SCOPE_TO_SONAR")
+        self.say(f"SCOPE ON THE SONAR BEARING {self.display_brg(self.dial_true):05.1f}"
+                 + ("T" if self.true_mode() else "R"))
 
     @property
     def score(self):
@@ -402,6 +450,9 @@ class Console:
             "TMA PAGE": self.flip_page,
             "AUTO-SOLVE": self.auto_solve,
             "DAMAGE BOARD": self.damage_board,
+            "BEARING MODE": self.toggle_bearing_mode,
+            "WATERFALL SCALE": self.cycle_waterfall,
+            "SCOPE TO SONAR": self.scope_to_sonar,
             "SKIP DRILL": lambda: self.actions.add("SKIP"),  # training only: the tutorial reads it
         }
         name = settings.action_for(k)
@@ -463,7 +514,8 @@ class Console:
             centre = bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
             self.dial = (centre + (x - wf.centerx) / WF_W * PLOT_SPAN - self.world.player.heading) % 360
         elif wf.collidepoint(pos):
-            self.dial = (x - wf.x) / WF_W * 360
+            self.dial_true = self.from_display((x - wf.x) / WF_W * 360)
+            self.tracking = False
         elif math.hypot(x - SCOPE_C[0], y - SCOPE_C[1]) <= SCOPE_R:
             self.scope_click(pos)
         elif any(b.collidepoint(pos) for b in TELEGRAPH_BTNS):
@@ -508,7 +560,8 @@ class Console:
         elif TELEGRAPH_RECT.collidepoint(pos):
             self.telegraph(self.telegraph_index() + dy)
         elif CRT_RECT.collidepoint(pos) and self.crt_page == "SONAR":
-            self.dial = (self.dial + dy) % 360
+            self.dial_true = (self.dial_true + dy) % 360
+            self.tracking = False
 
     # --- simulation tick ---
     def update(self, dt, keys):
@@ -519,9 +572,10 @@ class Console:
         held = lambda action: keys[settings.code(action)]
         train = held("TRAIN RIGHT") - held("TRAIN LEFT")
         if self.looking:  # A/D train the scope; the hydrophone dial stays where it was
-            self.scope_brg = (self.scope_brg + train * SCOPE_TRAIN_RATE[self.high_power] * dt) % 360
+            self.scope_true = (self.scope_true + train * SCOPE_TRAIN_RATE[self.high_power] * dt) % 360
         else:
-            self.dial = (self.dial + train * DIAL_RATE * dt) % 360
+            self.dial_true = (self.dial_true + train * DIAL_RATE * dt) % 360
+            self.tracking = self.tracking and not train  # a hand on the wheel takes the dial back
         rudder = held("RUDDER RIGHT") - held("RUDDER LEFT")
         if rudder:
             p.rudder = clamp(p.rudder + rudder * RUDDER_RATE * dt, -MAX_RUDDER, MAX_RUDDER)
@@ -539,6 +593,11 @@ class Console:
         self.tubes = [r if r == math.inf else max(0.0, r - dt) for r in self.tubes]
 
         self.frame_events = world.step(dt)
+        turned = angle_diff(p.heading, self.last_heading)
+        self.last_heading = p.heading
+        if not self.true_mode():  # ship's-head mode: dial and scope are fixed to the hull and swing with it
+            self.dial_true = (self.dial_true + turned) % 360
+            self.scope_true = (self.scope_true + turned) % 360
         for kind, a, b in self.frame_events:
             self.report(kind, a, b)
         self.tdc.update(dt)
@@ -573,12 +632,15 @@ class Console:
         diesel = getattr(p, "snorkeling", False)
         if diesel:  # our own diesels thunder through the hull: the hydrophones are nearly deaf while we charge
             levels = levels / DIESEL_DEAFNESS
-        self.waterfall.update(dt, bearings, levels, widths, rain, floor=DIESEL_FLOOR if diesel else 0.0)
+        self.waterfall.update(dt, bearings, levels, widths, rain, floor=DIESEL_FLOOR if diesel else 0.0,
+                              heading=p.heading)
         gains = cone_gain(self.dial, bearings, self.diff["cone"])
-        self.signal = float((gains * levels / 160).max(initial=0.0)) / (1 + 2 * rain)
+        heard = gains * levels / 160
+        self.signal = float(heard.max(initial=0.0)) / (1 + 2 * rain)
+        self._track(dt, bearings, heard)
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
         self.audio.set_hydrophone(self.signal, self.dial)
-        self.tma.update(world.time, p, self.signal > 0.5, self.dial + p.heading)
+        self.tma.update(world.time, p, self.locked, self.dial_true)
         self.torpedo_warning = bool(np.any(hostile & (levels > 30)))
 
         self.flash = max(0.0, self.flash - dt * 2.5)
@@ -593,6 +655,19 @@ class Console:
             self.audio.set_hydrophone(0.0)
             self.teletype.print(f"{self.cause}. CONTACT LOST WITH BOAT AT {stamp(world.time)}. "
                                 f"WAVE {self.wave}. {self.score:,} GRT SUNK.")
+
+    def _track(self, dt, bearings, heard):
+        """LOCK means the dial is ON the trace, not merely near it; once locked the dial follows the contact."""
+        if self.signal < 0.15 or not len(heard):
+            self.brg_err, self.locked, self.tracking = None, False, False
+            return
+        err = angle_diff(bearings[int(np.argmax(heard))], self.dial)  # noisy measured bearing: operator data
+        self.brg_err = err if self.brg_err is None else self.brg_err + (err - self.brg_err) * min(1.0, dt * 4)
+        lock = self.diff.get("lock_deg", 2.0)
+        self.locked = self.signal > 0.5 and abs(self.brg_err) <= lock
+        self.tracking = (self.tracking or self.locked) and self.signal > 0.3 and abs(self.brg_err) < 3 * lock
+        if self.tracking:  # a tracker servo: the dial walks onto the smoothed bearing
+            self.dial_true = (self.dial_true + self.brg_err * min(1.0, dt * 2)) % 360
 
     def jolt(self, strength):
         self.shake = max(self.shake, strength)

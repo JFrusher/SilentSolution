@@ -5,13 +5,16 @@ sim.py; behaviour code lives in ai.py and sim.py and only reads these numbers.""
 DIFFICULTY = {
     "CADET": dict(layer_loss=0.3, enemy_torp_kt=28, enemy_seeker_yd=0, reload=30.0, battery=False, oxygen=False,
                   leaks=False, beam_width=3.0, cone=35.0, ping_warning=True, zigzag=False, sub_decoys=0,
-                  cavitation_instant=False, torp_damage=50.0, spot_mult=0.5, mast_damage=False, lower_delay=0.0),
+                  cavitation_instant=False, torp_damage=50.0, spot_mult=0.5, mast_damage=False, lower_delay=0.0,
+                  lock_deg=3.0),
     "COMMANDER": dict(layer_loss=0.3, enemy_torp_kt=40, enemy_seeker_yd=600, reload=45.0, battery=True, oxygen=False,
                       leaks=False, beam_width=1.5, cone=25.0, ping_warning=False, zigzag=True, sub_decoys=2,
-                      cavitation_instant=False, torp_damage=75.0, spot_mult=1.0, mast_damage=False, lower_delay=0.0),
+                      cavitation_instant=False, torp_damage=75.0, spot_mult=1.0, mast_damage=False, lower_delay=0.0,
+                      lock_deg=1.5),
     "IRON CAPTAIN": dict(layer_loss=0.0, enemy_torp_kt=45, enemy_seeker_yd=1200, reload=60.0, battery=True, oxygen=True,
                          leaks=True, beam_width=1.5, cone=20.0, ping_warning=False, zigzag=True, sub_decoys=3,
-                         cavitation_instant=True, torp_damage=90.0, spot_mult=1.5, mast_damage=True, lower_delay=4.0),
+                         cavitation_instant=True, torp_damage=90.0, spot_mult=1.5, mast_damage=True, lower_delay=4.0,
+                         lock_deg=1.0),  # lock_deg: how far off the trace the dial may sit and still read LOCK
 }
 
 # ---------- being seen (periscope / snorkel lookouts) ----------

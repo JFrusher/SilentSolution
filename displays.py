@@ -9,7 +9,8 @@ import pygame
 from layout import WF_H, WF_W
 from settings import SETTINGS
 
-ROW_INTERVAL = 0.1        # sim seconds per waterfall row
+SCALES = (0.1, 1.0, 3.0)  # sim seconds per waterfall row: 21 s, 3.6 min, 10.7 min of history
+ROW_INTERVAL = 1.0        # the default: long enough that a moving contact's trace visibly slants
 
 
 # ---------- acoustic profile analysis (the deaf/mute-playable ear) ----------
@@ -95,28 +96,37 @@ class Teletype:
 
 # ---------- passive waterfall ----------
 class WaterfallDisplay:
-    def __init__(self):
+    """Bearing across, time down. Rows are stored in TRUE bearing with the heading they were painted at, so the
+    same history can be drawn north-stabilised (traces hold still through a turn) or ship's-head relative."""
+
+    def __init__(self, row_interval=ROW_INTERVAL):
         self.buffer = np.zeros((WF_H, WF_W), np.float32)
+        self.headings = np.zeros(WF_H, np.float32)  # own heading when each row was painted
         self.surface = pygame.Surface((WF_W, WF_H))
         self.cols = np.arange(WF_W, dtype=np.float32)
         self.acc = 0.0
+        self.row_interval = row_interval
         self.blips = []  # (rel_bearing, intensity, width) painted onto the next row: echoes, transients
 
     def blip(self, rel_bearing, intensity, width=1.5):
         self.blips.append((rel_bearing, intensity, width))
 
-    def update(self, dt, bearings, levels, widths=None, rain=0.0, floor=0.0):
+    def update(self, dt, bearings, levels, widths=None, rain=0.0, floor=0.0, heading=0.0):
+        """bearings are relative; heading turns them true for storage."""
         self.acc += dt
-        if self.acc < ROW_INTERVAL:
+        if self.acc < self.row_interval:
             return
-        self.acc %= ROW_INTERVAL
+        self.acc %= self.row_interval
         if widths is None:
             widths = np.full(len(levels), 1.5)
         if self.blips:
             b, lv, w = np.array(self.blips).T
             bearings, levels, widths = (np.concatenate(p) for p in ((bearings, b), (levels, lv), (widths, w)))
             self.blips.clear()
+        bearings = (np.asarray(bearings, float) + heading) % 360
         self.buffer = np.roll(self.buffer, shift=1, axis=0)
+        self.headings = np.roll(self.headings, 1)
+        self.headings[0] = heading
         row = np.clip(np.random.normal(22.5, 6.0, WF_W), 10, 35)                                 # thermal / self noise
         row += rain * (np.random.uniform(20, 70, WF_W) + (np.random.random(WF_W) < 0.03) * 90)  # rain hiss + drops
         row += floor * np.random.uniform(0.6, 1.4, WF_W)                                        # own diesels
@@ -125,7 +135,11 @@ class WaterfallDisplay:
         row += (levels[:, None] * np.exp(-0.5 * (off / widths[:, None]) ** 2)).sum(axis=0)
         self.buffer[0] = row
 
-    def draw(self):
-        g = np.clip(self.buffer, 0, 255).T  # surfarray is (x, y)
+    def draw(self, relative=False):
+        g = self.buffer
+        if relative:  # each row as it looked from the ship's head at that moment: turns swing the history
+            shift = np.round(self.headings / 360 * WF_W).astype(int)
+            g = np.take_along_axis(g, (np.arange(WF_W)[None, :] + shift[:, None]) % WF_W, axis=1)
+        g = np.clip(g, 0, 255).T  # surfarray is (x, y)
         pygame.surfarray.blit_array(self.surface, np.stack((g / 6, g, g / 4), axis=-1).astype(np.uint8))
         return self.surface
