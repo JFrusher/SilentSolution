@@ -1,6 +1,6 @@
 [project]
 name = "silent-solution"
-version = "0.2.1"
+version = "0.2.2"
 description = "Submarine sonar and fire-control simulator: you never see the ocean, only the instruments."
 readme = "README.md"
 license = "MIT"

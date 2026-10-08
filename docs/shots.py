@@ -80,7 +80,8 @@ def hero():
     run(con, 10)
     merchants = [t for t in con.world.targets if t.kind == "MERCHANT"]
     target = min(merchants, key=con.world.player.range_to)
-    run(con, 70, track=target)
+    con.waterfall.row_interval = 3.0  # F8's slow scale: ten minutes of history shows the bearing drift
+    run(con, 600, track=target)
     con.mark()
     con.ping()
     run(con, 14, track=target)
@@ -90,6 +91,8 @@ def hero():
     con.tdc.set("CRS", target.heading)
     con.tdc.set("SPR", 4.0)
     con.fire()
+    if con.wire_sel is None:  # a long shot asks for a second press
+        con.fire()
     con.wire_sel.wire_aim = (target.x, target.y)
     run(con, 40, st, track=target)
     save("station")
