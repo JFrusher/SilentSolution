@@ -21,8 +21,9 @@ KEYS = {  # action -> pygame key name
 }
 RESERVED = ("escape", "f1", "p")  # quit / back, help card, pause
 DEFAULTS = dict(volume=dict(MASTER=0.8, SONAR=1.0, EFFECTS=1.0, AMBIENCE=1.0), mouse=1.0, large_text=False,
-                colorblind=False, sound_captions=True, true_bearings=True, keys=KEYS)
+                colorblind=False, sound_captions=True, caption_scale=1.0, true_bearings=True, keys=KEYS)
 SETTINGS = copy.deepcopy(DEFAULTS)
+CAPTION_SIZES = {1.0: "SMALL", 1.3: "LARGE", 1.7: "HUGE"}  # caption_scale -> its name
 
 
 def reset():
@@ -48,6 +49,8 @@ def load(path=PATH):
             SETTINGS[name] = value if isinstance(value, bool) else cur
         elif isinstance(cur, float) and isinstance(value, (int, float)):
             SETTINGS[name] = float(value)
+    if SETTINGS["caption_scale"] not in CAPTION_SIZES:  # a hand-edited file: only the sizes on offer
+        SETTINGS["caption_scale"] = DEFAULTS["caption_scale"]
 
 
 def save(path=PATH):
@@ -123,7 +126,8 @@ class SettingsMenu:
 
     def __init__(self):
         self.rows = [*(("VOLUME", c) for c in DEFAULTS["volume"]), ("MOUSE", None), ("LARGE TEXT", None),
-                     ("COLOUR-BLIND LAMPS", None), ("SOUND CAPTIONS", None), ("TRUE BEARINGS", None),
+                     ("COLOUR-BLIND LAMPS", None), ("SOUND CAPTIONS", None), ("CAPTION SIZE", None),
+                     ("TRUE BEARINGS", None),
                      *(("KEY", a) for a in KEYS),
                      ("RESET DEFAULTS", None),
                      ("BACK", None)]
@@ -144,6 +148,8 @@ class SettingsMenu:
             return kind, None, "ON" if SETTINGS["large_text"] else "OFF"
         if kind == "COLOUR-BLIND LAMPS":
             return kind, None, "ON" if SETTINGS["colorblind"] else "OFF"
+        if kind == "CAPTION SIZE":
+            return kind, None, CAPTION_SIZES[SETTINGS["caption_scale"]]
         if kind == "SOUND CAPTIONS":
             return kind, None, "ON" if SETTINGS["sound_captions"] else "OFF"
         if kind == "TRUE BEARINGS":
@@ -163,6 +169,9 @@ class SettingsMenu:
             SETTINGS["large_text"] = not SETTINGS["large_text"]
         elif kind == "COLOUR-BLIND LAMPS":
             SETTINGS["colorblind"] = not SETTINGS["colorblind"]
+        elif kind == "CAPTION SIZE":
+            sizes = list(CAPTION_SIZES)
+            SETTINGS["caption_scale"] = sizes[(sizes.index(SETTINGS["caption_scale"]) + d) % len(sizes)]
         elif kind == "SOUND CAPTIONS":
             SETTINGS["sound_captions"] = not SETTINGS["sound_captions"]
         elif kind == "TRUE BEARINGS":

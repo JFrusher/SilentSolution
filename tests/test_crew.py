@@ -126,7 +126,7 @@ con.teletype.print("DAMAGE CONTROL: FLOODING. 1 LEAK(S). PUMPS ON.")
 con.teletype.print("WAVE 2 DISPERSED.")
 con.hear("SOUND", "[ENEMY SONAR PING 045R]")
 scene.hear()
-said = [t for t, _ in scene.captions]
+said = [t for t, _, _ in scene.captions]
 assert said == ["SONAR: BREAKUP NOISES. SUNK", "DAMAGE CONTROL: FLOODING. 1 LEAK(S). PUMPS ON.",
                 "RADIO: WAVE 2 DISPERSED.", "[ENEMY SONAR PING 045R]"], said
 assert main.speaker(said[0]) == ("SONAR", "BREAKUP NOISES. SUNK") and main.speaker(said[3])[0] == ""
@@ -139,6 +139,29 @@ assert [main.voice(w) for w in ("CONN, SONAR", "HELM, AYE", "CHIEF, AYE", "MANEU
     == ["SONAR", "HELM", "BALLAST CONTROL", "HELM", "RADIO", None], "a caller's caption is his crewman's to say"
 scene.say("CONN, SONAR: CONTACT 045, CLASSIFIED MERCHANT")
 assert "SONAR" in scene.spoke, "the sonarman made that call"
+assert scene.captions[-1][2] == "SONAR", "a caption knows its crewman"
+# turn to him: no arrow when he's in view, which way to look when he isn't
+facing = main.cr.Pose(main.CREW_AT["SONAR"] + (1.5, 0.0, 0.0), -90.0, 0.0)  # starboard of him, looking to port
+assert main.turn_to(facing, "SONAR") is None
+behind = main.cr.Pose(facing.pos, 90.0, 0.0)
+assert abs(main.turn_to(behind, "SONAR")) > 170, main.turn_to(behind, "SONAR")
+screen = pygame.display.get_surface()
+main.captions(screen, [("CONN, SONAR: CONTACT", 0.5, 120.0), ("[KLAXON]", 1.0, None)], 700)  # fades, arrows draw
+menu = settings.SettingsMenu()
+menu._select(next(i for i, r in enumerate(menu.rows) if r[0] == "CAPTION SIZE"))
+for want in (1.3, 1.7, 1.0):  # CAPTION SIZE cycles SMALL, LARGE, HUGE
+    menu._adjust(1)
+    assert settings.SETTINGS["caption_scale"] == want
+import json  # noqa: E402
+import tempfile  # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    path = f"{d}/settings.json"
+    with open(path, "w") as f:
+        json.dump({"caption_scale": 1.55}, f)
+    settings.load(path)
+    assert settings.SETTINGS["caption_scale"] == 1.0, "only the sizes on offer"
+settings.reset()
 print("captions ok")
 
 # quick travel from the order wheel: on foot or from another station, a dip to black and you're carried in

@@ -18,7 +18,7 @@ import stations
 from audio import AudioSynthesizer
 from console import Console
 from graphics import console_art as art
-from graphics.room3d import RoomRenderer, legend_art, plot_art
+from graphics.room3d import RoomRenderer, crew_places, legend_art, plot_art
 from graphics.tabletop import ReplayView
 from layout import CRT_RECT, HIGHLIGHTS, STRIP, H, W
 from orders_menu import OrderWheel
@@ -284,24 +284,44 @@ def voice(who):
 
 
 def captions(screen, lines, bottom):
-    """What's said, printed and heard aboard, newest at the bottom: the caller in amber, a sound in [brackets]."""
-    font = art.mono(18 if settings.SETTINGS["large_text"] else 15, True)
+    """What's said, printed and heard aboard, newest at the bottom: the caller in amber, a sound in [brackets].
+    lines: (text, opacity 0..1, turn) where turn, when set, is how far round (deg, + to the right) the speaker is
+    from where you look, and an arrow points the way."""
+    scale = settings.SETTINGS["caption_scale"]
+    font = art.mono(round(15 * scale), True)
     rows = []
-    for line in lines:
+    for line, fade, turn in lines:
         who, said = speaker(line)
-        wrapped = textwrap.wrap(said, 80 if settings.SETTINGS["large_text"] else 100) or [""]
-        rows += [(who if i == 0 else "", part, said.startswith("[")) for i, part in enumerate(wrapped)]
+        wrapped = textwrap.wrap(said, round(100 / scale)) or [""]
+        rows += [(who if i == 0 else "", part, said.startswith("["), fade, turn if i == 0 else None)
+                 for i, part in enumerate(wrapped)]
     step = font.get_linesize() + 4
-    for i, (who, part, sound) in enumerate(reversed(rows)):
+    for i, (who, part, sound, fade, turn) in enumerate(reversed(rows)):
         tag = font.render(f"{who}: " if who else "", True, (240, 190, 90))
         text = font.render(part, True, (170, 200, 235) if sound else (150, 240, 160))
-        back = pygame.Rect(0, 0, tag.get_width() + text.get_width() + 16, step - 2)
-        back.midbottom = (W // 2, bottom - i * step)
-        shade = pygame.Surface(back.size, pygame.SRCALPHA)
-        shade.fill((0, 0, 0, 180))
-        screen.blit(shade, back)
-        screen.blit(tag, (back.x + 8, back.y + 2))
-        screen.blit(text, (back.x + 8 + tag.get_width(), back.y + 2))
+        arrow = step if turn is not None else 0
+        row = pygame.Surface((arrow + tag.get_width() + text.get_width() + 16, step - 2), pygame.SRCALPHA)
+        row.fill((0, 0, 0, 180))
+        if turn is not None:  # which way to look for him: left, right, or behind you
+            c, a, r = (step / 2 + 4, row.get_height() / 2), math.radians(turn), step * 0.32
+            tip = (c[0] + math.sin(a) * r, c[1] - math.cos(a) * r)
+            wing = [(c[0] + math.sin(a + k) * r * 0.75, c[1] - math.cos(a + k) * r * 0.75) for k in (2.4, -2.4)]
+            pygame.draw.polygon(row, (240, 190, 90), [tip, *wing])
+        row.blit(tag, (arrow + 8, 2))
+        row.blit(text, (arrow + 8 + tag.get_width(), 2))
+        row.set_alpha(round(255 * fade))
+        screen.blit(row, row.get_rect(midbottom=(W // 2, bottom - i * step)))
+
+
+CREW_AT = {k: sat[:3, 3] + (0.0, 1.2, 0.0) for k, (sat, _) in crew_places().items()}  # each watchkeeper's head
+HALF_VIEW = math.degrees(math.atan(math.tan(math.radians(cr.FOVY / 2)) * W / H)) - 4  # just inside the screen edge
+
+
+def turn_to(pose, who):
+    """How far round (deg, + to the right) crewman `who` is from where `pose` looks, or None if he's in view."""
+    d = CREW_AT[who] - pose.pos
+    rel = (math.degrees(math.atan2(d[0], -d[2])) - pose.yaw + 180) % 360 - 180
+    return rel if abs(rel) > HALF_VIEW else None
 
 
 class OnFoot:
@@ -445,7 +465,7 @@ class Patrol(Scene):
         self.wheel = OrderWheel()  # the captain's orders, on the right mouse button
         self.from_room = False     # at the eyepiece by way of the room: stepping back puts you there again
         self.grip = None           # the station piece a drag started on
-        self.captions = deque(maxlen=4)  # (line, when it went up): the newest of what's been heard aboard
+        self.captions = deque(maxlen=4)  # (line, when it went up, its crewman): the newest heard aboard
         self.spoke = {}  # crewman -> when he last made a call, so he looks round at you as he does
         self.heard = console.heard[-1][0] if console.heard else 0  # the last of console.heard captioned
         self.at = None  # the station you're working (the full console, "ALL", once the boat is lost)
@@ -566,8 +586,8 @@ class Patrol(Scene):
 
     def say(self, text):
         now = pygame.time.get_ticks()
-        self.captions.append((text, now))
         who = voice(speaker(text)[0])
+        self.captions.append((text, now, who))
         if who:
             self.spoke[who] = now
 
@@ -688,7 +708,11 @@ class Patrol(Scene):
             notice(screen, st.confirm or (["PATROL PAUSED", "", "[P] RESUME"] if self.paused else []))
         if self.at != "ALL":  # the full console has its own log; the eyepiece's strip shows only the last line
             now = pygame.time.get_ticks()
-            captions(screen, [t for t, at in self.captions if now - at < self.CAPTION_TIME],
+            pose = self.on_foot.room.pose if self.on_foot else None if full else cr.seated(
+                next(s for s in cr.STATIONS if s.name == self.at))
+            captions(screen, [(t, min(1.0, (self.CAPTION_TIME - (now - at)) / 1000), turn_to(pose, who)
+                               if pose is not None and who else None)
+                              for t, at, who in self.captions if now - at < self.CAPTION_TIME],
                      STRIP.top - 6 if full else H - 12)
         if not full and self.app.show_help:
             st.draw_help(screen)
