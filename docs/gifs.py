@@ -1,7 +1,6 @@
 """Film the README GIFs from scripted, headless runs of the real game: time-lapse with real-time beats, Dymo
 captions, crossfaded loops. Run: uv run --with pillow docs/gifs.py [attack tma escort wire storm table]"""
 import os
-import random
 import sys
 from pathlib import Path
 
@@ -18,6 +17,7 @@ pygame.init()
 screen = pygame.display.set_mode((1280, 720))
 
 import settings  # noqa: E402
+import sim  # noqa: E402
 from ai import EscortAI  # noqa: E402
 from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
@@ -130,8 +130,7 @@ def operator(con):
 
 
 def seed(n):
-    random.seed(n)
-    np.random.seed(n)
+    sim.seed(n)
 
 
 # ---------------------------------------------------------------------------------------------- the scenes

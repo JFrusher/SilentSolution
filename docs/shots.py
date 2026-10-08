@@ -2,7 +2,6 @@
 Run: uv run --with pillow docs/shots.py   ->  docs/images/*.png and *.gif"""
 import math
 import os
-import random
 import sys
 import tempfile
 from pathlib import Path
@@ -19,6 +18,7 @@ screen = pygame.display.set_mode((1280, 720))
 
 import campaign  # noqa: E402
 import settings  # noqa: E402
+import sim  # noqa: E402
 from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
 from sim import KNOT, YARD, Vessel, bearing  # noqa: E402
@@ -46,7 +46,7 @@ def run(con, seconds, station=None, state="PLAY", track=None):
     n = int(seconds / DT)
     for i in range(n):
         if track is not None and track in con.world.targets:
-            con.dial = rel(con, track) + random.gauss(0, 0.7)
+            con.dial = rel(con, track) + sim.DICE.gauss(0, 0.7)
         con.update(DT, NoKeys())
         if station and i >= n - 30:
             station.draw(screen, con, state, False, False, DT)
@@ -74,7 +74,7 @@ def quiet_sea(con, rain=0.0):
 
 def hero():
     """The station mid-attack: a convoy on the waterfall, the dial locked on, a wired spread running."""
-    random.seed(7)
+    sim.seed(7)
     st, con = Workstation(), Console("COMMANDER", AUDIO)
     quiet_sea(con)
     run(con, 10)
@@ -114,7 +114,7 @@ def anatomy(st, con):
 
 
 def periscope_scene():
-    random.seed(3)
+    sim.seed(3)
     con = Console("CADET", AUDIO)
     con.world.director = None
     quiet_sea(con)
@@ -171,7 +171,7 @@ def periscope_gif():
 
 def tma():
     """Two legs of bearings on a crossing merchant, a ping for range, then auto-solve."""
-    random.seed(5)
+    sim.seed(5)
     st, con = Workstation(), Console("CADET", AUDIO)
     con.world.director = None
     quiet_sea(con)
@@ -192,14 +192,14 @@ def tma():
 
 
 def damage():
-    random.seed(2)
+    sim.seed(2)
     st, con = Workstation(), Console("IRON CAPTAIN", AUDIO)
     quiet_sea(con)
     run(con, 4)
     p = con.world.player
     p.break_systems(["PLANES", "HYDROPHONES", "TUBE 2", "BATTERY", "ACTIVE SONAR"])
     p.repair_first("PLANES")
-    p.leaks = [35.0, 50.0]
+    p.damaged.update({"LEAK 1": 35.0, "LEAK 2": 50.0})
     con.world.hull = 58.0
     con.teletype.print("DAMAGE CONTROL: PLANES, HYDROPHONES, TUBE 2, BATTERY, ACTIVE SONAR DAMAGED. ONE PARTY "
                        "WORKS THE LIST TOP FIRST - F5 TO SET IT.")
@@ -230,7 +230,7 @@ def pages():
     con.world.time, con.world.hull = 1834.0, 62.0
     con.actions.add("ENTER")
     patrol.update(con)
-    random.seed(1)
+    sim.seed(1)
     st.debrief = car.record(patrol, con)
     for _ in range(40):
         st.draw(screen, None, "DEBRIEF", False, False, DT)

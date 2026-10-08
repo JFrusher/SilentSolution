@@ -8,6 +8,7 @@ import pygame
 
 from layout import WF_H, WF_W
 from settings import SETTINGS
+from sim import NP_DICE
 
 SCALES = (0.1, 1.0, 3.0)  # sim seconds per waterfall row: 21 s, 3.6 min, 10.7 min of history
 ROW_INTERVAL = 1.0        # the default: long enough that a moving contact's trace visibly slants
@@ -51,7 +52,7 @@ class SpectrumAnalyzer:
         w = np.where(kinds == 0, w * (0.7 + 0.3 * math.sin(2 * math.pi * 0.9 * t)), w)  # merchant shaft beat
         target = (w[:, None] * TEMPLATES[kinds]).sum(axis=0) if len(w) else np.zeros(SPEC_BINS)
         floor = 0.06 + 0.25 * rain
-        noise = np.abs(np.random.normal(floor, 0.03 + 0.08 * rain, SPEC_BINS))
+        noise = np.abs(NP_DICE.normal(floor, 0.03 + 0.08 * rain, SPEC_BINS))
         self.curve += (target + noise - self.curve) * min(1.0, dt * 8)
         signal = np.clip(self.curve - floor - 0.04, 0, None)
         if signal.max() < 0.1:
@@ -127,9 +128,9 @@ class WaterfallDisplay:
         self.buffer = np.roll(self.buffer, shift=1, axis=0)
         self.headings = np.roll(self.headings, 1)
         self.headings[0] = heading
-        row = np.clip(np.random.normal(22.5, 6.0, WF_W), 10, 35)                                 # thermal / self noise
-        row += rain * (np.random.uniform(20, 70, WF_W) + (np.random.random(WF_W) < 0.03) * 90)  # rain hiss + drops
-        row += floor * np.random.uniform(0.6, 1.4, WF_W)                                        # own diesels
+        row = np.clip(NP_DICE.normal(22.5, 6.0, WF_W), 10, 35)                                 # thermal / self noise
+        row += rain * (NP_DICE.uniform(20, 70, WF_W) + (NP_DICE.random(WF_W) < 0.03) * 90)  # rain hiss + drops
+        row += floor * NP_DICE.uniform(0.6, 1.4, WF_W)                                        # own diesels
         centre = bearings / 360.0 * WF_W
         off = (self.cols[None, :] - centre[:, None] + WF_W / 2) % WF_W - WF_W / 2  # wraps 359 -> 0
         row += (levels[:, None] * np.exp(-0.5 * (off / widths[:, None]) ** 2)).sum(axis=0)

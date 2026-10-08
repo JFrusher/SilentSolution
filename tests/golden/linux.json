@@ -1,0 +1,226 @@
+{
+ "events": [
+  [
+   480,
+   "WAVE",
+   null
+  ],
+  [
+   1200,
+   "CONVOY_ALARM",
+   2
+  ],
+  [
+   1200,
+   "AI_ALERT",
+   4
+  ],
+  [
+   1200,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   1200,
+   "AI_ALARMED",
+   5
+  ],
+  [
+   1681,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   2162,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   2643,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   3124,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   3605,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   4086,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   4567,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   5048,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   5447,
+   "ARMED",
+   6
+  ],
+  [
+   5457,
+   "ARMED",
+   7
+  ],
+  [
+   5529,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   6010,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   6491,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   6972,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   7453,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   7934,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   8415,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   8896,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   9377,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   9858,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   10339,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   10820,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   11301,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   11782,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   12263,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   12722,
+   "HEAD_VALVE",
+   1
+  ],
+  [
+   12744,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   13000,
+   "MASTS_LOWERED",
+   1
+  ],
+  [
+   13225,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   13706,
+   "ESCORT_PING",
+   4
+  ],
+  [
+   14187,
+   "ESCORT_PING",
+   4
+  ]
+ ],
+ "log": [
+  "01:30 T2 SEEKER ACTIVE",
+  "02:30 UP SCOPE",
+  "02:33 MARK 000.0R. NOTHING IN THE WIRES",
+  "02:36 AUTO-SOLVE NOT FITTED - PLOT IT YOURSELF",
+  "03:03 RAISE SNORKEL. START DIESELS",
+  "03:32 HEAD VALVE SHUT - WAVE OVER SNORKEL",
+  "03:36 MASTS HOUSED FOR DEPTH"
+ ],
+ "teletype": [
+  "FROM FLAG OFFICER SUBMARINES:",
+  "COMMANDER PATROL. INTERCEPT CONVOYS IN",
+  "YOUR SECTOR. STAY DEEP, STAY QUIET. F1",
+  "FOR STATION DRILL.",
+  "",
+  "DISPATCH WAVE 1: CONVOY OF 3",
+  "MERCHANTS, 1 ESCORT(S) REPORTED NEAR",
+  "172 TRUE, 8 KM. ATTACK AT DISCRETION.",
+  "",
+  "CONN, SONAR: CONVOY HAS WOKEN UP -",
+  "REVS INCREASING, STARTING A ZIG-ZAG.",
+  "",
+  "WEAPONS: FISH ARE ON THE WIRE. CLICK",
+  "ONE ON THE TACTICAL SCOPE, THEN CLICK",
+  "WHERE TO SEND IT. [ ] NUDGE, \\ NEXT",
+  "FISH, L CUTS THE WIRE. OVER 12 KNOTS",
+  "THE WIRE PARTS.",
+  ""
+ ],
+ "end": {
+  "x": 0.0,
+  "y": 610.474,
+  "z": 25.0,
+  "heading": 0.0,
+  "hull": 100.0,
+  "score": 0,
+  "wave": 1,
+  "targets": 4,
+  "torpedoes": 2,
+  "dial": 0.0,
+  "dice": 0.6652474490794696
+ }
+}

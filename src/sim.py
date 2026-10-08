@@ -65,6 +65,19 @@ R_EFF = 7.6e6            # m, effective earth radius with refraction (hull-down 
 # being seen: per-second chance at zero range for an alertness-1 observer, and how far it can reach in clear air
 
 UIDS = itertools.count(1)
+# World dice: everything inside the patrol tick (sim, AI, sensors, operator displays) rolls these and nothing else,
+# so a seed replays a patrol exactly. Presentation (audio, drawing) keeps its own generators.
+# ponytail: module-level, so one patrol per process at a time; make them per-world if two ever run side by side.
+DICE = random.Random()
+NP_DICE = np.random.RandomState()
+
+
+def seed(n):
+    """Start a patrol's dice and ship numbering from `n`."""
+    global UIDS
+    DICE.seed(n)
+    NP_DICE.seed(n)
+    UIDS = itertools.count(1)
 TELEGRAPH = (("STOP", 0.0), ("SLOW", 4.0), ("HALF", 8.0), ("FULL", 14.0), ("FLANK", 20.0))  # order, knots
 
 
@@ -77,11 +90,16 @@ SHIP_CLASSES = {
 def silhouette_class(ship):
     if ship.kind == "ESCORT":
         return "escort"
-    return "tanker" if id(ship) % 3 == 0 else "merchant"
+    return "tanker" if ship.uid % 3 == 0 else "merchant"  # uid, not id(): same ship, same class, every run
 
 
 # torpedo lifecycle
 RUNNING, ACQUIRING, HOMING, EXHAUSTED = "RUNNING", "ACQUIRING", "HOMING", "EXHAUSTED"
+
+
+def repair_time(name):
+    """s the damage-control party needs for one job on the list."""
+    return LEAK_REPAIR if name.startswith("LEAK") else REPAIR_TIME[name]
 
 
 def clamp(v, lo, hi):
@@ -175,7 +193,6 @@ class Submarine(Vessel):
     blowing: bool = False
     cavitating: bool = False
     snorkeling: bool = False   # diesels running on the snorkel
-    leaks: list = field(default_factory=list)  # seconds until each is plugged
     # masts
     mast_damage: bool = False  # difficulty: speed can bend a raised scope
     lower_delay: float = 0.0   # difficulty: seconds to strike masts once ordered deep
@@ -221,6 +238,14 @@ class Submarine(Vessel):
                 return "SNORKEL DAMAGED"
             self.snorkel_up = True
         return None
+
+    @property
+    def leaks(self):
+        """Open leaks: they sit on the damage list with the systems, and the one party plugs them in turn."""
+        return [k for k in self.damaged if k.startswith("LEAK")]
+
+    def spring_leak(self):
+        self.damaged[next(f"LEAK {n}" for n in itertools.count(1) if f"LEAK {n}" not in self.damaged)] = LEAK_REPAIR
 
     def break_systems(self, names):
         for name in names:
@@ -302,7 +327,6 @@ class Submarine(Vessel):
         self.z = clamp(self.z + len(self.leaks) * LEAK_SINK * dt, 0.0, 400.0)  # flooding makes her heavy
         steerage = min(1.0, self.speed / (4 * KNOT)) * (DAMAGED_RUDDER if "RUDDER" in hurt else 1.0)
         self.heading = (self.heading + self.rudder / MAX_RUDDER * TURN_RATE * steerage * dt) % 360
-        self.leaks = [t - dt for t in self.leaks if t > dt]  # damage control works through them
         self.noise = self.quiet * (0.25 + 0.035 * kt + 0.9 * self.cavitating + 0.8 * self.snorkeling
                                    + 1.5 * self.blowing)
         super().step(dt)
@@ -410,15 +434,15 @@ class Ocean:
 
     def __post_init__(self):
         if not self.swells:
-            self.swells = [(a, 2 * math.pi / lam, off, random.uniform(0, 2 * math.pi))
+            self.swells = [(a, 2 * math.pi / lam, off, DICE.uniform(0, 2 * math.pi))
                            for a, lam, off in ((0.55, 90.0, 0.0), (0.3, 45.0, 25.0), (0.15, 22.0, -35.0),
                                                (0.1, 11.0, 60.0))]
 
     def step(self, dt):
         self.timer -= dt
         if self.timer <= 0:
-            self.timer = random.uniform(60, 180)
-            self.front = random.choice((0.0, 0.0, 0.3, 0.6, 1.0))
+            self.timer = DICE.uniform(60, 180)
+            self.front = DICE.choice((0.0, 0.0, 0.3, 0.6, 1.0))
         self.rain += (self.front - self.rain) * min(1.0, dt / 20)  # fronts roll in over ~20 s
         self.wind += (3.0 + 11.0 * self.rain - self.wind) * min(1.0, dt / 60)  # the sea builds slower than the rain
 
@@ -459,7 +483,9 @@ class WorldSimulation:
     targets: list  # ships and decoys: anything sonar can hear or a seeker can lock
     torpedoes: list = field(default_factory=list)
     charges: list = field(default_factory=list)
-    ais: list = field(default_factory=list)  # ship behaviours: .update(world, dt) -> events, .hear_ping/.hear_launch
+    # ship behaviours, each with .ship, .lookouts, .alertness(), .update(world, dt) -> events, and
+    # .hear_ping(world) / .hear_launch(world) / .hear_explosion(world, x, y, sunk, torp)
+    ais: list = field(default_factory=list)
     director: Any = None                    # spawns waves: .update(world, dt) -> events
     ocean: Ocean = field(default_factory=Ocean)
     time: float = 0.0
@@ -548,12 +574,12 @@ class WorldSimulation:
         p = self.player
         if self.systems_damage and dmg >= 8 and isinstance(p, Submarine):
             pool = [s for s in REPAIR_TIME if s not in p.damaged]
-            hit = random.sample(pool, min(len(pool), 1 + int(dmg // 30)))
+            hit = DICE.sample(pool, min(len(pool), 1 + int(dmg // 30)))
             p.break_systems(hit)
             if hit:
                 events.append(("DAMAGE", p, hit))
         if self.leaks_enabled and dmg >= 8 and isinstance(self.player, Submarine):
-            self.player.leaks.append(LEAK_REPAIR)
+            self.player.spring_leak()
             events.append(("LEAK", self.player, len(self.player.leaks)))
 
     def fire(self, heading, speed=TORP_SPEED, **kw):

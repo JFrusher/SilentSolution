@@ -10,6 +10,9 @@ from functools import cache, lru_cache
 import numpy as np
 import pygame
 
+from layout import value_angle
+from settings import SETTINGS
+
 _FX = random.Random()  # presentation-only randomness, so drawing never moves the simulation's dice
 _NP = np.random.default_rng()
 
@@ -27,7 +30,6 @@ AMBER = (255, 190, 86)           # incandescent behind amber glass
 RED = (232, 74, 52)
 GREEN = (132, 214, 112)
 BLUE = (128, 172, 222)
-SAFE_LAMPS = False  # colour-blind lamps: Okabe-Ito blue / vermilion / yellow for green / red / amber
 SAFE = {GREEN: (86, 180, 233), RED: (213, 94, 0), AMBER: (240, 228, 66)}
 WHITE = (238, 232, 214)
 INK = (32, 30, 28)               # print on paper
@@ -62,18 +64,6 @@ def polar(c, r, deg):
     """Point at radius r, angle deg (maths convention: 0 = east, CCW positive) from c on a y-down screen."""
     a = math.radians(deg)
     return c[0] + r * math.cos(a), c[1] - r * math.sin(a)
-
-
-def clamp01(f):
-    return min(max(f, 0.0), 1.0)
-
-
-def value_angle(v, lo, hi, start=225.0, sweep=270.0):
-    return start - clamp01((v - lo) / (hi - lo)) * sweep
-
-
-def angle_value(deg, lo, hi, start=225.0, sweep=270.0):
-    return lo + clamp01(((start - deg) % 360) / sweep) * (hi - lo)
 
 
 # ---------- surfaces ----------
@@ -379,7 +369,7 @@ def _warm(color, on):
 
 def lamp(surf, c, on, color, r=6):
     """Pilot lamp: a domed lens in a knurled bezel."""
-    color = SAFE.get(color, color) if SAFE_LAMPS else color
+    color = SAFE.get(color, color) if SETTINGS["colorblind"] else color
     x, y = int(c[0]), int(c[1])
     if on:
         surf.blit(_glow(color, r), (x - r * 3, y - r * 3))
@@ -393,7 +383,7 @@ def lamp(surf, c, on, color, r=6):
 
 def annunciator(surf, rect, legend, on, color):
     """Warning annunciator tile: legend engraved on the lens, so it reads lit or dark, in any colour."""
-    color = SAFE.get(color, color) if SAFE_LAMPS else color
+    color = SAFE.get(color, color) if SETTINGS["colorblind"] else color
     r = pygame.Rect(rect)
     pygame.draw.rect(surf, (10, 10, 9), r.inflate(4, 4))
     lens = _warm(color, on)

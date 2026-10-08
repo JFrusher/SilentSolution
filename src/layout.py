@@ -42,6 +42,7 @@ TDC_ROW_Y0, TDC_ROW_H = 290, 20
 WF_POS = (20, 30)
 WF_W, WF_H = 360, 214
 DC_ROW_Y0, DC_ROW_H = 26, 18  # damage board rows, from the top of the waterfall
+DC_ROWS = (WF_H - DC_ROW_Y0) // DC_ROW_H  # lines that fit on the board
 SPEC_RECT = pygame.Rect(392, 30, 172, 146)
 LIB_RECT = pygame.Rect(392, 198, 172, 46)
 LOG_POS = (20, 266)
@@ -66,5 +67,19 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
 }
 
 # periscope screen (look mode): the eyepiece and the instruments you can glimpse around it
+EYE = 600  # eyepiece diameter, px
 EYEPIECE_C = (640, 340)
 STRIP = pygame.Rect(40, 676, 1200, 36)
+
+
+# dials: a value on a gauge sweep, and back (maths angles, 0 = east, CCW positive)
+def clamp01(f):
+    return min(max(f, 0.0), 1.0)
+
+
+def value_angle(v, lo, hi, start=225.0, sweep=270.0):
+    return start - clamp01((v - lo) / (hi - lo)) * sweep
+
+
+def angle_value(deg, lo, hi, start=225.0, sweep=270.0):
+    return lo + clamp01(((start - deg) % 360) / sweep) * (hi - lo)

@@ -6,6 +6,7 @@
 - **Execution:** Always use `uv run src/main.py` for testing (on this machine `uv` lives at `.venv/Scripts/uv.exe`)
 - **Checks:** `uv run checks.py` runs every suite headless plus `ruff check` (lint only, line length 120; set `SDL_VIDEODRIVER=dummy` for ad-hoc scripts)
 - **Layout:** game modules live flat in `src/` (they import each other by bare name); suites in `tests/`; `checks.py` sets `PYTHONPATH=src`
+- **Determinism:** the patrol tick rolls only `sim.DICE` / `sim.NP_DICE` (seeded per patrol); drawing and audio use their own generators. `tests/test_golden.py` replays a seeded patrol against `tests/golden/<platform>.json`; regenerate with `uv run tests/test_golden.py --update` (with `PYTHONPATH=src`) only when a change is meant to alter play
 - **Git:** git flow — `main` releases, `develop` integration, `feature/*` merged into `develop` with `--no-ff`
 
 ## Core Architecture

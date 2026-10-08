@@ -150,15 +150,15 @@ def load(path):
 
 if __name__ == "__main__":  # self-check: round trip, interpolation, retention, junk files, read-only recording
     import os
-    import random
     import tempfile
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    import sim
     from sim import KNOT, Submarine, Vessel, WorldSimulation
     folder = Path(tempfile.mkdtemp())
 
     def world():
-        random.seed(4)
+        sim.seed(4)
         return WorldSimulation(Submarine(0, 0, 0, 5 * KNOT, z=60), [Vessel(2000, 0, 270, 8 * KNOT)])
     w, rec = world(), Recorder()
     for _ in range(600):

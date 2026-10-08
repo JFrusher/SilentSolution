@@ -15,6 +15,7 @@ pygame.init()
 pygame.display.set_mode((1280, 720))
 
 import settings  # noqa: E402
+import sim  # noqa: E402
 from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
 from displays import WaterfallDisplay  # noqa: E402
@@ -125,8 +126,7 @@ class NoKeys:
 
 def station(level="COMMANDER", rel=40.0, rng=2500.0):
     """A console with one merchant at a known relative bearing, nothing else in the sea."""
-    random.seed(3)
-    np.random.seed(3)
+    sim.seed(3)
     con = Console(level, AudioSynthesizer())
     w = con.world
     w.director, w.ocean.timer, w.ocean.rain, w.ocean.front = None, 1e9, 0.0, 0.0
@@ -194,8 +194,7 @@ def check_rendering_never_moves_the_world():
     screen = pygame.display.get_surface()
     worlds = []
     for draw in (False, True):
-        random.seed(9)
-        np.random.seed(9)
+        sim.seed(9)
         con, ship = station(rng=1800.0)
         st = Workstation() if draw else None
         con.world.ais.clear()
@@ -204,7 +203,7 @@ def check_rendering_never_moves_the_world():
             con.update(1 / 30, NoKeys())
             if st:
                 st.draw(screen, con, "PLAY", False, False, 1 / 30)
-        worlds.append((ship.x, ship.y, con.world.ocean.rain, random.random()))
+        worlds.append((ship.x, ship.y, con.world.ocean.rain, sim.DICE.random()))
     assert worlds[0] == worlds[1], worlds
 
 

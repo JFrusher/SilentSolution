@@ -1,10 +1,16 @@
 """Plain-assert checks. Run: uv run test_sim.py"""
+import ast
+import inspect
 import math
-import random
+import re
+import sys
+from pathlib import Path
 
 import numpy as np
 import pygame
 
+import replay
+import sim
 from ai import (
     ALARMED,
     ALERT,
@@ -22,12 +28,24 @@ from ai import (
     frame_point,
 )
 from audio import AudioSynthesizer
-from console import Console, build_world
+from console import MAST_MESSAGES, Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
 from layout import CRT_RECT, WF_H, WF_POS, WF_W
 from sensors import PeriscopeOptics, cone_gain
-from sim import EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff, bearing
+from sim import (
+    EXHAUSTED,
+    KNOT,
+    LEAK_REPAIR,
+    YARD,
+    Decoy,
+    Submarine,
+    Torpedo,
+    Vessel,
+    WorldSimulation,
+    angle_diff,
+    bearing,
+)
 from tma import TMALog
 from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME, WAVE_TIME_LIMIT
 
@@ -40,7 +58,7 @@ def calm_or_storm(w, rain):
 
 def spotted_within(masts, rng, seconds, seed, rain=0.0, speed_kt=0.0):
     """Does an unaware escort `rng` m off spot our raised `masts` within `seconds`?"""
-    random.seed(seed)
+    sim.seed(seed)
     w = WorldSimulation(Submarine(0, 0, 0, speed_kt * KNOT, z=15), [Vessel(0, rng, 90, 0)])
     calm_or_storm(w, rain)
     w.ais.append(EscortAI(w.targets[0], 90.0, detect_radius=0.0))  # deaf: eyes only
@@ -96,7 +114,7 @@ def engagement(speed_error_kts, arm_yd=None, decoy=False):
 
 def hunt(depth):
     """An escort 6 km off hears (or doesn't hear) one ping; 10 minutes later, what happened?"""
-    random.seed(1)
+    sim.seed(1)
     w = WorldSimulation(Submarine(0, 0, 0, 0, z=depth), [Vessel(0, 6000, 90, 0)])
     w.ais.append(ai := EscortAI(w.targets[0], base_course=90))
     w.emit_ping()
@@ -109,7 +127,7 @@ def hunt(depth):
 
 def counterfire(depth, noisemaker=False, layer_loss=0.0):
     """A homing fish fired straight at our stopped boat from 3 km; returns (event kinds, hull)."""
-    random.seed(2)
+    sim.seed(2)
     w = WorldSimulation(Submarine(0, 0, 90, 0, z=depth), [])
     w.ocean.layer_loss = layer_loss
     w.launch_hostile(Vessel(0, 3000, 180, 0, z=60), 180.0, 40 * KNOT, seeker_range=1200 * YARD,
@@ -174,7 +192,7 @@ if __name__ == "__main__":
         assert sa.best == i, (i, sa.best, sa.confidence)
 
     # wave director: a wave spawns, and clearing it brings resupply
-    random.seed(3)
+    sim.seed(3)
     w = build_world(DIFFICULTY["COMMANDER"])
     kinds = []
     while not w.targets:
@@ -186,7 +204,7 @@ if __name__ == "__main__":
     assert "WAVE_CLEAR" in [e[0] for e in w.step(0.1)] and w.player.torpedoes == torps + 4
 
     # ship behaviour: an unaware convoy holds formation and its escort holds station
-    random.seed(4)
+    sim.seed(4)
     w, convoy, merchants, escort = convoy_world()
     run(w, 300)
     lead, second = merchants[0].ship, merchants[1].ship
@@ -202,7 +220,7 @@ if __name__ == "__main__":
     assert "CONVOY_ALARM" in kinds and all(m.state == ALARMED for m in merchants) and escort.state == ALERT
 
     # ... a sinking scatters the survivors and sends the escort to search the back-plotted torpedo track
-    random.seed(5)
+    sim.seed(5)
     w, convoy, merchants, escort = convoy_world(player=(0.0, -30000.0, 60.0))  # boat well clear of the search
     run(w, 60)
     lead = merchants[0].ship
@@ -224,7 +242,7 @@ if __name__ == "__main__":
     assert escort.state == PATROL, escort.state
 
     # lookouts: masts down at periscope depth are invisible; a snorkel near the convoy gets seen and wakes everyone
-    random.seed(6)
+    sim.seed(6)
     w, convoy, merchants, escort = convoy_world(player=(1200.0, 1500.0, 15.0))
     run(w, 30)
     assert escort.state == PATROL and not convoy.alarmed, (escort.state, convoy.alarmed)
@@ -276,7 +294,7 @@ if __name__ == "__main__":
     assert PeriscopeOptics(w).look() is None, "masts struck below periscope depth: blind"
 
     # late waves wind down: idle warships withdraw and far unalarmed merchants stop holding the wave open
-    random.seed(2)
+    sim.seed(2)
     w = build_world(DIFFICULTY["COMMANDER"])
     w.min_hull, w.director.boost = 100.0, 2  # wave 1 brings a submarine; the boat sits still and watches
     w.player.speed = w.player.ordered_speed = 0.0
@@ -376,14 +394,14 @@ if __name__ == "__main__":
     assert "WIRE_CUT" in run(w, 230) and not t2.wired and t2 in w.torpedoes  # end of spool, before fuel out
 
     # TMA: noisy bearings across an own-ship leg change plus one echo let auto-solve recover the target
-    random.seed(7)
+    sim.seed(7)
     own, tgt = Vessel(0, 0, 0, 5 * KNOT), Vessel(3000, 6000, 250, 10 * KNOT)
     log, tdc = TMALog(), TargetDataComputer(own)
     t = 0.0
     while t < 300:
         if t == 150:
             own.heading = 90.0  # leg change: makes range observable from bearings
-        log.update(t, own, True, bearing(own.x, own.y, tgt.x, tgt.y) + random.gauss(0, 0.5))
+        log.update(t, own, True, bearing(own.x, own.y, tgt.x, tgt.y) + sim.DICE.gauss(0, 0.5))
         if t == 200:
             log.add(t, bearing(own.x, own.y, tgt.x, tgt.y), "ECHO", own.range_to(tgt))
         own.step(0.5), tgt.step(0.5), tdc.update(0.5)
@@ -403,4 +421,44 @@ if __name__ == "__main__":
 
     g = cone_gain(350.0, np.array([350.0, 5.0, 20.0]))
     assert g[0] == 1.0 and 0 < g[1] < 1 and g[2] == 0, g
+
+    # leaks join the damage list: the one party plugs them in turn, and can be sent to one first
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [], systems_damage=True, leaks_enabled=True)
+    p, events = w.player, []
+    w.damage(10, events)
+    w.damage(10, events)
+    assert p.leaks == ["LEAK 1", "LEAK 2"] and [e[0] for e in events].count("LEAK") == 2, (p.damaged, events)
+    p.repair_first("LEAK 2")
+    assert next(iter(p.damaged)) == "LEAK 2"
+    z0 = p.z
+    run(w, LEAK_REPAIR + 1)
+    assert p.leaks == ["LEAK 1"] and p.z > z0, (p.damaged, p.z)  # plugged first; the other still floods her
+    p.spring_leak()
+    assert p.leaks == ["LEAK 1", "LEAK 2"], "a plugged leak's number is free again"
+
+    # difficulty presets are plain dicts: a misspelt key in one would be silently ignored, so they all match
+    from tutorial import TRAINING
+    keys = set(DIFFICULTY["CADET"])
+    assert all(set(d) == keys for d in (*DIFFICULTY.values(), TRAINING)), "difficulty presets differ in their keys"
+
+    # events are (kind, a, b) by name: every kind the world can raise reaches Console.report, and the replay
+    # only keeps kinds that exist, so a misspelt name fails here instead of going quiet in play
+    raised = {"ARMED", "HOMING", "LOST", EXHAUSTED}  # the seeker's returns
+    SRC = Path(sim.__file__).parent
+    emit = r'(?:events\.append|events \+=|alerts\.append)\(\(?\s*"([A-Z_]+)"'
+    for f in ("sim.py", "ai.py"):
+        raised |= set(re.findall(emit, (SRC / f).read_text()))
+    told = inspect.getsource(Console.report)
+    unheard = {k for k in raised if f'"{k}"' not in told and k not in MAST_MESSAGES and not k.startswith("AI_")}
+    assert not unheard, f"raised but never reported: {unheard}"
+    assert set(replay.EVENTS) <= raised, f"replay keeps kinds nothing raises: {set(replay.EVENTS) - raised}"
+
+    # the world never reaches for the operator layer, audio or graphics: what the crew hears and sees is Console's
+    world = {"sim", "ai", "sensors", "geometry", "tma", "fire_control", "tuning"}
+    for name in world:
+        tree = ast.parse((SRC / f"{name}.py").read_text())
+        mods = {n.name for x in ast.walk(tree) if isinstance(x, ast.Import) for n in x.names}
+        mods |= {x.module for x in ast.walk(tree) if isinstance(x, ast.ImportFrom)}
+        stray = {m for m in mods if m.split(".")[0] not in world | sys.stdlib_module_names | {"numpy"}}
+        assert not stray, f"{name}.py imports {stray}"
     print("ok")

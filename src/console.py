@@ -7,19 +7,20 @@ import numpy as np
 import pygame
 
 import settings
+import sim
 from ai import ThreatDirector
 from displays import CLASSES, SCALES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from geometry import bearing, offset
-from graphics import console_art as art
-from graphics.periscope import EYE
 from layout import (
     BLOW_BTN,
     CRT_RECT,
     DC_ROW_H,
     DC_ROW_Y0,
+    DC_ROWS,
     DEPTH_C,
     DEPTH_R,
+    EYE,
     HOLD_BTN,
     LOOK_BTN,
     NMKR_BTN,
@@ -42,6 +43,7 @@ from layout import (
     WF_W,
     WHEEL_C,
     WHEEL_R,
+    angle_value,
 )
 from replay import Recorder
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
@@ -84,7 +86,9 @@ SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
 
 
 # ---------- game state behind the workstation ----------
-def build_world(d):
+def build_world(d, seed=None):
+    if seed is not None:
+        sim.seed(seed)
     world = WorldSimulation(Submarine(0, 0, 0, 4 * KNOT, z=60, uses_battery=d["battery"], uses_oxygen=d["oxygen"],
                                       mast_damage=d["mast_damage"], lower_delay=d["lower_delay"]), [])
     world.ocean.layer_loss = d["layer_loss"]
@@ -101,9 +105,10 @@ def stamp(t):
 class Console:
     """Operator-side state and logic: input, sensors, events -> what the crew sees and hears."""
 
-    def __init__(self, level, audio, diff=None):
+    def __init__(self, level, audio, diff=None, seed=None):
         self.level, self.diff = level, diff or DIFFICULTY[level]
-        self.world = build_world(self.diff)
+        self.seed = sim.DICE.randrange(2 ** 31) if seed is None else seed  # kept with the replay: the patrol again
+        self.world = build_world(self.diff, self.seed)
         self.audio = audio
         self.passive = PassiveSonar(self.world, self.diff["beam_width"])
         self.active = ActiveSonar(self.world)
@@ -302,7 +307,7 @@ class Console:
         mult = self.world.spot_mult
         if self.diff["ping_warning"]:  # cadet: the honest number
             per_s = max((spot_probability(exposed, p.speed / KNOT, ai.ship.range_to(p), o.visibility, o.sea_state,
-                                          ai._alertness()) for ai in self.world.ais if ai.lookouts), default=0.0)
+                                          ai.alertness()) for ai in self.world.ais if ai.lookouts), default=0.0)
         else:
             seen = [s.rng for s in self.view[0]] if self.view else []
             near = min(seen, default=3000.0)
@@ -470,9 +475,9 @@ class Console:
         self.actions.add("PAGE_" + self.crt_page)
 
     def damage_rows(self):
-        """Damage board lines: the repair list in work order, then the systems that are fine."""
+        """Damage board lines: the repair list in work order (leaks included), then the systems that are fine."""
         hurt = self.world.player.damaged
-        return [*hurt, *(s for s in REPAIR_TIME if s not in hurt)]
+        return [*hurt, *(s for s in REPAIR_TIME if s not in hurt)][:DC_ROWS]  # healthy systems drop off first
 
     def tma_centre(self):
         """The TMA plot centres on your own recent bearings, so the dots are in view before there is a solution;
@@ -536,7 +541,7 @@ class Console:
             self.drag(pos)
         elif math.hypot(x - DEPTH_C[0], y - DEPTH_C[1]) <= DEPTH_R:
             a = math.degrees(math.atan2(DEPTH_C[1] - y, x - DEPTH_C[0]))
-            self.order_depth(round(art.angle_value(a, 0, 300) / 5) * 5)
+            self.order_depth(round(angle_value(a, 0, 300) / 5) * 5)
         elif TDC_PANEL.collidepoint(pos) and 0 <= (y - TDC_ROW_Y0) // TDC_ROW_H < len(FIELDS):
             self.tdc.selected = int((y - TDC_ROW_Y0) // TDC_ROW_H)
         else:
@@ -675,7 +680,7 @@ class Console:
             return
         err = angle_diff(bearings[int(np.argmax(heard))], self.dial)  # noisy measured bearing: operator data
         self.brg_err = err if self.brg_err is None else self.brg_err + (err - self.brg_err) * min(1.0, dt * 4)
-        lock = self.diff.get("lock_deg", 2.0)
+        lock = self.diff["lock_deg"]
         self.locked = self.signal > 0.5 and abs(self.brg_err) <= lock
         self.tracking = (self.tracking or self.locked) and self.signal > 0.3 and abs(self.brg_err) < 3 * lock
         if self.tracking:  # a tracker servo: the dial walks onto the smoothed bearing
@@ -690,7 +695,7 @@ class Console:
         tt, world = self.teletype.print, self.world
         if kind == "WAVE":
             m, e, s, brg = b
-            fuzz = 0 if self.diff["ping_warning"] else random.uniform(-25, 25)
+            fuzz = 0 if self.diff["ping_warning"] else sim.DICE.uniform(-25, 25)
             tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR "
                f"{(brg + fuzz) % 360:03.0f} TRUE, "
                f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")
