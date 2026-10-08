@@ -109,6 +109,21 @@ Each milestone ships with its tests; the golden run is regenerated only where pl
      view. Drill texts explain the room; the drills' own goals and checks are unchanged, so the scripted trainee in
      `tests/test_tutorial.py` still passes them all.
 
+7. **Detail: stations** (built)
+   - The look is the Oberon class (1960s RN):
+     - grey hammertone consoles round worn black bezels, cream-on-black traffolyte name plates
+     - a sloped switch rail of bakelite tumblers, knobs, lit buttons, guarded firing keys and blow levers, each engraved
+     - lino desk tops with a chrome nosing, cabinet doors, louvres, rivets, a brass maker's plate
+     - sound-powered telephones, armoured cable looms into a tray under the deckhead
+     - the watch's clutter: headphones, log books, clipboards, mugs, an ashtray, a radio clock, a first-aid box and an
+       extinguisher
+   - Built in code by `graphics/models.py` and saved as `.glb` under `assets/`, so a better model can be dropped in;
+     `graphics/gltf.py` reads them. The live panel stays the 2D station, so the seated cut is still invisible.
+8. **Detail: crew** (next)
+   - Stylised-realistic RN ratings (modelled heads and hands, jumpers and overalls, some bearded), each his own.
+   - Idle life (breathing, weight shifts, glances) and turning to face you when he makes a call, so a caption has
+     a face.
+
 ## 6. Risks
 
 - **Drawing cost.** Several live screens plus the 3D frame. Plan: screens out of view update at 10 Hz and are drawn smaller; measure before optimising.

@@ -8,6 +8,7 @@
 - **Layout:** game modules live flat in `src/` (they import each other by bare name); suites in `tests/`; `checks.py` sets `PYTHONPATH=src`
 - **Determinism:** the patrol tick rolls only `sim.DICE` / `sim.NP_DICE` (seeded per patrol); drawing and audio use their own generators. `tests/test_golden.py` replays a seeded patrol against `tests/golden/<platform>.json`; regenerate with `uv run tests/test_golden.py --update` (with `PYTHONPATH=src`) only when a change is meant to alter play
 - **3D control room:** `src/control_room.py` (layout, walking, camera moves; no GL) and `src/graphics/room3d.py` (moderngl, procedural meshes, offscreen then read back into pygame). Needs OpenGL: on a headless box run checks under `xvfb-run -a`
+- **Models:** the control room's consoles (and crew) are `.glb` files under `assets/`, built in code by `src/graphics/models.py` (regenerate with `uv run src/graphics/models.py`, `PYTHONPATH=src`) and read by `src/graphics/gltf.py`; `assets/README.md` says how to drop in a better model
 - **Git:** git flow — `main` releases, `develop` integration, `feature/*` merged into `develop` with `--no-ff`
 
 ## Core Architecture

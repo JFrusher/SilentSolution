@@ -9,7 +9,7 @@ SUITES = ("tests/test_sim.py", "tests/test_geometry.py", "tests/test_tutorial.py
           # and these modules self-check:
           "src/geometry.py", "src/settings.py", "src/audio.py", "src/campaign.py", "src/replay.py",
           "src/control_room.py", "src/stations.py",
-          "-m graphics.tabletop")
+          "-m graphics.tabletop", "-m graphics.gltf")
 LINT = ("-m", "ruff", "check", ".")  # ruff is a dev dependency: uv run installs it
 
 if __name__ == "__main__":

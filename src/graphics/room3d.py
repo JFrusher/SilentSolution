@@ -10,6 +10,8 @@ import pygame
 
 import control_room as cr
 from graphics import console_art as art
+from graphics import gltf
+from graphics.models import ASSETS, STATION_FILES
 from layout import H, W
 from sim import KNOT
 
@@ -106,6 +108,35 @@ void main() {
     vec3 t = texture(tex, uv).rgb;
     vec3 c = finish(lit(pow(t, vec3(2.2)), pos, normal, 0.35), pos);
     frag = vec4(mix(c, t, glow), 1.0);
+}
+"""
+MODEL_VS = """#version 330
+uniform mat4 mvp;
+uniform mat4 model;  // a rotation and a place: normals turn with it unscaled
+in vec3 in_pos; in vec3 in_norm; in vec2 in_uv; in vec3 in_col;
+out vec3 pos; out vec3 opos; out vec3 norm; out vec2 uv; out vec3 col;
+void main() {
+    vec4 w = model * vec4(in_pos, 1.0);
+    pos = w.xyz; opos = in_pos; norm = mat3(model) * in_norm; uv = in_uv; col = in_col;
+    gl_Position = mvp * w;
+}
+"""
+MODEL_FS = "#version 330\n" + LIGHTING + """
+uniform sampler2D tex;
+uniform bool textured;
+uniform vec3 factor;
+uniform bool emissive;  // lamps and lit caps: their own colour, unlit
+uniform float shine;
+uniform float wear;     // painted steel: mottle and grime, fixed to the model so it doesn't swim when it moves
+in vec3 pos; in vec3 opos; in vec3 norm; in vec2 uv; in vec3 col;
+out vec4 frag;
+void main() {
+    vec3 base = col * factor;
+    if (textured) base *= pow(texture(tex, uv).rgb, vec3(2.2));
+    if (emissive) { frag = vec4(pow(base, vec3(1.0 / 2.2)), 1.0); return; }
+    base *= mix(1.0, (0.8 + 0.34 * noise(opos * 3.1)) * (0.93 + 0.12 * noise(opos * 23.0)), wear);
+    base *= mix(0.55, 1.0, smoothstep(0.0, 0.45, pos.y));
+    frag = vec4(finish(lit(base, pos, normalize(norm), shine), pos), 1.0);
 }
 """
 
@@ -278,8 +309,10 @@ def build_room():
     m.box((tx, 1.93, tz), (0.3, 0.08, 0.3), DARK)
     m.box((tx, 1.89, tz), (0.24, 0.01, 0.24), (0.9, 0.35, 0.2), mat=2)  # a red chart lamp
 
-    for s in cr.STATIONS:
-        console(m, s)
+    helm = next(s for s in cr.STATIONS if s.name == "HELM AND PLANES")
+    for side in (-0.6, 0.6):  # the helmsman and planesman, in the helm station's seats
+        crewman(m, (helm.centre[0] + side, 0.0, helm.centre[2] + 0.75), (0.0, 0.0, -1.0), seated=True, stool=False,
+                hands=0.95)
     trim_valves(m)
     for pos, out in ALERT_LAMPS:
         alert_lamp(m, pos, out)
@@ -288,34 +321,6 @@ def build_room():
     m.box((lx, ly, lz - 0.03), (0.24, 0.42, 0.04), CONSOLE)
     table_props(m)
     return m.array()
-
-
-def console(m, s):
-    """A console carcass under each panel: desk, housing round the panel, hood; seats at the helm."""
-    right, up, n = basis(s.normal)
-    c = np.array(s.centre)
-    axes = np.column_stack((right, up, n))
-    m.box(c - n * 0.14, (s.w + 0.14, s.h + 0.14, 0.26), CONSOLE, axes=axes)  # housing
-    m.box(c + up * (s.h / 2 + 0.09) - n * 0.05, (s.w + 0.14, 0.05, 0.22), CONSOLE, axes=axes)  # hood
-    flat = np.array([n[0], 0.0, n[2]]) / math.hypot(n[0], n[2])
-    level = np.column_stack((right, (0.0, 1.0, 0.0), flat))
-    desk_top = c[1] - s.h / 2 * up[1] - 0.06
-    m.box(np.array([c[0], desk_top / 2, c[2]]) + flat * 0.1, (s.w + 0.14, desk_top, 0.7), CONSOLE, axes=level)
-    m.box(np.array([c[0], desk_top, c[2]]) + flat * 0.38, (s.w + 0.18, 0.04, 0.24), (0.2, 0.2, 0.19), axes=level)
-    for k in range(int(s.w / 0.4)):  # lit push-buttons along the desk edge
-        x = (k - (int(s.w / 0.4) - 1) / 2) * 0.35
-        colour = ((0.9, 0.6, 0.2), (0.3, 0.8, 0.35), (0.85, 0.2, 0.15))[k % 3]
-        m.box(np.array([c[0], desk_top + 0.025, c[2]]) + flat * 0.4 + right * x, (0.05, 0.02, 0.04), colour, 2,
-              level)
-    if s.name == "HELM AND PLANES":
-        for side in (-0.6, 0.6):
-            seat = np.array([c[0] + side, 0.5, c[2] + 0.75])
-            m.cylinder((seat[0], 0, seat[2]), (seat[0], 0.45, seat[2]), 0.05, DARK)
-            m.box(seat, (0.48, 0.1, 0.46), (0.3, 0.12, 0.1))
-            m.box(seat + (0, 0.35, 0.22), (0.48, 0.6, 0.08), (0.3, 0.12, 0.1))
-            m.cylinder((seat[0], 0.95, seat[2] - 0.45), (seat[0], 0.95, seat[2] - 0.75), 0.03, DARK)  # yoke column
-            m.wheel((seat[0], 0.95, seat[2] - 0.45), (0, 0, 1), 0.17, DARK, mat=0)
-            crewman(m, (seat[0], 0.0, seat[2]), (0.0, 0.0, -1.0), seated=True, stool=False, hands=0.95)
 
 
 COVERALL, SKIN, HAIR = (0.16, 0.19, 0.26), (0.78, 0.6, 0.47), (0.18, 0.12, 0.08)
@@ -559,6 +564,60 @@ def legend_art(alarms, size=(200, 360)):
     return surf
 
 
+def placement(s):
+    """Model space to the room for station s: its floor point, x to the panel's right, z into the room."""
+    c, n = np.array(s.centre), np.array(s.normal)
+    z = np.array([n[0], 0.0, n[2]]) / math.hypot(n[0], n[2])
+    y = np.array([0.0, 1.0, 0.0])
+    m = np.identity(4)
+    m[:3, 0], m[:3, 1], m[:3, 2], m[:3, 3] = np.cross(y, z), y, z, (c[0], 0.0, c[2])
+    return m
+
+
+class Model:
+    """A .glb on the GPU: its parts' primitives, each with its texture and material."""
+
+    def __init__(self, ctx, prog, path):
+        self.parts = {}
+        for name, (pivot, prims) in gltf.load(path).items():
+            draws = []
+            for verts, idx, mat, img in prims:
+                vbo, ibo = ctx.buffer(verts.tobytes()), ctx.buffer(idx.astype("u4").tobytes())
+                vao = ctx.vertex_array(prog, [(vbo, "3f 3f 2f 3f", "in_pos", "in_norm", "in_uv", "in_col")], ibo, 4)
+                tex = None
+                if img is not None:
+                    tex = ctx.texture(img.get_size(), 3, pygame.image.tobytes(img.convert(24) if img.get_bitsize()
+                                                                              != 24 else img, "RGB"))
+                    tex.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
+                    tex.anisotropy = 8.0
+                    tex.build_mipmaps()
+                shine = (1.0 - mat["rough"]) * 1.6 + 0.4 * mat["metal"]
+                draws.append((vao, tex, tuple(mat["color"][:3]), any(mat["emissive"]), shine, mat["wear"]))
+            self.parts[name] = (pivot, draws)
+        self.triangles = sum(d[0].vertices // 3 for _, ds in self.parts.values() for d in ds)
+
+    def render(self, prog, place, turns=None):
+        """place: model to room (4x4); turns: {part: 3x3 rotation about the part's pivot}."""
+        for name, (pivot, draws) in self.parts.items():
+            m = place
+            if turns and name in turns:
+                t = np.identity(4)
+                t[:3, :3] = turns[name]
+                t[:3, 3] = pivot - turns[name] @ pivot
+                m = place @ t
+            prog["model"].write(m.T.astype("f4").tobytes())
+            for vao, tex, factor, emissive, shine, wear in draws:
+                prog["textured"].value = tex is not None
+                if tex is not None:
+                    tex.use(0)
+                    prog["tex"].value = 0
+                prog["factor"].value = factor
+                prog["emissive"].value = emissive
+                prog["shine"].value = shine
+                prog["wear"].value = wear
+                vao.render()
+
+
 class RoomRenderer:
     """Owns the GL context and everything uploaded to it; render() gives back a screen-sized pygame Surface."""
 
@@ -569,6 +628,9 @@ class RoomRenderer:
         self.ctx.disable(moderngl.CULL_FACE)  # the hull and bulkheads are seen from inside; keep every face
         self.solid = self.ctx.program(vertex_shader=SOLID_VS, fragment_shader=SOLID_FS)
         self.flat = self.ctx.program(vertex_shader=PANEL_VS, fragment_shader=PANEL_FS)
+        self.model = self.ctx.program(vertex_shader=MODEL_VS, fragment_shader=MODEL_FS)
+        self.consoles = [(Model(self.ctx, self.model, ASSETS / STATION_FILES[s.name]), placement(s))
+                         for s in cr.STATIONS]
         vbo = self.ctx.buffer(build_room().tobytes())
         self.room = self.ctx.vertex_array(self.solid, [(vbo, "3f 3f 3f 1f", "in_pos", "in_norm", "in_col", "in_mat")])
         self.panels = []  # (vertex array, texture, normal, glow, name)
@@ -638,7 +700,7 @@ class RoomRenderer:
                   ALERT_LAMPS[-1][0], ALERT_LAMPS[3][0]]  # the conn's and the helm's alarm lamps throw light too
         colours = [LAMP_COLOUR] * len(LAMPS) + [tuple(0.6 * c for c in SCREEN_GLOW)] + \
             [tuple(1.4 * alert * c for c in ALERT_COLOUR)] * 2
-        for prog in (self.solid, self.flat):
+        for prog in (self.solid, self.flat, self.model):
             prog["mvp"].write(mvp.T.astype("f4").tobytes())
             prog["eye"].value = tuple(pose.pos)
             prog["lights"].value = len(lights)
@@ -650,6 +712,8 @@ class RoomRenderer:
         self.msaa.use()
         self.ctx.clear(*FOG, depth=1.0)
         self.room.render()
+        for model, place in self.consoles:
+            model.render(self.model, place)
         for name, (sat, stood) in self.crew.items():
             (stood if name in aside else sat).render()
         for vao, tex, n, glow, _ in self.panels:
