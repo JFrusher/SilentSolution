@@ -610,14 +610,15 @@ def ease(x):
 
 
 def reach(age):
-    """Which arm pose (rest, half, full) a man is in `age` s after he put his hand to his controls: out and back."""
-    return 0 if age is None or age >= REACH_TIME else round(2 * math.sin(math.pi * age / REACH_TIME))
+    """Where a man's arm is between its poses (0 rest, 1 half, 2 full) `age` s after he put his hand to his
+    controls: out and back, smoothly."""
+    return 0.0 if age is None or age >= REACH_TIME else 2 * math.sin(math.pi * age / REACH_TIME)
 
 
 def wheel_pose(angle):
-    """The nearest of the posed wheel turns to `angle`: (its index, its angle)."""
-    k = int(np.argmin(np.abs(WHEEL_ANGLES - angle)))
-    return k, float(WHEEL_ANGLES[k])
+    """A wheel turn as a place between the posed turns (a fraction, for the arms) and the angle itself, kept to them."""
+    a = float(np.clip(angle, WHEEL_ANGLES[0], WHEEL_ANGLES[-1]))
+    return float(np.interp(a, WHEEL_ANGLES, np.arange(len(WHEEL_ANGLES)))), a
 
 
 def rot_x(deg):
@@ -660,10 +661,22 @@ class Model:
 
     def __init__(self, ctx, prog, path):
         self.parts = {}
-        for name, (pivot, prims) in gltf.load(path).items():
+        loaded = gltf.load(path)
+        poses = sorted((n for n in loaded if n.startswith("arms_")), key=lambda n: int(n[5:]))
+        # arm poses share one mesh, so they blend: one dynamic buffer per primitive, written as the pose moves
+        self.arm_poses = [[v for v, *_ in loaded[n][1]] for n in poses]
+        if any([v.shape for v in p] != [v.shape for v in self.arm_poses[0]] for p in self.arm_poses):
+            raise ValueError(f"{path.name}: its arms_N poses must be the same mesh, posed differently, to blend")
+        self.arm_at = None
+        self.arm_vbos = []
+        for name, (pivot, prims) in loaded.items():
+            if name.startswith("arms_") and name != "arms_0":
+                continue
             draws = []
             for verts, idx, mat, img in prims:
-                vbo, ibo = ctx.buffer(verts.tobytes()), ctx.buffer(idx.astype("u4").tobytes())
+                vbo, ibo = ctx.buffer(verts.tobytes(), dynamic=name == "arms_0"), ctx.buffer(idx.astype("u4").tobytes())
+                if name == "arms_0":
+                    self.arm_vbos.append(vbo)
                 vao = ctx.vertex_array(prog, [(vbo, "3f 3f 2f 3f", "in_pos", "in_norm", "in_uv", "in_col")], ibo, 4)
                 tex = None
                 if img is not None:
@@ -678,10 +691,15 @@ class Model:
         self.triangles = sum(d[0].vertices // 3 for _, ds in self.parts.values() for d in ds)
 
     def render(self, prog, place, turns=None, arms=0):
-        """place: model to room (4x4); turns: {part: 3x3 rotation about the part's pivot}; arms: which arm pose."""
+        """place: model to room (4x4); turns: {part: 3x3 rotation about the part's pivot}; arms: the arm pose, a
+        fraction between two posed ones blending them."""
+        if self.arm_poses and arms != self.arm_at:
+            self.arm_at = arms
+            k = min(int(arms), len(self.arm_poses) - 1)
+            f, k1 = arms - k, min(k + 1, len(self.arm_poses) - 1)
+            for vbo, a, b in zip(self.arm_vbos, self.arm_poses[k], self.arm_poses[k1]):
+                vbo.write((a * (1 - f) + b * f).astype("f4").tobytes())
         for name, (pivot, draws) in self.parts.items():
-            if name.startswith("arms_") and name != f"arms_{arms}":
-                continue
             m = place
             if turns and name in turns:
                 t = np.identity(4)

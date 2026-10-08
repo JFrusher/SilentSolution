@@ -19,7 +19,7 @@ from graphics import console_art as art
 from graphics import gltf
 
 ASSETS = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "assets"
-MODELS = "Silent Solution graphics/models.py v3"  # bump when the models change, so old copies are rebuilt
+MODELS = "Silent Solution graphics/models.py v4"  # bump when the models change, so old copies are rebuilt
 TILT = math.radians(18.0)  # the console faces lean back this far (control_room._tilted)
 I3 = np.identity(3)
 
@@ -941,11 +941,12 @@ def crew_models():
             out[CREW_FILES[key].replace("seated", "standing")] = lambda key=key: crewman(key, "standing")
     for key in ("HELM", "PLANES"):  # hands on the yoke's grips, at each of the wheel's turns
         out[CREW_FILES[key]] = lambda key=key: crewman(key, "seated", [grips(a) for a in WHEEL_ANGLES])
-    out[COXSWAIN_FILE] = lambda: crewman("COXSWAIN", "standing", [None, POINTING])  # at ease, and pointing the way
+    out[COXSWAIN_FILE] = lambda: crewman("COXSWAIN", "standing", [AT_EASE, POINTING])  # at ease, and pointing the way
     return out
 
 
 COXSWAIN_FILE = "crew/coxswain_standing.glb"
+AT_EASE = [np.array((-0.22, 0.88, 0.08)), np.array((0.22, 0.88, 0.08))]  # hands by his sides
 POINTING = [np.array((-0.2, 1.48, 0.62)), np.array((0.2, 0.86, 0.08))]  # his right arm out ahead, his left at his side
 
 
