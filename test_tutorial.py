@@ -9,11 +9,11 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame  # noqa: E402
 
 import layout  # noqa: E402
+import settings  # noqa: E402
 from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
-from sim import KNOT, YARD, bearing  # noqa: E402
-import settings  # noqa: E402
 from settings import keyed  # noqa: E402
+from sim import KNOT, YARD, bearing  # noqa: E402
 from tutorial import CHAPTERS, TRAINING, Tutorial  # noqa: E402
 
 DT = 0.05

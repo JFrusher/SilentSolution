@@ -6,22 +6,63 @@ from collections import deque
 import numpy as np
 import pygame
 
+import settings
 from ai import ThreatDirector
 from displays import CLASSES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from graphics import console_art as art
 from graphics.periscope import EYE
-from layout import (BLOW_BTN, CRT_RECT, DC_ROW_H, DC_ROW_Y0, DEPTH_C, DEPTH_R, HOLD_BTN, LOOK_BTN, NMKR_BTN,
-                    ORDER_SLIP, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER, SCOPE_R, SNORT_LEVER, TDC_PANEL,
-                    TDC_ROW_H, TDC_ROW_Y0, TELEGRAPH_BTNS, TELEGRAPH_RECT, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C,
-                    WHEEL_R)
-import settings
+from layout import (
+    BLOW_BTN,
+    CRT_RECT,
+    DC_ROW_H,
+    DC_ROW_Y0,
+    DEPTH_C,
+    DEPTH_R,
+    HOLD_BTN,
+    LOOK_BTN,
+    NMKR_BTN,
+    ORDER_SLIP,
+    PD_BTN,
+    PING_BTN,
+    RUDDER_BAR,
+    SCOPE_C,
+    SCOPE_LEVER,
+    SCOPE_R,
+    SNORT_LEVER,
+    TDC_PANEL,
+    TDC_ROW_H,
+    TDC_ROW_Y0,
+    TELEGRAPH_BTNS,
+    TELEGRAPH_RECT,
+    TUBE_SW,
+    WF_H,
+    WF_POS,
+    WF_W,
+    WHEEL_C,
+    WHEEL_R,
+)
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
-from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH, TORP_MAX_RUN,
-                 YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
+from sim import (
+    CRUSH_DEPTH,
+    KNOT,
+    MAX_DEPTH,
+    MAX_RUDDER,
+    MIN_ORDER_DEPTH,
+    PERISCOPE_DEPTH,
+    TELEGRAPH,
+    TORP_MAX_RUN,
+    YARD,
+    Decoy,
+    Submarine,
+    Torpedo,
+    WorldSimulation,
+    angle_diff,
+    clamp,
+    spot_probability,
+)
 from tma import PLOT_SPAN, TMALog
 from tuning import DIFFICULTY, REPAIR_TIME
-
 
 DIAL_RATE = 60.0          # hydrophone dial deg/s
 RUDDER_RATE = 20.0        # deg/s while LEFT/RIGHT held
@@ -448,7 +489,8 @@ class Console:
             self.scope_brg = (self.scope_brg - dx * settings.SETTINGS["mouse"] * SCOPE_FOV[self.high_power] / EYE) % 360
             self.dragging = ("scope", pos[0])
         elif self.dragging == "wheel":
-            self.world.player.rudder = round(clamp((pos[0] - WHEEL_C[0]) / (WHEEL_R + 16) * MAX_RUDDER, -MAX_RUDDER, MAX_RUDDER))
+            ordered = (pos[0] - WHEEL_C[0]) / (WHEEL_R + 16) * MAX_RUDDER
+            self.world.player.rudder = round(clamp(ordered, -MAX_RUDDER, MAX_RUDDER))
 
     def scroll(self, pos, dy):
         x, y = pos
@@ -562,7 +604,8 @@ class Console:
         if kind == "WAVE":
             m, e, s, brg = b
             fuzz = 0 if self.diff["ping_warning"] else random.uniform(-25, 25)
-            tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR {(brg + fuzz) % 360:03.0f} TRUE, "
+            tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR "
+               f"{(brg + fuzz) % 360:03.0f} TRUE, "
                f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")
             return
         if kind == "WAVE_CLEAR":

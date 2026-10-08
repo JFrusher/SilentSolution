@@ -3,12 +3,45 @@ World side: reads ground truth; the console only hears the results."""
 import math
 import random
 
-from tuning import (ALARM_HEARING, BLIND_RANGE, CALM_TIME, DESPAWN_RANGE, EXPLOSION_HEARING, GIVE_UP,
-                    LATE_DESPAWN_RANGE, LATE_MERCHANT_RANGE, LAUNCH_HEARING, LOOKOUT_ALERT, LOOKOUT_IDLE,
-                    LOOKOUT_MERCHANT, PING_HEARING, PING_INTERVAL, RUN_OUT, SCATTER_RANGE, SCATTER_TIME, SEARCH_TIME, SONAR_RANGE, TONNAGE,
-                    TORPEDO_HEARING, WAKE_SIGHTING, WAVE_GAP, WAVE_TIME_LIMIT)
-from sim import (KNOT, LAYER_DEPTH, YARD, Decoy, DepthCharge, Vessel, angle_diff, bearing, clamp, intercept,
-                 spot_probability)
+from sim import (
+    KNOT,
+    LAYER_DEPTH,
+    YARD,
+    Decoy,
+    DepthCharge,
+    Vessel,
+    angle_diff,
+    bearing,
+    clamp,
+    intercept,
+    spot_probability,
+)
+from tuning import (
+    ALARM_HEARING,
+    BLIND_RANGE,
+    CALM_TIME,
+    DESPAWN_RANGE,
+    EXPLOSION_HEARING,
+    GIVE_UP,
+    LATE_DESPAWN_RANGE,
+    LATE_MERCHANT_RANGE,
+    LAUNCH_HEARING,
+    LOOKOUT_ALERT,
+    LOOKOUT_IDLE,
+    LOOKOUT_MERCHANT,
+    PING_HEARING,
+    PING_INTERVAL,
+    RUN_OUT,
+    SCATTER_RANGE,
+    SCATTER_TIME,
+    SEARCH_TIME,
+    SONAR_RANGE,
+    TONNAGE,
+    TORPEDO_HEARING,
+    WAKE_SIGHTING,
+    WAVE_GAP,
+    WAVE_TIME_LIMIT,
+)
 
 # military states: unaware -> searching -> aware (hunting / attacking) / evading
 PATROL, SEARCH, ALERT, ATTACK, EVADE = "PATROL", "SEARCH", "ALERT", "ATTACK", "EVADE"
@@ -107,7 +140,8 @@ class ShipAI:
                  turn_rate=3.0, zigzag=True, decoys=0, cavitation_instant=False):
         self.ship, self.base_course = ship, base_course
         self.detect_radius, self.layer_sensitivity, self.aggression = detect_radius, layer_sensitivity, aggression
-        self.turn_rate, self.zigzag, self.decoys, self.cavitation_instant = turn_rate, zigzag, decoys, cavitation_instant
+        self.turn_rate, self.zigzag, self.decoys = turn_rate, zigzag, decoys
+        self.cavitation_instant = cavitation_instant
         self.state = PATROL
         self.datum = None             # (x, y, depth guess): where it thinks we are
         self.datum_vel = (0.0, 0.0)   # our motion, from successive fixes
@@ -305,11 +339,13 @@ class MerchantAI(ShipAI):
                 conv.calm(world, events)
         elif guide:
             g = guide.ship
-            sx, sy = frame_point(g.x, g.y, g.heading, self.offset[0] - guide.offset[0], self.offset[1] - guide.offset[1])
+            along, across = self.offset[0] - guide.offset[0], self.offset[1] - guide.offset[1]
+            sx, sy = frame_point(g.x, g.y, g.heading, along, across)
             desired, speed = steer_to_station(s, sx, sy, g.heading, g.speed, self.max_speed)
         else:  # independent
             alarmed = self.state == ALARMED
-            desired = self.base_course + ((ZIG_ANGLE if int(self.clock // ZIG_LEG) % 2 else -ZIG_ANGLE) if alarmed else 0)
+            zig = ZIG_ANGLE if int(self.clock // ZIG_LEG) % 2 else -ZIG_ANGLE
+            desired = self.base_course + (zig if alarmed else 0)
             speed = self.max_speed if alarmed else self.cruise
             if alarmed and world.time > self.calm_at:
                 self._set(CRUISE, events)
@@ -452,7 +488,8 @@ class EscortAI(ShipAI):
         for along, across in PATTERN:
             x, y = frame_point(s.x, s.y, s.heading, along, across)
             world.effects.append(("SPLASH", x, y, world.time))
-            world.charges.append(DepthCharge(x, y, 0, 0, noise=0.0, set_depth=max(10.0, depth_guess + random.gauss(0, 15))))
+            depth = max(10.0, depth_guess + random.gauss(0, 15))
+            world.charges.append(DepthCharge(x, y, 0, 0, noise=0.0, set_depth=depth))
         self.charges -= len(PATTERN)
 
 
@@ -530,7 +567,8 @@ class SubmarineAI(ShipAI):
         dx, dy, dz = self.datum
         vx, vy = self.datum_vel
         los = bearing(s.x, s.y, dx, dy)
-        sol = intercept(los, math.hypot(dx - s.x, dy - s.y), bearing(0, 0, vx, vy), math.hypot(vx, vy), self.torpedo_speed)
+        rng = math.hypot(dx - s.x, dy - s.y)
+        sol = intercept(los, rng, bearing(0, 0, vx, vy), math.hypot(vx, vy), self.torpedo_speed)
         world.launch_hostile(s, sol[0] if sol else los, self.torpedo_speed, seeker_range=self.seeker_range,
                              arm_distance=600 * YARD, max_run=9000 * YARD, run_depth=dz)
         self.torpedoes -= 1

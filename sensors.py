@@ -5,10 +5,19 @@ from collections import namedtuple
 
 import numpy as np
 
-from sim import (R_EFF, SCOPE_TOP, SHIP_CLASSES, Decoy, angle_diff, bearing, horizon_distance, ping_delay,
-                 range_from_delay, silhouette_class)
+from sim import (
+    R_EFF,
+    SCOPE_TOP,
+    SHIP_CLASSES,
+    Decoy,
+    angle_diff,
+    bearing,
+    horizon_distance,
+    ping_delay,
+    range_from_delay,
+    silhouette_class,
+)
 from tuning import DAMAGED_HYDROPHONES
-
 
 MAX_ECHO_RANGE = 12000.0  # m; beyond this the return is lost in noise
 DECOY_WIDTH = 14.0        # noisemaker cloud smears across ~30 deg of waterfall

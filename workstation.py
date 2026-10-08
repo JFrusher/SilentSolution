@@ -8,23 +8,79 @@ import pygame
 
 from campaign import PATROLS, UPGRADES, objective
 from console import ECHO_FADE
-from displays import CLASSES, CLASS_TAGS, SPEC_BINS, TEMPLATES
+from displays import CLASS_TAGS, CLASSES, SPEC_BINS, TEMPLATES
 from fire_control import FIELDS
 from graphics import console_art as art
 from graphics.crt_renderer import DIM, PHOSPHOR, RED, CRTRenderer
 from graphics.periscope import EYE, PeriscopeRenderer, View
-from layout import (ANNUNCIATORS, BLOW_BTN, CONSOLE, CRT_RECT, DC_ROW_H, DC_ROW_Y0, DEPTH_C, DEPTH_R, EYEPIECE_C,
-                    GAUGES, GAUGE_POS, GAUGE_R, GAUGE_SPECS, H, HIGHLIGHTS, HOLD_BTN, HYD_POS, LAMPS, LIB_RECT, LOG_POS,
-                    LOOK_BTN, MONITOR, NMKR_BTN, ORDER_SLIP, PAPER_RECT, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C,
-                    SCOPE_LEVER, SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H, TDC_ROW_Y0,
-                    TELEGRAPH_BTNS, TELEGRAPH_RECT, TELETYPE, TUBE_SW, W, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
+from layout import (
+    ANNUNCIATORS,
+    BLOW_BTN,
+    CONSOLE,
+    CRT_RECT,
+    DC_ROW_H,
+    DC_ROW_Y0,
+    DEPTH_C,
+    DEPTH_R,
+    EYEPIECE_C,
+    GAUGE_POS,
+    GAUGE_R,
+    GAUGE_SPECS,
+    GAUGES,
+    HIGHLIGHTS,
+    HOLD_BTN,
+    HYD_POS,
+    LAMPS,
+    LIB_RECT,
+    LOG_POS,
+    LOOK_BTN,
+    MONITOR,
+    NMKR_BTN,
+    ORDER_SLIP,
+    PAPER_RECT,
+    PD_BTN,
+    PING_BTN,
+    RUDDER_BAR,
+    SCOPE_C,
+    SCOPE_LEVER,
+    SCOPE_PANEL,
+    SCOPE_R,
+    SNORT_LEVER,
+    SPEC_RECT,
+    STRIP,
+    TDC_PANEL,
+    TDC_ROW_H,
+    TDC_ROW_Y0,
+    TELEGRAPH_BTNS,
+    TELEGRAPH_RECT,
+    TELETYPE,
+    TUBE_SW,
+    WF_H,
+    WF_POS,
+    WF_W,
+    WHEEL_C,
+    WHEEL_R,
+    H,
+    W,
+)
 from sensors import SCOPE_FOV
-from tma import PLOT_SPAN
-from tma import PLOT_WINDOW as TMA_WINDOW
-from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, SCOPE_TOP, SOUND_SPEED,
-                 TELEGRAPH, TORP_MAX_RUN, YARD)
 from settings import BAR_W, BAR_X, ROW_H, ROW_Y0, SETTINGS, VISIBLE
 from settings import label as keylabel
+from sim import (
+    CRUSH_DEPTH,
+    FEATHER_KT,
+    KNOT,
+    MAST_DEPTH,
+    MAX_RUDDER,
+    PERISCOPE_DEPTH,
+    SCOPE_TOP,
+    SOUND_SPEED,
+    TELEGRAPH,
+    TORP_MAX_RUN,
+    YARD,
+)
+from tma import PLOT_SPAN
+from tma import PLOT_WINDOW as TMA_WINDOW
 from tuning import REPAIR_TIME
 from tutorial import CHAPTERS
 from version import __version__
@@ -116,7 +172,8 @@ class Workstation:
                     under=con.view is None, shake=shake)
         f.blit(self.periscope.render(view), (EYEPIECE_C[0] - EYE // 2, EYEPIECE_C[1] - EYE // 2))
         f.blit(self.scope_surround, (0, 0))
-        keys = (f"{keylabel('TRAIN LEFT', 'TRAIN RIGHT')}  or drag   TRAIN", f"{keylabel('SCOPE POWER')}  or wheel   POWER",
+        keys = (f"{keylabel('TRAIN LEFT', 'TRAIN RIGHT')}  or drag   TRAIN",
+                f"{keylabel('SCOPE POWER')}  or wheel   POWER",
                 f"{keylabel('MARK')}     MARK TO FIRE CONTROL", f"{keylabel('LOOK')}     BACK TO STATION",
                 f"{keylabel('RAISE SCOPE')}     LOWER SCOPE")  # drawn live: the bindings can change
         for i, line in enumerate(keys):
@@ -156,7 +213,8 @@ class Workstation:
         # annunciator strip under the eyepiece: what you can still see from the scope
         pygame.draw.rect(f, (14, 15, 16), STRIP, border_radius=4)
         blink = int(w.time * 4) % 2 == 0
-        lamps = (("TORPEDO", con.torpedo_warning and blink, art.RED), ("ENEMY SONAR", con.lamp_enemy > 0 and blink, art.AMBER),
+        lamps = (("TORPEDO", con.torpedo_warning and blink, art.RED),
+                 ("ENEMY SONAR", con.lamp_enemy > 0 and blink, art.AMBER),
                  ("EXPOSED", risk > 0.25 and blink, art.RED), ("BROACH", p.broached and blink, art.RED),
                  ("DIESEL", p.snorkeling, art.GREEN))
         for i, (name, on, color) in enumerate(lamps):
@@ -185,7 +243,8 @@ class Workstation:
             bg.blit(face, (c[0] - fc[0], c[1] - fc[1]))
         face, fc = art.gauge_face(DEPTH_R, "", 0, 300, 50, 10, red=(CRUSH_DEPTH, 300))
         bg.blit(face, (DEPTH_C[0] - fc[0], DEPTH_C[1] - fc[1]))
-        pygame.draw.rect(bg, (16, 16, 18), (WHEEL_C[0] - 14, WHEEL_C[1], 28, HELM_PLATE.bottom - WHEEL_C[1] - 30))  # yoke column
+        column = (WHEEL_C[0] - 14, WHEEL_C[1], 28, HELM_PLATE.bottom - WHEEL_C[1] - 30)  # the yoke's column
+        pygame.draw.rect(bg, (16, 16, 18), column)
 
         art.label_plate(bg, (TELEGRAPH_RECT.centerx, TELEGRAPH_RECT.top + 12), "ENGINE ORDER", 11)
         art.label_plate(bg, (HELM_PLATE.centerx, HELM_PLATE.top + 12), "SHIP CONTROL - HELM", 11)
@@ -229,7 +288,8 @@ class Workstation:
             ov.blit(g, (c[0] - g.get_width() / 2, c[1] - g.get_height() / 2))
         g = art.glint(DEPTH_R)
         ov.blit(g, (DEPTH_C[0] - g.get_width() / 2, DEPTH_C[1] - g.get_height() / 2))
-        art.label_plate(ov, (MONITOR.centerx, MONITOR.bottom - 13), "SONAR  -  PASSIVE / ACTIVE / ACOUSTIC ANALYSIS", 11)
+        art.label_plate(ov, (MONITOR.centerx, MONITOR.bottom - 13), "SONAR  -  PASSIVE / ACTIVE / ACOUSTIC ANALYSIS",
+                        11)
         art.tape(ov, (MONITOR.right - 70, MONITOR.top + 14), "DO NOT ADJUST", 3, 11)
         art.tape(ov, (MONITOR.right - 96, MONITOR.bottom - 12), "TUBE 2 STICKS - HIT IT TWICE", -2, 10)
         art.label_plate(ov, (SCOPE_C[0], SCOPE_PANEL.bottom - 12), "TACTICAL PPI", 10)
@@ -328,8 +388,8 @@ class Workstation:
     def _crt_chapters(self, s, crt):
         cx = s.get_width() // 2
         crt.text(s, "TRAINING", (cx, 40), PHOSPHOR, huge=True, center=True)
-        crt.text(s, f"PICK A CHAPTER. EACH STANDS ON ITS OWN; {keylabel('SKIP DRILL')} SKIPS A DRILL INSIDE ONE.", (cx, 76), DIM,
-                 small=True, center=True)
+        crt.text(s, f"PICK A CHAPTER. EACH STANDS ON ITS OWN; {keylabel('SKIP DRILL')} SKIPS A DRILL INSIDE ONE.",
+                 (cx, 76), DIM, small=True, center=True)
         for i, (name, blurb) in enumerate(CHAPTERS.items()):
             box = pygame.Rect(70, 100 + i * 56, 440, 48)
             crt.frame(s, box, color=PHOSPHOR)
@@ -428,7 +488,8 @@ class Workstation:
         elif con.crt_page == "DAMAGE":
             self._crt_damage(s, crt, con)
         else:
-            crt.text(s, f"PASSIVE WATERFALL  BRG REL   {keylabel('TMA PAGE')}: TMA  {keylabel('DAMAGE BOARD')}: DAMAGE", (x0 + 14, 12), DIM, small=True)
+            pages = f"{keylabel('TMA PAGE')}: TMA  {keylabel('DAMAGE BOARD')}: DAMAGE"
+            crt.text(s, f"PASSIVE WATERFALL  BRG REL   {pages}", (x0 + 14, 12), DIM, small=True)
             s.blit(con.waterfall.draw(), WF_POS)
             crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
             for b in (0, 90, 180, 270, 359):
@@ -470,7 +531,8 @@ class Workstation:
         """Damage board: the repair list in the party's work order. Click a line to send them there first."""
         x0, y0 = WF_POS
         p, w = con.world.player, con.world
-        crt.text(s, f"DAMAGE CONTROL  CLICK: WORK IT FIRST  {keylabel('DAMAGE BOARD')}: SONAR", (x0 + 14, 12), DIM, small=True)
+        crt.text(s, f"DAMAGE CONTROL  CLICK: WORK IT FIRST  {keylabel('DAMAGE BOARD')}: SONAR", (x0 + 14, 12), DIM,
+                 small=True)
         crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
         leaks = len(getattr(p, "leaks", ()))
         crt.text(s, f"HULL {w.hull:3.0f}%" + (f"   LEAKS {leaks}" if leaks else ""), (x0 + 10, y0 + 6),
@@ -517,9 +579,9 @@ class Workstation:
         times = np.linspace(max(now - TMA_WINDOW, log.track[0][0] if log.track else now), now, 48)
         pred = log.predicted(times, now, own, tdc)
         if pred is not None:
-            crt.lines(s, [(X(b), Y(t)) for b, t in zip(pred[0], times) if abs((b - centre + 180) % 360 - 180) < span / 2],
-                      PHOSPHOR, 2)
-        for t, b, kind, rng in log.recent(now, TMA_WINDOW):
+            shown = [(X(b), Y(t)) for b, t in zip(pred[0], times) if abs((b - centre + 180) % 360 - 180) < span / 2]
+            crt.lines(s, shown, PHOSPHOR, 2)
+        for t, b, kind, _rng in log.recent(now, TMA_WINDOW):
             if abs((b - centre + 180) % 360 - 180) > span / 2:
                 continue
             px, py = X(b), Y(t)
@@ -532,7 +594,8 @@ class Workstation:
             else:  # ECHO: ranged
                 crt.circle(s, (px, py), 4, RED, 1)
         fit = log.fit(now, own, tdc)
-        verdict = ("NO DATA", DIM) if fit is None else (f"FIT {fit:4.1f} DEG", PHOSPHOR if fit < 1.0 else RED if fit > 3 else DIM)
+        good = None if fit is None else PHOSPHOR if fit < 1.0 else RED if fit > 3 else DIM
+        verdict = ("NO DATA", DIM) if fit is None else (f"FIT {fit:4.1f} DEG", good)
         crt.text(s, verdict[0], (x0 + WF_W - 100, y0 + 4), verdict[1], small=True)
         if con.diff["ping_warning"]:
             crt.text(s, f"{keylabel('AUTO-SOLVE')}: AUTO-SOLVE", (x0 + WF_W - 100, y0 + 18), DIM, small=True)
@@ -550,14 +613,15 @@ class Workstation:
         xs = r.x + np.arange(SPEC_BINS) * (r.w - 1) / (SPEC_BINS - 1)
         crt.lines(s, list(zip(xs, ys)), PHOSPHOR, 2)
         cw = LIB_RECT.w // len(CLASSES)
-        for i, name in enumerate(CLASSES):
+        for i in range(len(CLASSES)):
             cell = pygame.Rect(LIB_RECT.x + i * cw, LIB_RECT.y, cw - 3, LIB_RECT.h - 14)
             hot = sp.best == i
             crt.frame(s, cell, color=PHOSPHOR if hot else DIM)
             tx = cell.x + 2 + np.arange(0, SPEC_BINS, 4) * (cell.w - 4) / SPEC_BINS
             ty = cell.bottom - 3 - TEMPLATES[i, ::4] * (cell.h - 6)
             crt.lines(s, list(zip(tx, ty)), PHOSPHOR if hot else DIM, 1)
-            crt.text(s, CLASS_TAGS[i], (cell.centerx, cell.bottom + 7), PHOSPHOR if hot else DIM, small=True, center=True)
+            crt.text(s, CLASS_TAGS[i], (cell.centerx, cell.bottom + 7), PHOSPHOR if hot else DIM, small=True,
+                     center=True)
 
     # --- tactical scope ---
     def draw_scope(self, con):
@@ -613,7 +677,8 @@ class Workstation:
                         crt.line(s, (fx, fy), (ax, ay), DIM)
                         crt.line(s, (ax - 3, ay), (ax + 3, ay), RED)
                         crt.line(s, (ax, ay - 3), (ax, ay + 3), RED)
-                    crt.text(s, f"WIRE T{t.tube}  {keylabel('WIRE LEFT')} {keylabel('WIRE RIGHT')} {keylabel('CUT WIRE')}", (R, 26), RED, small=True, center=True)
+                    keys = f"{keylabel('WIRE LEFT')} {keylabel('WIRE RIGHT')} {keylabel('CUT WIRE')}"
+                    crt.text(s, f"WIRE T{t.tube}  {keys}", (R, 26), RED, small=True, center=True)
         h = math.radians(own.heading)
         crt.circle(s, c, 3, PHOSPHOR)
         crt.line(s, c, (c[0] + 12 * math.sin(h), c[1] - 12 * math.cos(h)), PHOSPHOR, 2)
@@ -636,7 +701,8 @@ class Workstation:
         dc = GAUGE_POS["DEPTH"]
         art.counter(f, (dc[0] - 36, dc[1] + 44), f"{14.7 + p.z * 1.4228:4.0f}", 11, art.RED)
         art.engrave(f, "PSI", (dc[0] + 28, dc[1] + 47), 9, art.WARN)
-        art.needle(f, DEPTH_C, art.value_angle(nd["ORDER"].update(p.ordered_depth, dt), 0, 300), DEPTH_R - 16, art.WARN, 3)
+        order = nd["ORDER"].update(p.ordered_depth, dt)
+        art.needle(f, DEPTH_C, art.value_angle(order, 0, 300), DEPTH_R - 16, art.WARN, 3)
         art.needle(f, DEPTH_C, art.value_angle(p.z, 0, 300), DEPTH_R - 22, art.WHITE, 1, tail=6)
 
     def draw_controls(self, f, con):
@@ -663,7 +729,8 @@ class Workstation:
         art.engrave(f, "HDG", (HELM_PLATE.x + 14, RUDDER_BAR.bottom + 8), 10, art.LEGEND_DIM)
         art.counter(f, (HELM_PLATE.x + 40, RUDDER_BAR.bottom + 6), f"{p.heading:05.1f}", 11)
         art.engrave(f, "RUD", (HELM_PLATE.x + 106, RUDDER_BAR.bottom + 8), 10, art.LEGEND_DIM)
-        art.counter(f, (HELM_PLATE.x + 132, RUDDER_BAR.bottom + 6), f"{abs(p.rudder):2.0f}" + ("R" if p.rudder > 0.5 else "L" if p.rudder < -0.5 else "-"), 11)
+        side = "R" if p.rudder > 0.5 else "L" if p.rudder < -0.5 else "-"
+        art.counter(f, (HELM_PLATE.x + 132, RUDDER_BAR.bottom + 6), f"{abs(p.rudder):2.0f}" + side, 11)
         # diving station and masts
         holding = abs(p.ordered_depth - p.z) < 1 and not p.blowing
         art.button(f, HOLD_BTN, "HOLD", lit=holding, color=art.GREEN)
@@ -691,15 +758,16 @@ class Workstation:
         art.counter(f, (650, 604), f"{p.torpedoes:02d}", 14)
         art.counter(f, (718, 604), f"{p.noisemakers:02d}", 14)
         art.button(f, NMKR_BTN, f"NOISEMAKER  [{keylabel('NOISEMAKER')}]", color=art.AMBER)
-        art.button(f, PING_BTN, f"ACTIVE PING  [{keylabel('PING')}]", lit=world.time - con.ping_time < 0.6, color=art.RED)
+        art.button(f, PING_BTN, f"ACTIVE PING  [{keylabel('PING')}]", lit=world.time - con.ping_time < 0.6,
+                   color=art.RED)
         # annunciator panel: legend on every tile, so colour is never the only cue
         exposed = con.exposure > 0.25
         masts = p.scope_up or p.snorkel_up
         states = (con.lamp_enemy > 0 and blink, con.torpedo_warning and blink, p.cavitating, p.snorkeling,
                   masts and (blink or not exposed), p.broached and blink, bool(p.leaks),
                   p.z > CRUSH_DEPTH - 20 and blink, p.z >= world.ocean.layer_depth)
-        colors = (art.AMBER, art.RED, art.AMBER, art.GREEN, art.RED if exposed else art.AMBER, art.RED, art.RED, art.RED,
-                  art.BLUE)
+        colors = (art.AMBER, art.RED, art.AMBER, art.GREEN, art.RED if exposed else art.AMBER, art.RED, art.RED,
+                  art.RED, art.BLUE)
         for rect, name, on, color in zip(ANNUNCIATORS, LAMPS, states, colors):
             art.annunciator(f, rect, name, on, color)
         # TDC readouts
@@ -766,7 +834,8 @@ class Workstation:
             key = f"{ai.ship.kind[:3]}:{ai.state}"
             states[key] = states.get(key, 0) + 1
         lines = [f"FPS {self.fps:5.1f}   T+ {w.time:7.1f} s   WAVE {con.wave}",
-                 f"SEA {o.sea_state}  HS {o.wave_height:3.1f} m  WIND {o.wind:4.1f}  RAIN {o.rain:3.2f}  VIS {o.visibility:5.0f}",
+                 f"SEA {o.sea_state}  HS {o.wave_height:3.1f} m  WIND {o.wind:4.1f}  RAIN {o.rain:3.2f}  "
+                 f"VIS {o.visibility:5.0f}",
                  f"OWN z {p.z:5.1f} kt {p.speed / KNOT:4.1f} noise {p.noise:4.2f} cav {int(p.cavitating)} "
                  f"exp {p.exposed or '-'}",
                  f"EXPOSURE/MIN {con.exposure * 100:4.1f}%   HULL {w.hull:5.1f}   BATT {p.battery:5.1f}",

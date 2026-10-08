@@ -66,7 +66,8 @@ def _mix(a, b, t):
 def _puff(radius, shade, alpha):
     s = pygame.Surface((radius * 2 + 2, radius * 2 + 2), pygame.SRCALPHA)
     for k in range(radius, 0, -1):
-        pygame.draw.circle(s, (shade, shade, shade, int(alpha * (1 - k / (radius + 1)) ** 0.7)), (radius + 1, radius + 1), k)
+        a = int(alpha * (1 - k / (radius + 1)) ** 0.7)
+        pygame.draw.circle(s, (shade, shade, shade, a), (radius + 1, radius + 1), k)
     return s
 
 
@@ -245,7 +246,8 @@ class PeriscopeRenderer:
             lum = (sz - nx * sx - ny * sy) / np.sqrt(nx * nx + ny * ny + 1)
             haze = np.clip(np.clip(d / o.visibility, 0, 1) ** 0.7 + (d / d_h) ** 6 * 0.4, 0, 1)
             grazing = np.clip(1 - np.degrees(dep) / 6, 0, 1) ** 3  # low angles mirror the sky
-            glint = np.clip(lum - 0.985, 0, 1) * 15000 * (1 - overcast) * np.exp(-((az - SUN_BRG + 180) % 360 - 180) ** 2 / 144)
+            sun = np.exp(-((az - SUN_BRG + 180) % 360 - 180) ** 2 / 144)  # glitter path under the sun
+            glint = np.clip(lum - 0.985, 0, 1) * 15000 * (1 - overcast) * sun
             sky_glance = np.clip((lum - 0.85) * 4, 0, 1) * 0.35  # facets tilted toward the sky catch it
             k_base = (0.45 + 0.9 * lum) * (1 - haze) * (1 - 0.25 * o.rain)
             k_hor = ((grazing * 0.6 + sky_glance) * (1 - haze) + haze) * (1 - 0.25 * o.rain)
@@ -312,7 +314,8 @@ class PeriscopeRenderer:
             pygame.draw.polygon(f, upper, [pt(f0, h0), pt(f0, h1), pt(f1, h1), pt(f1, h0)])
         f0, f1, h0, h1 = shape["funnel"]
         pygame.draw.polygon(f, hull, [pt(f0, h0), pt(f0 + 0.01, h1), pt(f1 + 0.01, h1), pt(f1, h0)])
-        pygame.draw.polygon(f, dark, [pt(f0 + 0.008, h1 - 1.5), pt(f0 + 0.01, h1), pt(f1 + 0.01, h1), pt(f1 + 0.008, h1 - 1.5)])
+        pygame.draw.polygon(f, dark, [pt(f0 + 0.008, h1 - 1.5), pt(f0 + 0.01, h1), pt(f1 + 0.01, h1),
+                                      pt(f1 + 0.008, h1 - 1.5)])
         if s.speed > 1.0 and not sinking:  # bow wave and wake
             kt = s.speed / 0.514444
             foam = _mix((236, 240, 240), hor, haze)
@@ -333,7 +336,8 @@ class PeriscopeRenderer:
             py = fy - k * size * (0.45 if not heavy else 0.9)
             rad = min(80, int(size * (0.7 + 0.3 * k)))
             shade = 40 if heavy else int(_mix((70, 70, 70), hor, haze * 0.7)[0])
-            f.blit(_puff(rad, shade, int((110 if heavy else 70) * (1 - k / 13) * (1 - haze * 0.6))), (px - rad, py - rad))
+            density = int((110 if heavy else 70) * (1 - k / 13) * (1 - haze * 0.6))
+            f.blit(_puff(rad, shade, density), (px - rad, py - rad))
         if heavy and s.sinking < 140:  # fire
             for k in range(3):
                 gx, gy = pt(0.45 + 0.08 * k, 6 + 3 * math.sin(v.time * 9 + k))
@@ -381,7 +385,8 @@ class PeriscopeRenderer:
             self.wash = 1.0
             f.fill((16, 54, 52))
             for _ in range(24):
-                pygame.draw.circle(f, (110, 170, 160), (random.randrange(EYE), random.randrange(EYE)), random.randint(2, 7), 1)
+                spot = (random.randrange(EYE), random.randrange(EYE))
+                pygame.draw.circle(f, (110, 170, 160), spot, random.randint(2, 7), 1)
             if len(self.drops) < 40:
                 self.drops += [[random.uniform(60, EYE - 60), random.uniform(60, EYE - 60), random.uniform(3, 8), 3.0]
                                for _ in range(4)]
@@ -395,7 +400,8 @@ class PeriscopeRenderer:
                 x, y = random.randrange(EYE), random.randrange(EYE)
                 pygame.draw.line(f, (200, 210, 215), (x, y), (x - 2, y + 9), 1)
             if random.random() < rain * dt * 6 and len(self.drops) < 40:
-                self.drops.append([random.uniform(60, EYE - 60), random.uniform(40, EYE - 80), random.uniform(2, 6), 4.0])
+                self.drops.append([random.uniform(60, EYE - 60), random.uniform(40, EYE - 80), random.uniform(2, 6),
+                                   4.0])
         for d in self.drops:
             d[1] += dt * 18 * d[2] / 4
             d[3] -= dt

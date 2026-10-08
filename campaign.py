@@ -173,6 +173,7 @@ if __name__ == "__main__":  # self-check: save round trip, ranks, objectives, re
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
     import pygame
+
     from audio import AudioSynthesizer
     from sim import Vessel
     pygame.init()
@@ -192,7 +193,8 @@ if __name__ == "__main__":  # self-check: save round trip, ranks, objectives, re
     assert debrief["promoted"] == "LIEUTENANT" and len(debrief["offer"]) == 2
     assert not set(debrief["offer"]) & {"THICK HULL", "QUIET SCREWS"}
     again = Career(tmp)
-    assert again.patrol == 1 and again.upgrades == ["THICK HULL", "QUIET SCREWS"] and again.log[0]["result"] == "SUCCESS"
+    assert again.patrol == 1 and again.upgrades == ["THICK HULL", "QUIET SCREWS"]
+    assert again.log[0]["result"] == "SUCCESS"
     con, run = sail(again, AudioSynthesizer())
     con.world.director.done = True
     assert run.update(con) == "FAILED" and again.record(run, con)["promoted"] is None and again.patrol == 1
@@ -200,7 +202,8 @@ if __name__ == "__main__":  # self-check: save round trip, ranks, objectives, re
     for g in (500, 90000, 20):
         again.add_score("COMMANDER", g, 3)
     assert [s["grt"] for s in Career(tmp).scores][:2] == [90000, 6500]
-    assert all(s["grt"] > 0 for s in Career(tmp).scores) and len(Career(tmp).log) == 2  # the 0 GRT patrol is logged only
+    assert all(s["grt"] > 0 for s in Career(tmp).scores)
+    assert len(Career(tmp).log) == 2  # the 0 GRT patrol is logged, not scored
     tmp.write_text("{broken")
     assert Career(tmp).patrol == 0
     print("campaign ok")

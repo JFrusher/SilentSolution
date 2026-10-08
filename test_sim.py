@@ -5,17 +5,30 @@ import random
 import numpy as np
 import pygame
 
-from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
-                SubmarineAI, ThreatDirector, WITHDRAW, frame_point)
+from ai import (
+    ALARMED,
+    ALERT,
+    ATTACK,
+    CRUISE,
+    PATROL,
+    SCATTER,
+    SEARCH,
+    WITHDRAW,
+    Convoy,
+    EscortAI,
+    MerchantAI,
+    SubmarineAI,
+    ThreatDirector,
+    frame_point,
+)
 from audio import AudioSynthesizer
 from console import Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
 from layout import CRT_RECT, WF_H, WF_POS, WF_W
 from sensors import PeriscopeOptics, cone_gain
+from sim import EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff, bearing
 from tma import TMALog
-from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
-                 bearing)
 from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME, WAVE_TIME_LIMIT
 
 
@@ -377,7 +390,8 @@ if __name__ == "__main__":
         t += 0.5
     result = log.auto_solve(t, own, tdc)
     assert result[1] is False, "two legs and an echo: the solution should be well conditioned"
-    assert abs(angle_diff(tdc.get("CRS"), 250)) <= 15 and abs(tdc.get("SPD") - 10) <= 2, (tdc.get("CRS"), tdc.get("SPD"), result)
+    assert abs(angle_diff(tdc.get("CRS"), 250)) <= 15, (tdc.get("CRS"), result)
+    assert abs(tdc.get("SPD") - 10) <= 2, (tdc.get("SPD"), result)
     assert abs(tdc.get("RNG") * YARD - own.range_to(tgt)) / own.range_to(tgt) < 0.15, tdc.get("RNG")
     assert log.fit(t, own, tdc) < 1.5
 
