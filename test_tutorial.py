@@ -102,6 +102,16 @@ def act(tut, con, once):
         do("page", lambda: con.key(pygame.K_F2))
     elif g.startswith("SET TGT SPD"):
         do("tma", lambda: (aim(con, tut.merchant), con.key(pygame.K_F2)))
+    elif g.startswith("CHECK TGT SPD"):
+        do("solve", lambda: aim(con, tut.merchant))
+    elif g.startswith("SET SKR ARM"):
+        sol = con.tdc.solve()
+        con.tdc.set("ARM", max(300.0, round(sol.run / YARD / 2, -2)) if sol else 1000.0)
+        con.tdc.set("DEP", 10.0)
+    elif g.startswith("FIRE ONE FISH"):
+        if not ours_running and 0 in con.tubes:
+            aim(con, tut.merchant)
+            con.key(pygame.K_1 if con.tubes[0] == 0 else pygame.K_2)
     elif g.startswith("SINK THE MERCHANT"):
         if not ours_running and 0 in con.tubes:
             aim(con, tut.merchant)

@@ -250,12 +250,46 @@ class Tutorial:
               "MINUTE; SPEED THROWS A FEATHER OF SPRAY. LOOK BRIEFLY, THEN GET IT DOWN: {LOOK} BACK TO THE STATION, "
               "{RAISE SCOPE} DOWN SCOPE.", "BACK ({LOOK}) AND DOWN SCOPE ({RAISE SCOPE})",
               lambda t, c: not c.looking and not c.world.player.scope_up, highlight=("masts", "lamps")),
-            S("SKR ARM IS HOW FAR THE FISH RUNS BEFORE ITS SEEKER WAKES. RUN DEP: SHALLOW (10 M) FOR SHIPS, DEEP "
-              "FOR SUBS UNDER THE LAYER. GYRO AND RUN SHOW THE SOLUTION; A GREEN LAMP MEANS IN RANGE. FIRE WITH "
-              "{FIRE}, {FIRE TUBE 1} / {FIRE TUBE 2}, OR FLIP A TUBE SWITCH. TUBES RELOAD FROM THE RACKS (UNLIMITED "
-              "IN TRAINING). THE RUN TAKES A MINUTE OR TWO - WATCH YOUR FISH AS RED DOTS ON THE SCOPE.",
+            # --- fire control, one piece at a time ---
+            S("FIRE CONTROL, ONE STEP AT A TIME. FIRST READ THE SOLUTION. AT THE FOOT OF THE TDC, GYRO IS THE "
+              "COURSE THE FISH WILL RUN AND RUN IS HOW FAR IT SWIMS TO MEET HER; THE LAMP BESIDE THEM IS GREEN WHEN "
+              "A FISH CAN CATCH HER AND RED WHEN SHE IS OUT OF REACH. ON THE TACTICAL SCOPE THE BOX IS WHERE THE "
+              "TDC PUTS HER, THE LINE IS HER COURSE AND THE RED CROSS IS WHERE FISH AND SHIP MEET.",
+              "STUDY THE SOLUTION - {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, highlight=("tdc", "scope")),
+            S(lambda c: "THE SOLUTION IS ONLY AS GOOD AS TGT SPD AND TGT CRS. HER BOW IN THE SCOPE SHOWED WHICH WAY "
+                        f"SHE IS HEADING; INTEL MAKES IT ABOUT {self.merchant.speed / KNOT:.0f} KNOTS ON ABOUT "
+                        f"{round(self.merchant.heading / 10) * 10:03.0f}. SET BOTH ON THE TDC "
+                        "({TDC ROW UP} / {TDC ROW DOWN} PICKS A ROW, {TDC VALUE UP} / {TDC VALUE DOWN} SETS IT).",
+              "CHECK TGT SPD AND TGT CRS AGAINST HER",
+              lambda t, c: abs(c.tdc.get("SPD") - t.merchant.speed / KNOT) <= 1.5 and
+              abs(angle_diff(c.tdc.get("CRS"), t.merchant.heading)) <= 15, highlight=("tdc",),
+              outro="INSTRUCTOR: GOOD. WATCH THE CROSS ON THE SCOPE MOVE AS YOU CHANGE THEM."),
+            S("NOW SET THE FISH. SKR ARM IS HOW FAR IT RUNS BEFORE ITS SEEKER WAKES: SHORTER THAN THE RUN, OR IT "
+              "WAKES PAST HER, BUT NOT SO SHORT IT CAN LISTEN FOR YOU. RUN DEP: SHALLOW (10 M) FOR SHIPS, DEEP FOR "
+              "SUBS UNDER THE LAYER. SET SKR ARM TO ABOUT HALF THE RUN AND RUN DEP TO 10 M.",
+              "SET SKR ARM AND RUN DEP", self._fish_set, highlight=("tdc",),
+              outro="INSTRUCTOR: SET. THE SEEKER WILL WAKE CLOSE TO HER."),
+            S("FIRE ONE FISH: {FIRE TUBE 1} OR FLIP TUBE 1'S GUARDED SWITCH. (WITH SPREAD AT 0, {FIRE} FIRES ONE "
+              "TOO.) A LAUNCH IS LOUD - EVERY ESCORT IN EARSHOT HEARS IT. TUBES RELOAD FROM THE RACKS; IN TRAINING "
+              "THE RACKS NEVER RUN DRY.",
+              "FIRE ONE FISH  ({FIRE TUBE 1}, TUBE SWITCH)", lambda t, c: "FIRE" in c.actions,
+              highlight=("tubes",)),
+            S("YOUR FISH IS THE RED DOT ON THE TACTICAL SCOPE, RUNNING ON ITS GUIDANCE WIRE TOWARD THE CROSS. YOU "
+              "CAN STEER IT: CLICK THE FISH, THEN CLICK WHERE TO SEND IT, OR NUDGE IT WITH {WIRE LEFT} {WIRE RIGHT}. "
+              "AT SKR ARM THE LOG READS SEEKER ACTIVE, THEN HOMING WHEN IT HEARS HER. THE RUN TAKES A MINUTE OR TWO.",
+              "WATCH THE FISH RUN", lambda t, c: not any(not f.hostile for f in c.world.torpedoes),
+              highlight=("scope",)),
+            S(lambda c: "HIT: BREAKUP NOISES ON THE SONAR LOG, AND THE TELEPRINTER CONFIRMS HER SUNK."
+              if self.merchant in c.world.sunk else
+              "A MISS. CHECK TGT SPD AND TGT CRS AGAINST THE SCOPE, RE-MARK HER ({MARK}) AND FIRE AGAIN WHEN A TUBE "
+              "RELOADS.",
               "SINK THE MERCHANT  ({FIRE}, TUBE SWITCH)", lambda t, c: t.merchant in c.world.sunk,
               highlight=("tdc", "tubes"), outro="INSTRUCTOR: TARGET DESTROYED. WELL SHOT."),
+            S("SALVOS: SET SPREAD (THE LAST TDC ROW) TO A FEW DEGREES AND {FIRE} FIRES EVERY READY TUBE, FANNED "
+              "EITHER SIDE OF THE SOLUTION, SO A SMALL ERROR IN HER SPEED OR COURSE STILL PUTS ONE FISH ON HER. "
+              "EACH FISH HAS ITS OWN WIRE: {NEXT FISH} PICKS WHICH ONE YOU STEER, {CUT WIRE} CUTS IT. A SOLUTION "
+              "BEYOND RANGE ASKS FOR A SECOND PRESS BEFORE IT FIRES.",
+              "STUDY SALVOS - {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, highlight=("tdc", "tubes")),
             S("BATTERY IS DOWN TO 55%. AT PERISCOPE DEPTH ({PERISCOPE DEPTH}), RAISE THE SNORKEL: {RAISE SNORKEL} "
               "OR THE SNORT SWITCH. THE DIESELS CHARGE THE BATTERY, BUT THEIR ROAR DEAFENS YOUR OWN SONAR - WATCH "
               "THE WATERFALL FOG OVER - AND THE EXHAUST CAN BE SEEN. KEEP UNDER 8 KNOTS OR THE HEAD FLOODS.",
@@ -335,6 +369,11 @@ class Tutorial:
         seen = next((s for s in con.view[0] if s.uid == id(self.merchant)), None)
         aim = (con.scope_brg + con.world.player.heading) % 360
         return seen is not None and abs(angle_diff(seen.brg, aim)) < 1.0
+
+    def _fish_set(self, t, con):
+        sol = con.tdc.solve()
+        arm, dep = con.tdc.get("ARM"), con.tdc.get("DEP")
+        return sol is not None and 300 <= arm <= sol.run / YARD - 300 and dep <= 15
 
     # ------------------------------------------------------------------ scenario setups
     def _spawn_merchant(self, t, con):
