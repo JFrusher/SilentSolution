@@ -436,6 +436,11 @@ if __name__ == "__main__":
     p.spring_leak()
     assert p.leaks == ["LEAK 1", "LEAK 2"], "a plugged leak's number is free again"
 
+    # difficulty presets are plain dicts: a misspelt key in one would be silently ignored, so they all match
+    from tutorial import TRAINING
+    keys = set(DIFFICULTY["CADET"])
+    assert all(set(d) == keys for d in (*DIFFICULTY.values(), TRAINING)), "difficulty presets differ in their keys"
+
     # events are (kind, a, b) by name: every kind the world can raise reaches Console.report, and the replay
     # only keeps kinds that exist, so a misspelt name fails here instead of going quiet in play
     raised = {"ARMED", "HOMING", "LOST", EXHAUSTED}  # the seeker's returns
