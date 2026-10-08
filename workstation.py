@@ -56,6 +56,7 @@ class Workstation:
         self.career = None   # campaign career, for its page
         self.debrief = None  # the last patrol's debrief
         self.confirm = None  # lines of a yes/no question over the patrol, or None
+        self.over_hint = None  # game-over key line, when it isn't the endless one
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
         self.scope_surround = self.scope_bg.convert_alpha()  # same art with a round hole: hides the square corners
@@ -282,7 +283,7 @@ class Workstation:
             if state == "OVER":
                 self._crt_box(s, crt, ["LOST WITH ALL HANDS" if con.cause == "HULL BREACHED" else "CREW UNCONSCIOUS",
                                        con.cause, f"WAVE {con.wave}   {con.score:,} GRT SUNK", "",
-                                       "[R] NEW PATROL   [T] TITLE   [ESC] QUIT"])
+                                       self.over_hint or "[R] NEW PATROL   [T] TITLE   [ESC] QUIT"])
             elif self.confirm:
                 self._crt_box(s, crt, self.confirm)
             elif paused:
