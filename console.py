@@ -472,6 +472,15 @@ class Console:
         hurt = self.world.player.damaged
         return [*hurt, *(s for s in REPAIR_TIME if s not in hurt)]
 
+    def tma_centre(self):
+        """The TMA plot centres on your own recent bearings, so the dots are in view before there is a solution;
+        with none yet, on the TDC's bearing."""
+        recent = self.tma.recent(self.world.time, 60.0)
+        if not recent:
+            return bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
+        b = np.radians([r[1] for r in recent])
+        return math.degrees(math.atan2(np.sin(b).mean(), np.cos(b).mean())) % 360
+
     def auto_solve(self):
         """Least-squares fit of the bearing history: fitted on Cadet / Training consoles only."""
         if not self.diff["ping_warning"]:
@@ -511,7 +520,7 @@ class Console:
                 self.actions.add("REPAIR_FIRST")
                 self.say(f"PARTY TO THE {rows[k]}")
         elif wf.collidepoint(pos) and self.crt_page == "TMA":  # the plot's x is true bearing round the TDC's
-            centre = bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
+            centre = self.tma_centre()
             self.dial = (centre + (x - wf.centerx) / WF_W * PLOT_SPAN - self.world.player.heading) % 360
         elif wf.collidepoint(pos):
             self.dial_true = self.from_display((x - wf.x) / WF_W * 360)

@@ -188,7 +188,28 @@ def check_waterfall_frames():
     assert abs(int(np.argmax(tru)) - WF_W // 4) <= 1
 
 
+def check_rendering_never_moves_the_world():
+    """Drawing the station (shake, needle wobble, periscope spray) must not consume the simulation's dice."""
+    from workstation import Workstation
+    screen = pygame.display.get_surface()
+    worlds = []
+    for draw in (False, True):
+        random.seed(9)
+        np.random.seed(9)
+        con, ship = station(rng=1800.0)
+        st = Workstation() if draw else None
+        con.world.ais.clear()
+        con.jolt(1.0)  # shake on: the jitter path draws random numbers every frame
+        for _ in range(300):
+            con.update(1 / 30, NoKeys())
+            if st:
+                st.draw(screen, con, "PLAY", False, False, 1 / 30)
+        worlds.append((ship.x, ship.y, con.world.ocean.rain, random.random()))
+    assert worlds[0] == worlds[1], worlds
+
+
 if __name__ == "__main__":
+    check_rendering_never_moves_the_world()
     check_lock_links_scope_to_sonar()
     check_stabilisation()
     check_waterfall_frames()

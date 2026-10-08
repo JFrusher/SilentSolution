@@ -10,6 +10,9 @@ from functools import cache, lru_cache
 import numpy as np
 import pygame
 
+_FX = random.Random()  # presentation-only randomness, so drawing never moves the simulation's dice
+_NP = np.random.default_rng()
+
 WALL = (36, 37, 36)
 STEEL = (106, 108, 104)          # battleship-grey hammertone
 STEEL_LIGHT = (146, 147, 142)
@@ -76,7 +79,7 @@ def angle_value(deg, lo, hi, start=225.0, sweep=270.0):
 # ---------- surfaces ----------
 def _mottle(w, h, scale):
     """Low-frequency blotches: hammertone paint, uneven fading."""
-    small = np.random.random((max(2, w // scale), max(2, h // scale)))
+    small = _NP.random((max(2, w // scale), max(2, h // scale)))
     src = pygame.Surface(small.shape)
     pygame.surfarray.blit_array(src, np.repeat((small * 255).astype(np.uint8)[..., None], 3, axis=2))
     return pygame.surfarray.array_red(pygame.transform.smoothscale(src, (w, h))) / 255.0 - 0.5
@@ -85,7 +88,7 @@ def _mottle(w, h, scale):
 def texture(size, base, grain=4.0, light=(1.06, 0.88), mottle=10.0):
     """Hammertone: speckle over blotches, lit from above, grime settling toward the bottom."""
     w, h = size
-    n = np.random.normal(0, grain, (w, h)) + _mottle(w, h, 6) * mottle + _mottle(w, h, 40) * mottle * 0.8
+    n = _NP.normal(0, grain, (w, h)) + _mottle(w, h, 6) * mottle + _mottle(w, h, 40) * mottle * 0.8
     shade = np.linspace(light[0], light[1], h)[None, :]
     grime = 1 - 0.18 * np.clip(np.linspace(-0.6, 1, h), 0, 1)[None, :] ** 2
     rgb = (np.array(base, float)[None, None, :] + n[..., None]) * (shade * grime)[..., None]
@@ -232,11 +235,11 @@ def _dial(radius):
     ang = np.arctan2(c - y, x - c)
     rgb = np.zeros((size, size, 3))
     rim = (d <= radius) & (d > radius - 7)
-    lit = 0.65 + 0.4 * np.cos(ang - 2.36) + np.random.normal(0, 0.06, (size, size))
+    lit = 0.65 + 0.4 * np.cos(ang - 2.36) + _NP.normal(0, 0.06, (size, size))
     rgb[rim] = np.array(CHROME)[None, :] * lit[rim][:, None]
     face = d <= radius - 7
     tint = np.array((30, 29, 26))  # black gone slightly brown and dusty
-    rgb[face] = (tint[None, :] + (np.random.normal(0, 3, (size, size)) + _mottle(size, size, 10) * 10)[face][:, None]) \
+    rgb[face] = (tint[None, :] + (_NP.normal(0, 3, (size, size)) + _mottle(size, size, 10) * 10)[face][:, None]) \
         * (1.2 - 0.35 * (d[face] / radius))[:, None]
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
     pygame.surfarray.pixels3d(surf)[:] = np.clip(rgb, 0, 255).astype(np.uint8)
@@ -308,7 +311,7 @@ class Needle:
     def update(self, target, dt, jitter=0.0):
         self.vel += ((target - self.v) * 60 - self.vel * 12) * dt
         self.v += self.vel * dt
-        return self.v + (random.gauss(0, jitter) if jitter else 0.0)
+        return self.v + (_FX.gauss(0, jitter) if jitter else 0.0)
 
 
 # ---------- mechanical drum counters ----------
