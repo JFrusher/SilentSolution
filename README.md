@@ -16,6 +16,7 @@ but while the mast is up, the sea can see you too.
 ![Asset files](https://img.shields.io/badge/asset%20files-0-84d670)
 ![Platform](https://img.shields.io/badge/build-Windows%20.exe-0078D6?logo=windows&logoColor=white)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
+[![checks](https://github.com/JFrusher/SilentSolution/actions/workflows/checks.yml/badge.svg)](https://github.com/JFrusher/SilentSolution/actions/workflows/checks.yml)
 
 [Quick start](#-quick-start) · [The station](#-the-station) · [How an attack works](#-how-an-attack-works) ·
 [Game modes](#-game-modes) · [Controls](#-controls) · [Under the hood](#-under-the-hood) · [Development](#-development)
@@ -409,7 +410,7 @@ runs.
 ## 🧰 Development
 
 ```bash
-uv run checks.py                          # every suite, headless (SDL dummy drivers)
+uv run checks.py                          # every suite headless (SDL dummy drivers), then ruff; CI runs it too
 uv run --with pillow docs/shots.py        # regenerate every image in this README from live game states
 uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 ```
