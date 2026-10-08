@@ -112,7 +112,7 @@ def check_eyepiece():
     brg = fix(w.player, w.targets[0]).true_brg
     r, h = PeriscopeRenderer(), PeriscopeOptics(w).eye_height()
     img = pygame.surfarray.array3d(r.render(View(brg, 8.0, h, 0, 0, w.time, w.ocean, *look))).astype(int)
-    sea = pygame.surfarray.array3d(r.render(View(brg + 30, 8.0, h, 0, 0, w.time, w.ocean, [], [], []))).astype(int)
+    sea = pygame.surfarray.array3d(r.render(View(brg, 8.0, h, 0, 0, w.time, w.ocean, [], [], []))).astype(int)
     cols = np.where(np.abs(img - sea).sum(axis=2).max(axis=1) > 60)[0]
     centre = (cols.min() + cols.max()) / 2 - EYE / 2
     assert abs(centre) / (EYE / 8.0) < 0.3, f"hull {centre:+.1f} px off the cross-wire"
@@ -188,7 +188,28 @@ def check_waterfall_frames():
     assert abs(int(np.argmax(tru)) - WF_W // 4) <= 1
 
 
+def check_rendering_never_moves_the_world():
+    """Drawing the station (shake, needle wobble, periscope spray) must not consume the simulation's dice."""
+    from workstation import Workstation
+    screen = pygame.display.get_surface()
+    worlds = []
+    for draw in (False, True):
+        random.seed(9)
+        np.random.seed(9)
+        con, ship = station(rng=1800.0)
+        st = Workstation() if draw else None
+        con.world.ais.clear()
+        con.jolt(1.0)  # shake on: the jitter path draws random numbers every frame
+        for _ in range(300):
+            con.update(1 / 30, NoKeys())
+            if st:
+                st.draw(screen, con, "PLAY", False, False, 1 / 30)
+        worlds.append((ship.x, ship.y, con.world.ocean.rain, random.random()))
+    assert worlds[0] == worlds[1], worlds
+
+
 if __name__ == "__main__":
+    check_rendering_never_moves_the_world()
     check_lock_links_scope_to_sonar()
     check_stabilisation()
     check_waterfall_frames()

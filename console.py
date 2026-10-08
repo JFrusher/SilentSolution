@@ -43,6 +43,7 @@ from layout import (
     WHEEL_C,
     WHEEL_R,
 )
+from replay import Recorder
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
 from sim import (
     CRUSH_DEPTH,
@@ -138,6 +139,7 @@ class Console:
         self.last_valve = -99.0
         self.debug = False       # F3: truth overlay for playtesting and tuning
         self.tma = TMALog()      # bearing history for the TMA plot
+        self.recorder = Recorder()  # world truth for the after-action replay (read-only)
         self.wire_sel = None     # the wired fish the scope clicks steer
         self.wire_hint = False
         self.long_shot = -99.0  # when F was last refused on a beyond-range solution
@@ -472,6 +474,15 @@ class Console:
         hurt = self.world.player.damaged
         return [*hurt, *(s for s in REPAIR_TIME if s not in hurt)]
 
+    def tma_centre(self):
+        """The TMA plot centres on your own recent bearings, so the dots are in view before there is a solution;
+        with none yet, on the TDC's bearing."""
+        recent = self.tma.recent(self.world.time, 60.0)
+        if not recent:
+            return bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
+        b = np.radians([r[1] for r in recent])
+        return math.degrees(math.atan2(np.sin(b).mean(), np.cos(b).mean())) % 360
+
     def auto_solve(self):
         """Least-squares fit of the bearing history: fitted on Cadet / Training consoles only."""
         if not self.diff["ping_warning"]:
@@ -511,7 +522,7 @@ class Console:
                 self.actions.add("REPAIR_FIRST")
                 self.say(f"PARTY TO THE {rows[k]}")
         elif wf.collidepoint(pos) and self.crt_page == "TMA":  # the plot's x is true bearing round the TDC's
-            centre = bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
+            centre = self.tma_centre()
             self.dial = (centre + (x - wf.centerx) / WF_W * PLOT_SPAN - self.world.player.heading) % 360
         elif wf.collidepoint(pos):
             self.dial_true = self.from_display((x - wf.x) / WF_W * 360)
@@ -600,6 +611,7 @@ class Console:
             self.scope_true = (self.scope_true + turned) % 360
         for kind, a, b in self.frame_events:
             self.report(kind, a, b)
+        self.recorder.sample(world, self.frame_events)
         self.tdc.update(dt)
         self.view = self.optics.look() if p.scope_up else None
         if self.wire_sel is not None and self.wire_sel not in world.torpedoes:

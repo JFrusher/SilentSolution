@@ -1,5 +1,6 @@
 """World simulation: hidden true state. Units: metres, seconds, m/s.
 Bearings/headings are degrees clockwise from north; x = east, y = north; z = depth, positive down."""
+import itertools
 import math
 import random
 from dataclasses import dataclass, field
@@ -63,6 +64,7 @@ R_EFF = 7.6e6            # m, effective earth radius with refraction (hull-down 
 
 # being seen: per-second chance at zero range for an alertness-1 observer, and how far it can reach in clear air
 
+UIDS = itertools.count(1)
 TELEGRAPH = (("STOP", 0.0), ("SLOW", 4.0), ("HALF", 8.0), ("FULL", 14.0), ("FLANK", 20.0))  # order, knots
 
 
@@ -137,6 +139,7 @@ class Vessel:
     kind: str = "MERCHANT"  # acoustic signature family: MERCHANT ESCORT SUB TORPEDO DECOY OWN
     sunk_at: float = -1.0       # world time it was sunk (wrecks settle visibly for a while)
     signal_until: float = -1.0  # an escort that has spotted us flashes its signal lamp until then
+    uid: int = field(default_factory=lambda: next(UIDS))  # stable identity for the after-action replay
 
     def velocity(self):
         return geometry.velocity(self)

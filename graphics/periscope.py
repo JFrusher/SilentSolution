@@ -10,6 +10,9 @@ import pygame
 
 from sim import R_EFF, SHIP_CLASSES, angle_diff, horizon_distance
 
+_FX = random.Random()  # presentation-only randomness, so drawing never moves the simulation's dice
+_NP = np.random.default_rng()
+
 EYE = 600                  # eyepiece diameter, px
 SEA_DIV = 3                # sky and sea are shaded at 1/SEA_DIV resolution, then smooth-scaled
 SUN_BRG, SUN_ELEV = 205.0, 28.0
@@ -97,7 +100,7 @@ class PeriscopeRenderer:
         """Fractal cloud cover over 360 deg of azimuth: octaves of random noise, smooth-scaled and summed."""
         total = np.zeros((CLOUD_W, CLOUD_H))
         for i, (w, h) in enumerate(((12, 3), (24, 6), (48, 12), (96, 24), (192, 40))):
-            noise = np.random.random((w + 1, h))
+            noise = _NP.random((w + 1, h))
             noise[-1] = noise[0]  # wrap the seam at 000/360
             src = pygame.Surface((w + 1, h))
             pygame.surfarray.blit_array(src, np.repeat((noise * 255).astype(np.uint8)[..., None], 3, axis=2))
@@ -114,8 +117,8 @@ class PeriscopeRenderer:
         gx = np.zeros((RIPPLE_N, RIPPLE_N), np.float32)
         gy = np.zeros_like(gx)
         for _ in range(14):  # integer wave numbers keep the tile seamless
-            mx, my = random.randint(-6, 6), random.randint(1, 7)
-            amp, phase = random.uniform(0.4, 1.0) / math.hypot(mx, my), random.uniform(0, 2 * np.pi)
+            mx, my = _FX.randint(-6, 6), _FX.randint(1, 7)
+            amp, phase = _FX.uniform(0.4, 1.0) / math.hypot(mx, my), _FX.uniform(0, 2 * np.pi)
             c = np.cos(mx * k[:, None] + my * k[None, :] + phase) * amp
             gx += c * mx
             gy += c * my
@@ -387,10 +390,10 @@ class PeriscopeRenderer:
             self.wash = 1.0
             f.fill((16, 54, 52))
             for _ in range(24):
-                spot = (random.randrange(EYE), random.randrange(EYE))
-                pygame.draw.circle(f, (110, 170, 160), spot, random.randint(2, 7), 1)
+                spot = (_FX.randrange(EYE), _FX.randrange(EYE))
+                pygame.draw.circle(f, (110, 170, 160), spot, _FX.randint(2, 7), 1)
             if len(self.drops) < 40:
-                self.drops += [[random.uniform(60, EYE - 60), random.uniform(60, EYE - 60), random.uniform(3, 8), 3.0]
+                self.drops += [[_FX.uniform(60, EYE - 60), _FX.uniform(60, EYE - 60), _FX.uniform(3, 8), 3.0]
                                for _ in range(4)]
         elif self.wash > 0:  # water sheeting off the glass
             self.wash = max(0.0, self.wash - dt * 2.0)
@@ -399,10 +402,10 @@ class PeriscopeRenderer:
             f.blit(sheet, (0, 0))
         if rain > 0.15:
             for _ in range(int(30 * rain)):
-                x, y = random.randrange(EYE), random.randrange(EYE)
+                x, y = _FX.randrange(EYE), _FX.randrange(EYE)
                 pygame.draw.line(f, (200, 210, 215), (x, y), (x - 2, y + 9), 1)
-            if random.random() < rain * dt * 6 and len(self.drops) < 40:
-                self.drops.append([random.uniform(60, EYE - 60), random.uniform(40, EYE - 80), random.uniform(2, 6),
+            if _FX.random() < rain * dt * 6 and len(self.drops) < 40:
+                self.drops.append([_FX.uniform(60, EYE - 60), _FX.uniform(40, EYE - 80), _FX.uniform(2, 6),
                                    4.0])
         for d in self.drops:
             d[1] += dt * 18 * d[2] / 4
@@ -468,5 +471,5 @@ class PeriscopeRenderer:
             self._bearing_tape(f, v, roll, pitch)
         f.blit(self.lens, (0, 0))
         if v.shake:
-            f.scroll(int(random.uniform(-v.shake, v.shake)), int(random.uniform(-v.shake, v.shake)))
+            f.scroll(int(_FX.uniform(-v.shake, v.shake)), int(_FX.uniform(-v.shake, v.shake)))
         return f
