@@ -19,7 +19,7 @@ import settings
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
 from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
                  YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
-from tma import TMALog
+from tma import PLOT_SPAN, TMALog
 from tuning import DIFFICULTY, REPAIR_TIME
 
 
@@ -413,6 +413,9 @@ class Console:
                 self.world.player.repair_first(rows[k])
                 self.actions.add("REPAIR_FIRST")
                 self.say(f"PARTY TO THE {rows[k]}")
+        elif wf.collidepoint(pos) and self.crt_page == "TMA":  # the plot's x is true bearing round the TDC's
+            centre = math.degrees(math.atan2(self.tdc.x, self.tdc.y))
+            self.dial = (centre + (x - wf.centerx) / WF_W * PLOT_SPAN - self.world.player.heading) % 360
         elif wf.collidepoint(pos):
             self.dial = (x - wf.x) / WF_W * 360
         elif math.hypot(x - SCOPE_C[0], y - SCOPE_C[1]) <= SCOPE_R:
@@ -457,7 +460,7 @@ class Console:
             p.rudder = clamp(p.rudder + 5 * dy, -MAX_RUDDER, MAX_RUDDER)
         elif TELEGRAPH_RECT.collidepoint(pos):
             self.telegraph(self.telegraph_index() + dy)
-        elif CRT_RECT.collidepoint(pos):
+        elif CRT_RECT.collidepoint(pos) and self.crt_page == "SONAR":
             self.dial = (self.dial + dy) % 360
 
     # --- simulation tick ---

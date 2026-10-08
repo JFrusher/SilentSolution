@@ -3,6 +3,7 @@ import math
 import random
 
 import numpy as np
+import pygame
 
 from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
                 SubmarineAI, ThreatDirector, WITHDRAW, frame_point)
@@ -10,7 +11,7 @@ from audio import AudioSynthesizer
 from console import Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
-from layout import WF_W
+from layout import CRT_RECT, WF_H, WF_POS, WF_W
 from sensors import PeriscopeOptics, cone_gain
 from tma import TMALog
 from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
@@ -291,6 +292,17 @@ if __name__ == "__main__":
     w.ais.clear()
     assert run(w, 0.2).count("WAVE_CLEAR") == 1 and w.director.done
     assert "WAVE" not in run(w, 30) and not w.targets
+
+    # clicking the TMA plot listens where you click (true bearing), not at a waterfall-scaled relative bearing
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.world.player.heading = 70.0
+    con.tdc.set("BRG", 30.0)
+    con.crt_page = "TMA"
+    wf = pygame.Rect(CRT_RECT.x + WF_POS[0], CRT_RECT.y + WF_POS[1], WF_W, WF_H)
+    con.click(wf.center)
+    assert abs(angle_diff(con.dial, 30.0)) < 0.5, con.dial
+    con.scroll(wf.center, 1)
+    assert abs(angle_diff(con.dial, 30.0)) < 0.5  # the wheel only trains the dial on the waterfall page
 
     # damage control: a hit breaks systems; one party repairs them in the order set, one at a time
     w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [], systems_damage=True)

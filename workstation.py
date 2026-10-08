@@ -19,6 +19,7 @@ from layout import (ANNUNCIATORS, BLOW_BTN, CONSOLE, CRT_RECT, DC_ROW_H, DC_ROW_
                     SCOPE_LEVER, SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H, TDC_ROW_Y0,
                     TELEGRAPH_BTNS, TELEGRAPH_RECT, TELETYPE, TUBE_SW, W, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
 from sensors import SCOPE_FOV
+from tma import PLOT_SPAN
 from tma import PLOT_WINDOW as TMA_WINDOW
 from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, SCOPE_TOP, SOUND_SPEED,
                  TELEGRAPH, TORP_MAX_RUN, YARD)
@@ -493,7 +494,7 @@ class Workstation:
         x0, y0 = WF_POS
         now, own, tdc, log = con.world.time, con.world.player, con.tdc, con.tma
         centre = math.degrees(math.atan2(tdc.x, tdc.y)) % 360
-        span = 40.0
+        span = PLOT_SPAN
 
         def X(b):
             return x0 + WF_W / 2 + ((b - centre + 180) % 360 - 180) / span * WF_W
