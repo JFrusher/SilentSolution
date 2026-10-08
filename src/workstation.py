@@ -335,7 +335,9 @@ class Workstation:
         return ov
 
     # --- frame ---
-    def draw(self, screen, con, state, paused, show_help, dt):
+    def draw(self, screen, con, state, paused, show_help, dt, lean=False):
+        """lean: only what the job stations still cut from this frame (the screens and their bezels), and the
+        needles' movement their own gauges read; the old console's controls aren't drawn."""
         if state == "REPLAY":  # the tabletop has the whole screen
             self.replay_view.draw(screen)
             return
@@ -349,11 +351,12 @@ class Workstation:
             self.draw_scope(con)
             f.blit(self.scope_surf, (SCOPE_C[0] - SCOPE_R, SCOPE_C[1] - SCOPE_R))
             if con:
-                self.draw_needles(f, con, dt)
+                self.draw_needles(f, con, dt, draw=not lean)
             f.blit(self.overlay(con.crt_page if con else "SONAR"), (0, 0))
-            if con:
+            if con and not lean:
                 self.draw_controls(f, con)
-            self.draw_teletype(f, con)
+            if not lean:
+                self.draw_teletype(f, con)
             if con and con.tutorial and not con.tutorial.finished:
                 self.draw_tutorial(f, con.tutorial)
         if con and con.debug:
@@ -367,7 +370,9 @@ class Workstation:
     # --- centre monitor ---
     def draw_crt(self, con, state, paused):
         page = con.crt_page if con and state in ("PLAY", "OVER") else state
-        s, crt = self.crt_surf, self.crts.setdefault(page, CRTRenderer(CRT_RECT.size))
+        if page not in self.crts:  # built once per page: the vignette is costly
+            self.crts[page] = CRTRenderer(CRT_RECT.size)
+        s, crt = self.crt_surf, self.crts[page]
         s.fill((0, 0, 0))
         self.buttons = []
         if state == "SETTINGS":
@@ -797,8 +802,13 @@ class Workstation:
         crt.text(s, f"{con.scope_range:,.0f} YD", (R, 2 * R - 30), PHOSPHOR, small=True, center=True)
 
     # --- instruments ---
-    def draw_needles(self, f, con, dt):
+    def draw_needles(self, f, con, dt, draw=True):
         p, world, nd = con.world.player, con.world, self.needles
+        if not draw:  # move them only: a station draws its own gauges from these
+            for name, v in (("DEPTH", p.z), ("BATTERY", p.battery), ("NOISE", p.noise), ("HULL", world.hull),
+                            ("O2", p.o2), ("ORDER", p.ordered_depth)):
+                nd[name].update(v, dt)
+            return
         stress = 0.6 if p.z > CRUSH_DEPTH else 0.05
         values = {"DEPTH": (p.z, stress), "BATTERY": (p.battery, 0.15), "NOISE": (p.noise, 0.02 + 0.04 * p.cavitating),
                   "HULL": (world.hull, 0.1 + 0.2 * (world.hull < 50))}

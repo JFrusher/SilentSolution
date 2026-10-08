@@ -46,15 +46,17 @@ class App:
         self.frame = pygame.Surface((W, H))  # the full console, drawn for whichever station is wanted
         self.backdrop = art.texture((W, H), art.STEEL_DARK, grain=4)  # a station's steelwork behind its panels
 
-    def console_frame(self, con, page, paused, dt):
-        """The full console with its CRT on `page`: every station on that page is cut from this one drawing."""
+    def console_frame(self, con, page, paused, dt, lean=True):
+        """The console with its CRT on `page`: every job station on that page is cut from this one drawing (lean:
+        only the parts they cut; the full console and the eyepiece take it all)."""
         con.crt_page = page
-        self.station.draw(self.frame, con, "PLAY", paused, False, dt)
+        self.station.draw(self.frame, con, "PLAY", paused, False, dt, lean=lean)
         return self.frame
 
     def canvas(self, view, con, paused, dt):
         """One station as its crewman sees it."""
-        return stations.compose(view, self.console_frame(con, view.page, paused, dt), self.backdrop, con, self.station)
+        frame = self.console_frame(con, view.page, paused, dt, lean=view.name not in ("ALL", "PERISCOPE"))
+        return stations.compose(view, frame, self.backdrop, con, self.station)
 
     def room(self):
         if self.room3d is None:

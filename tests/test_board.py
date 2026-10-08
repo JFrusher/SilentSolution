@@ -85,4 +85,15 @@ con.dragging = None
 crs = con.tdc.get("CRS")
 con.scroll((60, TDC_ROW_Y0 + 3 * TDC_ROW_H + 9), 1)
 assert con.tdc.selected == 3 and con.tdc.get("CRS") != crs, "scrolling on a row winds that row"
+# each CRT page builds its phosphor once (its vignette is costly), not on every frame
+import workstation  # noqa: E402
+
+ws = workstation.Workstation()
+built = []
+real = workstation.CRTRenderer
+workstation.CRTRenderer = lambda *a, **k: built.append(1) or real(*a, **k)
+for _ in range(5):
+    ws.draw(pygame.display.get_surface(), con, "PLAY", False, False, 1 / 60, lean=True)
+workstation.CRTRenderer = real
+assert len(built) == 1, f"{len(built)} CRT renderers built for one page"
 print("board ok")
