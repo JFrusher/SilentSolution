@@ -1,10 +1,12 @@
 """Training patrol: a scripted walk through every station, then live drills against each threat.
 Runs on top of an ordinary Console. It scripts the world (it may read ground truth to grade the trainee)
 and only talks to the trainee through the console: teleprinter, order slip, highlighted controls."""
+import dataclasses
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import settings
 from ai import PATROL, EscortAI, SubmarineAI
 from geometry import fix
 from settings import keyed
@@ -14,7 +16,9 @@ from tuning import DIFFICULTY
 # Cadet rules with a working battery (for the snorkel drill) and a homing enemy fish (for the decoy drill)
 TRAINING = dict(DIFFICULTY["CADET"], battery=True, enemy_torp_kt=35, enemy_seeker_yd=800, beam_width=2.0)
 HULL_FLOOR = 25.0  # training warheads: shaken, never sunk
-CHAPTERS = {  # chapter -> what it covers; each starts at the step tagged with its name
+CHAPTERS = {  # chapter -> what it covers; the first watch runs the lot, each drill starts at the step tagged with it
+    "FIRST WATCH": "THE COXSWAIN TAKES YOU ROUND EVERY STATION, THEN A LIVE ATTACK",
+    "THE ROOM": "ORDERS FROM THE CONN, THE PLOT, ALARMS, RELIEVING A STATION",
     "STATION DRILL": "EVERY CONTROL: TELEGRAPH, HELM, DIVING, BLOW, PAGES",
     "SONAR AND FIRE CONTROL": "WATERFALL, PROFILE, MARK, PING, TDC, TMA PLOT",
     "THE PERISCOPE": "MASTS, EYEPIECE, MARKS, BEING SEEN, SNORKEL, A LIVE SHOT",
@@ -31,6 +35,7 @@ class Step:
     highlight: tuple = ()          # workstation parts to ring
     outro: str | Callable = ""     # printed on completion
     chapter: str = ""              # first step of this chapter
+    station: str = ""              # a step that sends you to take this station
 
 
 def _spawn(world, rel_brg, rng_m, course, speed, **kw):
@@ -69,18 +74,24 @@ class Tutorial:
         o.rain = o.front = 0.0
         o.timer = 1e9  # the instructor orders the weather
         con.teletype.cps = 70.0
-        self.steps = self._script()
-        name = list(CHAPTERS)[chapter]
-        self.i = next(i for i, s in enumerate(self.steps) if s.chapter == name) - 1
+        self.steps = self._with_stations(self._script())
+        self.name = list(CHAPTERS)[chapter]
+        starts = [i for i, s in enumerate(self.steps) if s.chapter]
+        if self.name == "FIRST WATCH":  # the whole syllabus, start to finish
+            self.start, self.end = 0, len(self.steps)
+        else:  # one drill: its own steps only
+            self.start = next(i for i, s in enumerate(self.steps) if s.chapter == self.name)
+            self.end = next((i for i in starts if i > self.start), len(self.steps))
+        self.i = self.start - 1
         self.timer = 0.0
         self.memo = {}
-        self.merchant = self.escort = self.sub = None
+        self.merchant = self.escort = self.sub = self.escort_ai = None
         self.finished = False
         self.advance()
 
     @property
     def step(self):
-        return self.steps[min(self.i, len(self.steps) - 1)]
+        return self.steps[min(self.i, self.end - 1)]
 
     @property
     def goal(self):
@@ -89,12 +100,15 @@ class Tutorial:
 
     @property
     def progress(self):
-        return f"{min(self.i + 1, len(self.steps))}/{len(self.steps)}"
+        return f"{min(self.i + 1, self.end) - self.start}/{self.end - self.start}"
 
     def advance(self):
         self.i += 1
-        if self.i >= len(self.steps):
+        if self.i >= self.end:
             self.finished = True
+            if self.name == "FIRST WATCH":  # the station drills open up for practice
+                settings.SETTINGS["trained"] = True
+                settings.save()
             return
         self.con.actions.clear()
         self.timer = 0.0
@@ -103,7 +117,7 @@ class Tutorial:
         if step.setup:
             step.setup(self, self.con)
         brief = step.brief(self.con) if callable(step.brief) else step.brief
-        self.con.teletype.print(keyed(f"DRILL {self.progress}: {brief}"))
+        self.con.teletype.print(keyed(f"COXSWAIN: {brief}"))
 
     def update(self, dt):
         if self.finished:
@@ -112,7 +126,7 @@ class Tutorial:
         self.timer += dt
         con.world.player.torpedoes = max(con.world.player.torpedoes, 4)  # training racks never run dry
         if "SKIP" in con.actions:
-            con.teletype.print("INSTRUCTOR: DRILL SKIPPED.")
+            con.teletype.print("COXSWAIN: DRILL SKIPPED.")
             return self.advance()
         for kind, a, b in con.frame_events:
             self._watch(kind, a, b)
@@ -133,7 +147,7 @@ class Tutorial:
             con.teletype.print(keyed(text))
         hostile = getattr(a, "hostile", False)
         if kind == "EXHAUSTED" and not hostile and self.merchant in con.world.targets:
-            tt("INSTRUCTOR: MISS. CHECK TGT SPD/CRS - THE TDC TICK MUST SIT ON THE TRACE. RE-MARK ({MARK}) "
+            tt("COXSWAIN: MISS. CHECK TGT SPD/CRS - THE TDC TICK MUST SIT ON THE TRACE. RE-MARK ({MARK}) "
                "AND FIRE AGAIN WHEN A TUBE RELOADS.")
         elif kind in ("DECOYED", "PLAYER_HIT", "EXHAUSTED") and hostile:
             self.memo["outcome"] = kind
@@ -141,17 +155,80 @@ class Tutorial:
             self.memo["outcome"] = kind
         elif kind == "CHARGES":
             self.memo.setdefault("charges_at", self.timer)
+        elif kind == "ESCORT_PING" and self.escort_ai in con.world.ais and not self.memo.get("pinged"):
+            self.memo["pinged"] = True  # the alarm drill: sonar reports it, by name
+            con.say(f"ACTIVE SONAR {con.passive.bearing_of(a):03.0f}R, ESCORT PINGING", "CONN, SONAR")
+
+    @staticmethod
+    def _with_stations(steps):
+        """The syllabus as walked round the room: wherever the next drill belongs to another station, the coxswain
+        sends you to take it first, and the drill waits until you have."""
+        import stations  # here rather than at the top: stations -> workstation -> tutorial would go round in a loop
+        from layout import HIGHLIGHTS
+
+        out, at = [], None
+        for st in steps:
+            if st.chapter:
+                at = None  # each drill begins at the conn
+            if "periscope" in st.highlight:  # done at the periscope stand itself: you go there by doing it
+                at = "PERISCOPE"
+                out.append(st)
+                continue
+            need = stations.station_for(st.highlight, HIGHLIGHTS)
+            reading = isinstance(st.goal, str) and "{ACKNOWLEDGE}" in st.goal  # a look and ENTER: no walk for that
+            if need and need != at and not reading:
+                out.append(Step(f"NOW THE {need}. WALK TO IT AND PRESS E, OR USE THE STATIONS RING ON THE ORDER WHEEL.",
+                                f"TAKE THE {need} STATION", lambda t, c, need=need: c.crew.captain_at == need,
+                                chapter=st.chapter, station=need))
+                st = dataclasses.replace(st, chapter="")
+                at = need
+            out.append(st)
+        return out
 
     # ------------------------------------------------------------------ the syllabus
     def _script(self):
         S = Step
         return [
+            # --- the room: fighting the boat from the conn, through the crew ---
+            S("WELCOME ABOARD, CAPTAIN. YOU STAND AT THE CONN AND YOUR CREW MANS THE STATIONS. WASD WALKS, E TAKES "
+              "A STATION OR THE PERISCOPE, {STAND UP} STANDS YOU UP; HOLD THE RIGHT MOUSE BUTTON FOR THE ORDER WHEEL "
+              "(ITS STATIONS RING TAKES YOU STRAIGHT THERE). A STATION'S KEYS PRESSED ANYWHERE ELSE ARE ORDERS TO ITS "
+              "CREW. YOUR ORDER IS ON THE CARD ABOVE WITH THE STATION IT NEEDS, AND THE PART YOU NEED GLOWS. F1 SHOWS "
+              "THE KEY CARD; {SKIP DRILL} SKIPS A DRILL.",
+              "PRESS {ACKNOWLEDGE} (OR CLICK THIS SLIP)", lambda t, c: "ENTER" in c.actions, chapter="THE ROOM"),
+            S("CONN BY ORDERS: FROM HERE YOU FIGHT THE BOAT THROUGH YOUR CREW. HOLD THE RIGHT MOUSE BUTTON FOR THE "
+              "ORDER WHEEL, DRAG TO HELM, THEN COURSE, PICK ONE AND LET GO. THE HELMSMAN ANSWERS AND STEERS IT.",
+              "ORDER A COURSE ON THE ORDER WHEEL",
+              lambda t, c: c.crew.course is not None and abs(angle_diff(c.crew.course, c.world.player.heading)) < 3),
+            S("NOW THE DEPTH, ON THE WHEEL'S DEPTH RING: THE PLANESMAN TAKES HER DOWN.",
+              "ORDER 100 M ON THE ORDER WHEEL",
+              lambda t, c: c.world.player.ordered_depth == 100 and c.crew.worked.get("PLANES", -1) >= t.memo["t0"],
+              setup=lambda t, c: t.memo.update(t0=c.world.time)),
+            S("A HAND ON A CONTROL CANCELS THE STANDING ORDER FOR IT: PUT ON SOME RUDDER YOURSELF ({RUDDER LEFT} OR "
+              "{RUDDER RIGHT}) AND THE HELMSMAN DROPS THE COURSE HE WAS STEERING.", "CANCEL THE COURSE WITH RUDDER",
+              lambda t, c: c.crew.course is None, setup=self._steering),
+            S("THE PLOT TABLE, FORWARD OF THE PERISCOPE, IS WORKED IN PENCIL: YOUR TRACK, BEARING LINES, AND FIRE "
+              "CONTROL'S TARGET IN RED. WALK TO IT.", "WALK TO THE PLOT TABLE",
+              lambda t, c: c.crew.captain_at == "TABLE",
+              setup=self._plotted_merchant),
+            S("THE RED CIRCLE IS THE TARGET; ITS LINE IS WHERE IT WILL BE IN FIVE MINUTES. HEAD IT OFF: ORDER A COURSE "
+              "AHEAD OF IT, NOT AT IT.", "ORDER AN INTERCEPT COURSE", self._intercepting),
+            S("LISTEN WITH YOUR EYES. AN ORANGE LAMP FLASHES OVER A STATION WHEN SOMETHING'S WRONG, AND THE LEGEND AT "
+              "THE CONN SAYS WHAT. A MAN'S REPORT IS CAPTIONED WITH HIS NAME, AND AN ARROW POINTS TO HIM IF HE'S "
+              "BEHIND YOU. WAIT FOR IT, THEN GO TO HIM.", "WHEN THE LAMP FLASHES, GO TO THE MAN REPORTING",
+              lambda t, c: t.memo.get("pinged") and c.crew.captain_at == "SONAR", setup=self._distant_escort),
+            S("RELIEVING A STATION: TAKE FIRE CONTROL. ITS MAN GETS UP AND STANDS ASIDE FOR YOU.",
+              "TAKE OVER FIRE CONTROL", lambda t, c: c.crew.captain_at == "FIRE CONTROL",
+              setup=lambda t, c: _clear(c.world)),
+            S("WORK IT: WIND THE TARGET'S SPEED ON THE TDC WITH ITS CRANK (DRAG IT, OR SCROLL ON ITS ROW).",
+              "WIND TGT SPD ON THE TDC", lambda t, c: c.tdc.values["SPD"] != t.memo["spd"],
+              setup=lambda t, c: t.memo.update(spd=c.tdc.values["SPD"])),
+            S("NOW STAND UP ({STAND UP}). HE SITS BACK DOWN AND CARRIES ON FROM WHERE YOU LEFT IT.",
+              "STAND UP AND HAND IT BACK", lambda t, c: c.crew.captain_at is None),
             # --- station drill: every command ---
-            S("WELCOME ABOARD. THIS DRILL WALKS YOU THROUGH EVERY STATION, THEN LIVE EXERCISES. YOUR CURRENT "
-              "ORDER IS PINNED ON THE SLIP ABOVE; THE PART OF THE STATION YOU NEED GLOWS. F1 SHOWS THE KEY CARD; "
-              "{SKIP DRILL} SKIPS A DRILL.",
-              "PRESS {ACKNOWLEDGE} (OR CLICK THIS SLIP)", lambda t, c: "ENTER" in c.actions, chapter="STATION DRILL"),
-            S("ENGINEERING GAUGES, TOP RIGHT: DEPTH WITH HULL PRESSURE IN PSI (RED PAST 250 M IS CRUSH DEPTH), "
+            S("THE STATION DRILL: EVERY CONTROL ON THE BOAT, STATION BY STATION.",
+              "PRESS {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, chapter="STATION DRILL"),
+            S("THE SHIP'S GAUGES: DEPTH WITH HULL PRESSURE IN PSI (RED PAST 250 M IS CRUSH DEPTH), "
               "BATTERY, SELF NOISE (RED MEANS CAVITATION - ENEMIES HEAR IT), HULL INTEGRITY.",
               "STUDY THE GAUGES - {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, highlight=("gauges",)),
             S("THE ALARM PANEL HAS A LIT TILE FOR EVERY SOUND CUE, LEGEND PRINTED ON IT: ENEMY SONAR, TORPEDO, "
@@ -216,13 +293,15 @@ class Tutorial:
               "SET TGT RNG = ECHO RANGE  ({TDC ROW UP}/{TDC ROW DOWN}, {TDC VALUE UP}/{TDC VALUE DOWN})",
               lambda t, c: abs(c.tdc.get("RNG") * YARD - c.world.player.range_to(t.merchant)) < 400 * YARD,
               highlight=("tdc",)),
-            S("{TMA PAGE} FLIPS THE LEFT OF THE MONITOR TO THE TMA PLOT: TRUE BEARING ACROSS, TIME DOWN. EVERY "
+            S("FIRE CONTROL'S MONITOR IS THE TMA PLOT ({TMA PAGE} FLIPS TO IT ON THE FULL CONSOLE): TRUE BEARING "
+              "ACROSS, TIME DOWN. EVERY "
               "BEARING YOU HOLD WITH THE DIAL, MARK OR PING IS A DOT; THE BRIGHT CURVE IS WHERE THE TDC SAYS THE "
               "TARGET SHOULD HAVE BEEN.", "OPEN THE TMA PLOT  ({TMA PAGE})", lambda t, c: c.crt_page == "TMA",
-              highlight=("waterfall",)),
+              highlight=("tdc", "waterfall")),
             S(lambda c: "TARGET MOTION ANALYSIS: SET TGT SPD AND TGT CRS UNTIL THE CURVE RUNS THROUGH THE DOTS AND THE "
-                        "FIT READS UNDER A DEGREE - {AUTO-SOLVE} AUTO-SOLVES IN TRAINING. THEN {TMA PAGE} BACK TO THE "
-                        f"WATERFALL. INTEL: ABOUT {self.merchant.speed / KNOT:.0f} KNOTS, COURSE ABOUT "
+                        "FIT READS UNDER A DEGREE - {AUTO-SOLVE} AUTO-SOLVES IN TRAINING. THEN BACK TO THE WATERFALL "
+                        "AT SONAR ({TMA PAGE} ON THE FULL CONSOLE). "
+                        f"INTEL: ABOUT {self.merchant.speed / KNOT:.0f} KNOTS, COURSE ABOUT "
                         f"{round(self.merchant.heading / 10) * 10:03.0f}. RE-MARK ({{MARK}}) IF THE TICK HAS DRIFTED.",
               "SET TGT SPD AND TGT CRS, THEN {TMA PAGE}",
               lambda t, c: abs(c.tdc.get("SPD") - t.merchant.speed / KNOT) <= 1.5 and c.crt_page == "SONAR" and
@@ -233,23 +312,25 @@ class Tutorial:
               "18 M OR SHALLOWER.", "PERISCOPE DEPTH  ({PERISCOPE DEPTH}, P.D. BUTTON)",
               lambda t, c: c.world.player.z <= 16,
               setup=self._ensure_merchant, highlight=("depth",), chapter="THE PERISCOPE"),
-            S("UP SCOPE: {RAISE SCOPE} OR THE SCOPE SWITCH. THEN {LOOK} OR LOOK PUTS YOUR EYE TO IT. AT THE "
+            S("UP SCOPE: AT THE PERISCOPE STAND, E RAISES THE SCOPE AND PUTS YOUR EYE TO IT ({RAISE SCOPE} THEN "
+              "{LOOK} ON THE FULL CONSOLE). AT THE "
               "EYEPIECE YOU CANNOT SEE THE STATION - THE STRIP ALONG THE BOTTOM STILL CARRIES THE WARNINGS. ON THE "
               "BEARING TAPE, S MARKS YOUR SONAR DIAL AND T THE TDC'S TARGET; {SCOPE TO SONAR} SWINGS THE SCOPE ONTO "
               "THE SONAR BEARING.",
-              "UP SCOPE ({RAISE SCOPE}) AND LOOK ({LOOK})", lambda t, c: c.looking, highlight=("masts",)),
+              "UP SCOPE ({RAISE SCOPE}) AND LOOK ({LOOK})", lambda t, c: c.looking, highlight=("masts", "periscope")),
             S(lambda c: "TRAIN THE SCOPE: {TRAIN LEFT} / {TRAIN RIGHT} OR DRAG ACROSS THE EYEPIECE. {SCOPE POWER} OR "
                         "THE MOUSE WHEEL SWITCHES TO HIGH POWER (6X). THE MERCHANT BEARS ABOUT "
                         f"{self._merchant_rel(c):03.0f} RELATIVE - PUT HER IN THE WIRES.",
               "MERCHANT IN THE WIRES, HIGH POWER  ({TRAIN LEFT}/{TRAIN RIGHT}, {SCOPE POWER})",
-              self._merchant_in_wires),
+              self._merchant_in_wires, highlight=("periscope",)),
             S("PRESS {MARK}: THE EXACT BEARING AND A RANGEFINDER RANGE (HER KNOWN MAST HEIGHT AGAINST THE GRADUATIONS) "
               "GO STRAIGHT INTO THE TDC - FAR BETTER THAN SONAR. HER BOW TELLS YOU WHICH WAY SHE IS HEADING.",
-              "MARK  ({MARK})", lambda t, c: "SCOPE_MARK" in c.actions and c.scope_fix is not None),
+              "MARK  ({MARK})", lambda t, c: "SCOPE_MARK" in c.actions and c.scope_fix is not None,
+              highlight=("periscope",)),
             S("EVERY SECOND THE SCOPE IS UP YOU CAN BE SEEN. THE EXPOSURE METER ON THE RIGHT PLATE IS THE RISK PER "
-              "MINUTE; SPEED THROWS A FEATHER OF SPRAY. LOOK BRIEFLY, THEN GET IT DOWN: {LOOK} BACK TO THE STATION, "
-              "{RAISE SCOPE} DOWN SCOPE.", "BACK ({LOOK}) AND DOWN SCOPE ({RAISE SCOPE})",
-              lambda t, c: not c.looking and not c.world.player.scope_up, highlight=("masts", "lamps")),
+              "MINUTE; SPEED THROWS A FEATHER OF SPRAY. LOOK BRIEFLY, THEN GET IT DOWN: {LOOK} STEPS BACK FROM THE "
+              "EYEPIECE, {RAISE SCOPE} ORDERS IT DOWN.", "BACK ({LOOK}) AND DOWN SCOPE ({RAISE SCOPE})",
+              lambda t, c: not c.looking and not c.world.player.scope_up, highlight=("periscope",)),
             # --- fire control, one piece at a time ---
             S("FIRE CONTROL, ONE STEP AT A TIME. FIRST READ THE SOLUTION. AT THE FOOT OF THE TDC, GYRO IS THE "
               "COURSE THE FISH WILL RUN AND RUN IS HOW FAR IT SWIMS TO MEET HER; THE LAMP BESIDE THEM IS GREEN WHEN "
@@ -263,12 +344,12 @@ class Tutorial:
               "CHECK TGT SPD AND TGT CRS AGAINST HER",
               lambda t, c: abs(c.tdc.get("SPD") - t.merchant.speed / KNOT) <= 1.5 and
               abs(angle_diff(c.tdc.get("CRS"), t.merchant.heading)) <= 15, highlight=("tdc",),
-              outro="INSTRUCTOR: GOOD. WATCH THE CROSS ON THE SCOPE MOVE AS YOU CHANGE THEM."),
+              outro="COXSWAIN: GOOD. WATCH THE CROSS ON THE SCOPE MOVE AS YOU CHANGE THEM."),
             S("NOW SET THE FISH. SKR ARM IS HOW FAR IT RUNS BEFORE ITS SEEKER WAKES: SHORTER THAN THE RUN, OR IT "
               "WAKES PAST HER, BUT NOT SO SHORT IT CAN LISTEN FOR YOU. RUN DEP: SHALLOW (10 M) FOR SHIPS, DEEP FOR "
               "SUBS UNDER THE LAYER. SET SKR ARM TO ABOUT HALF THE RUN AND RUN DEP TO 10 M.",
               "SET SKR ARM AND RUN DEP", self._fish_set, highlight=("tdc",),
-              outro="INSTRUCTOR: SET. THE SEEKER WILL WAKE CLOSE TO HER."),
+              outro="COXSWAIN: SET. THE SEEKER WILL WAKE CLOSE TO HER."),
             S("FIRE ONE FISH: {FIRE TUBE 1} OR FLIP TUBE 1'S GUARDED SWITCH. (WITH SPREAD AT 0, {FIRE} FIRES ONE "
               "TOO.) A LAUNCH IS LOUD - EVERY ESCORT IN EARSHOT HEARS IT. TUBES RELOAD FROM THE RACKS; IN TRAINING "
               "THE RACKS NEVER RUN DRY.",
@@ -284,7 +365,7 @@ class Tutorial:
               "A MISS. CHECK TGT SPD AND TGT CRS AGAINST THE SCOPE, RE-MARK HER ({MARK}) AND FIRE AGAIN WHEN A TUBE "
               "RELOADS.",
               "SINK THE MERCHANT  ({FIRE}, TUBE SWITCH)", lambda t, c: t.merchant in c.world.sunk,
-              highlight=("tdc", "tubes"), outro="INSTRUCTOR: TARGET DESTROYED. WELL SHOT."),
+              highlight=("tdc", "tubes"), outro="COXSWAIN: TARGET DESTROYED. WELL SHOT."),
             S("SALVOS: SET SPREAD (THE LAST TDC ROW) TO A FEW DEGREES AND {FIRE} FIRES EVERY READY TUBE, FANNED "
               "EITHER SIDE OF THE SOLUTION, SO A SMALL ERROR IN HER SPEED OR COURSE STILL PUTS ONE FISH ON HER. "
               "EACH FISH HAS ITS OWN WIRE: {NEXT FISH} PICKS WHICH ONE YOU STEER, {CUT WIRE} CUTS IT. A SOLUTION "
@@ -321,15 +402,15 @@ class Tutorial:
               lambda t, c: c.world.player.z <= 70 and _kt(c) == 4, setup=lambda t, c: _clear(c.world),
               highlight=("depth", "telegraph")),
             S("DAMAGE CONTROL: THAT PATTERN SPRANG THE BOAT - HYDROPHONES, PLANES AND TUBE 2 ARE OUT. ONE PARTY "
-              "WORKS DOWN THE LIST, TOP FIRST. {DAMAGE BOARD} OPENS THE DAMAGE BOARD: CLICK A LINE TO SEND THE "
-              "PARTY THERE FIRST. JAMMED PLANES CAN'T PULL YOU OUT OF A DIVE - PUT THEM FIRST, THEN {DAMAGE BOARD} "
-              "BACK TO THE WATERFALL.",
+              "WORKS DOWN THE LIST, TOP FIRST. DAMAGE CONTROL'S MONITOR IS THE DAMAGE BOARD ({DAMAGE BOARD} ON THE "
+              "FULL CONSOLE): CLICK A LINE TO SEND THE PARTY THERE FIRST. JAMMED PLANES CAN'T PULL YOU OUT OF A DIVE "
+              "- PUT THEM FIRST, THEN BACK TO THE WATERFALL AT SONAR.",
               "{DAMAGE BOARD}, PLANES FIRST, {DAMAGE BOARD} BACK",
               lambda t, c: "REPAIR_FIRST" in c.actions and c.crt_page == "SONAR" and
               next(iter(c.world.player.damaged), None) == "PLANES",
               setup=lambda t, c: c.world.player.break_systems(["HYDROPHONES", "PLANES", "TUBE 2"]),
-              highlight=("waterfall",),
-              outro="INSTRUCTOR: GOOD. FOR THE EXERCISE THE DAMAGE IS MADE GOOD; ON PATROL HITS BREAK SYSTEMS AT "
+              highlight=("waterfall", "hull"),
+              outro="COXSWAIN: GOOD. FOR THE EXERCISE THE DAMAGE IS MADE GOOD; ON PATROL HITS BREAK SYSTEMS AT "
                     "RANDOM AND THE PARTY TAKES MINUTES OVER EACH."),
             S("TORPEDO IN THE WATER! AN ENEMY SUBMARINE HAS FIRED ON YOU. THE TORPEDO LAMP FLASHES AND ITS TRACE IS "
               "BRIGHT AND NARROW, BEARING MOVING FAST. PUT THE DIAL ON IT: THE PROFILE SHOWS A SHARP HIGH SPIKE.",
@@ -345,8 +426,8 @@ class Tutorial:
               "THEN FIRE. THE SEEKER WILL HOME.",
               "SINK THE SUBMARINE",
               lambda t, c: t.sub in c.world.sunk or t.timer > 360, highlight=("waterfall", "spectrum", "tdc"),
-              outro=lambda t, c: "INSTRUCTOR: SUBMARINE DESTROYED." if t.sub in c.world.sunk
-              else "INSTRUCTOR: EXERCISE TIME. THE TARGET SUB IS BEING RECALLED."),
+              outro=lambda t, c: "COXSWAIN: SUBMARINE DESTROYED." if t.sub in c.world.sunk
+              else "COXSWAIN: EXERCISE TIME. THE TARGET SUB IS BEING RECALLED."),
 
             # --- graduation ---
             S("DRILL COMPLETE: YOU HAVE WORKED EVERY STATION. ON PATROL, CONVOYS ARRIVE IN WAVES WITH ESCORTS "
@@ -376,6 +457,39 @@ class Tutorial:
         return sol is not None and 300 <= arm <= sol.run / YARD - 300 and dep <= 15
 
     # ------------------------------------------------------------------ scenario setups
+    def _steering(self, t, con):
+        if con.crew.course is None:  # a standing course to cancel
+            con.crew.order("COURSE", round(con.world.player.heading + 40) % 360)
+
+    def _plotted_merchant(self, t, con):
+        """A merchant, with fire control's solution on it already: the red target on the plot."""
+        self._spawn_merchant(t, con)
+        p, m = con.world.player, self.merchant
+        con.tdc.set("BRG", fix(p, m).rel_brg)
+        con.tdc.set("RNG", p.range_to(m) / YARD)
+        con.tdc.set("SPD", m.speed / KNOT)
+        con.tdc.set("CRS", m.heading)
+
+    def _intercepting(self, t, con):
+        """An ordered course within 40 degrees of where the merchant will be in five minutes."""
+        p, m = con.world.player, self.merchant
+        if con.crew.course is None:
+            return False
+        vx, vy = m.velocity()
+        ahead = Vessel(m.x + vx * 300, m.y + vy * 300, 0, 0)
+        return abs(angle_diff(con.crew.course, fix(p, ahead).true_brg)) < 40
+
+    def _distant_escort(self, t, con):
+        """An escort far off, searching with its sonar but carrying no charges: the drill's alarm."""
+        _clear(con.world)
+        w = con.world
+        self.escort = _spawn(w, 200.0, 7000.0, w.player.heading + 90, 6 * KNOT)
+        self.escort_ai = EscortAI(self.escort, self.escort.heading, charges=0, decoys=0, aggression=0.2,
+                                  detect_radius=1500.0)
+        self.escort_ai.alarm = True
+        self.escort_ai._mark(w, 300.0)
+        w.ais.append(self.escort_ai)
+
     def _spawn_merchant(self, t, con):
         _clear(con.world)
         rel = 45.0
@@ -407,11 +521,11 @@ class Tutorial:
 
     def _escort_outro(self, t, con):
         if self.escort_ai.state == PATROL:
-            return "INSTRUCTOR: THE ESCORT HAS LOST YOU. THE LAYER IS YOUR FRIEND."
+            return "COXSWAIN: THE ESCORT HAS LOST YOU. THE LAYER IS YOUR FRIEND."
         if "charges_at" in self.memo:
-            return (f"INSTRUCTOR: YOU RODE OUT A PATTERN - HULL {con.world.hull:.0f}%. CHARGES ARE SET TO A GUESSED "
+            return (f"COXSWAIN: YOU RODE OUT A PATTERN - HULL {con.world.hull:.0f}%. CHARGES ARE SET TO A GUESSED "
                     "DEPTH: DEEP AND MOVING IS HARD TO HIT. EXERCISE ENDED.")
-        return "INSTRUCTOR: EXERCISE TIME. THE ESCORT IS BEING RECALLED."
+        return "COXSWAIN: EXERCISE TIME. THE ESCORT IS BEING RECALLED."
 
     def _spawn_sub_and_fire(self, t, con):
         w = con.world
@@ -428,6 +542,6 @@ class Tutorial:
             con.report(kind, a, b)
 
     def _torpedo_outro(self, t, con):
-        return {"DECOYED": "INSTRUCTOR: IT TOOK THE DECOY. TEXTBOOK.",
-                "PLAYER_HIT": "INSTRUCTOR: YOU WERE HIT - TRAINING WARHEAD. IN COMBAT THAT COSTS 50-90% OF THE HULL.",
-                }.get(t.memo.get("outcome"), "INSTRUCTOR: IT RAN OUT OF FUEL. YOU OUTRAN IT.")
+        return {"DECOYED": "COXSWAIN: IT TOOK THE DECOY. TEXTBOOK.",
+                "PLAYER_HIT": "COXSWAIN: YOU WERE HIT - TRAINING WARHEAD. IN COMBAT THAT COSTS 50-90% OF THE HULL.",
+                }.get(t.memo.get("outcome"), "COXSWAIN: IT RAN OUT OF FUEL. YOU OUTRAN IT.")

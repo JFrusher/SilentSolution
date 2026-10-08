@@ -13,18 +13,18 @@ but while the mast is up, the sea can see you too.
 [![NumPy](https://img.shields.io/badge/NumPy-procedural-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![uv](https://img.shields.io/badge/run%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
 ![Version](https://img.shields.io/badge/version-0.4.0-ffbe56)
-![Asset files](https://img.shields.io/badge/asset%20files-0-84d670)
+![Assets in git](https://img.shields.io/badge/assets%20in%20git-0-84d670)
 ![Platform](https://img.shields.io/badge/build-Windows%20.exe-0078D6?logo=windows&logoColor=white)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
 [![checks](https://github.com/JFrusher/SilentSolution/actions/workflows/checks.yml/badge.svg)](https://github.com/JFrusher/SilentSolution/actions/workflows/checks.yml)
 
-[Quick start](#-quick-start) · [The station](#-the-station) · [How an attack works](#-how-an-attack-works) ·
+[The control room](#-the-control-room) · [Quick start](#-quick-start) · [The station](#-the-station) · [How an attack works](#-how-an-attack-works) ·
 [Game modes](#-game-modes) · [Replay](#-after-action-replay) · [Controls](#-controls) · [Under the hood](#-under-the-hood) ·
 [Development](#-development)
 
-<img src="docs/images/gif_attack.gif" width="960" alt="A full attack on the station: slanting contact traces, the dial locking and tracking, a ping for range, a two-fish spread on the wire, homing, detonation and sinking">
+<img src="docs/images/gif_room.gif" width="960" alt="The 3D control room of an Oberon-class boat: walking past the crew at their stations, pressing E at sonar, the sonarman stepping aside and the camera settling into his panel">
 
-<sub>A whole attack in fifteen seconds: hear her, lock on, range her, solve, fire a spread, steer it home. Real game, scripted run, time-lapsed where it says so.</sub>
+<sub>Walk the control room, take a station, fight the boat. Real game, scripted run.</sub>
 
 </div>
 
@@ -56,6 +56,45 @@ roll dice every second your periscope is up. **You only ever see that world thro
 | 🎖️ **A campaign.** Six patrols with briefings and objectives, a debrief after each, seven ranks, refits, a career save and a high-score table. | ♿ **Accessible by design.** Every audio cue also has a lamp, a log line or a picture. Keys can be rebound. Large text and colour-blind lamps are available. |
 | 🗺️ **After-action replay.** Every patrol recorded and replayed in 2.5D on a plotting table you can orbit, scrub and step event by event: the whole truth, depth included. | 📐 **One 3D backbone.** Every bearing, range and depth on every display comes from one geometry core, cross-checked by tests through a turn. |
 
+## ⚓ The control room
+
+You start each patrol on your feet at the conn of an Oberon-class boat, with seven crewmen on watch. Walk to any
+station and press <kbd>E</kbd>: its man stands aside and the view settles into his panel. Press a station's keys
+anywhere else and they are orders to its crew, or hold the right mouse button for the order wheel. Everything is
+built in code at start-up: the room, the consoles and the crew, written to `.glb` files on first run.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/room.png" alt="The control room seen from aft: the periscope well, consoles down both sides, crewmen at sonar, fire control and damage control"><br><sub><b>The room.</b> Every station screen is live while you walk. The crew breathe, shift their weight, work their controls and look round when they report.</sub></td>
+    <td width="50%"><img src="docs/images/gif_training.gif" alt="The coxswain at the conn turns from the camera and points forward to the helm while the training card says take the helm and planes station"><br><sub><b>Training.</b> The coxswain takes you round every station. He turns and points to the next one, and the card says what to do there.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/gif_captions.gif" alt="An escort pings: captions name the sonarman and point to him, the lamp over sonar flashes, the camera turns to him"><br><sub><b>Captions for every voice.</b> Each report is captioned with who said it and an arrow to him. Sounds can be captioned too (a setting), and an orange lamp flashes over the station. You can play the whole game deaf.</sub></td>
+    <td width="50%"><img src="docs/images/chart.png" alt="The attack plot: tracing paper over a chart of the Iceland-Faroe ridge, two legs of own track, bearing lines, a report and the TDC's target in red"><br><sub><b>The plot table.</b> Pencil on tracing paper over a hand-entered chart of the Iceland–Faroes gap, soundings in fathoms. Own track, bearings, reports, and fire control's target in red.</sub></td>
+  </tr>
+</table>
+
+**The stations.** Each one is laid out for its own job: 2.5D chrome-bezel gauges, guarded toggles, jewelled lamps
+and handwheels, around the original green CRT pages. Hover over a control to see its key.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/st_sonar.png" alt="Sonar station: the waterfall and acoustic profile CRT, a self-noise gauge, enemy sonar and torpedo lamps, the active ping button"><br><sub><b>Sonar.</b> Waterfall, profiler and log; self-noise; the ping.</sub></td>
+    <td width="50%"><img src="docs/images/st_fire.png" alt="Fire control: a round tactical PPI, the torpedo data computer with a crank per row, the TMA page, tube switches and reload timers"><br><sub><b>Fire control.</b> Tactical PPI, the TDC with a crank on every row (drag it or scroll), TMA, tubes.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/st_helm.png" alt="Helm and planes: depth and self-noise gauges, warning lamps, the engine order telegraph, rudder indicator, depth-order dial"><br><sub><b>Helm and planes.</b> Telegraph, rudder, depth order, cavitation and broach lamps.</sub></td>
+    <td width="50%"><img src="docs/images/st_ballast.png" alt="Ballast control: battery and depth gauges, scope and snort switches, the emergency blow button, three H.P. air gauges"><br><sub><b>Ballast control.</b> Masts, emergency blow, and three H.P. air groups.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/st_radio.png" alt="Radio: the teleprinter with the patrol orders typed on green-barred paper"><br><sub><b>Radio.</b> The teleprinter: orders from Flag, reports, damage traffic.</sub></td>
+    <td width="50%"><img src="docs/images/st_damage.png" alt="Damage control: the state board CRT listing systems, a hull integrity gauge, leak and hull stress lamps"><br><sub><b>Damage control.</b> The state board and the hull gauge.</sub></td>
+  </tr>
+</table>
+
+<p align="center"><img src="docs/images/gif_blow.gif" width="640" alt="Ballast control at 120 m: the BLOW button lit, the three H.P. air gauges falling as the boat rises"><br>
+<sub><b>H.P. air is finite.</b> A blow drains the three groups (more the deeper you are), and every torpedo fired costs some. Only snorkelling charges them again.</sub></p>
+
 ## ⚡ Quick start
 
 ```bash
@@ -64,12 +103,12 @@ cd SilentSolution
 uv run src/main.py
 ```
 
-[uv](https://docs.astral.sh/uv/) installs Python 3.11+ and the two dependencies (`pygame-ce`, `numpy`) on first run.
+[uv](https://docs.astral.sh/uv/) installs Python 3.11+ and the three dependencies (`pygame-ce`, `numpy`, `moderngl`) on first run.
 Without uv: `pip install -r requirements.txt`, then `python src/main.py`.
 
 > [!TIP]
-> New? Press <kbd>T</kbd> on the title screen. **Training** has four chapters that walk you through every station
-> with a live merchant, an escort attack and an incoming torpedo. In game, <kbd>F1</kbd> shows the key card and
+> New? Press <kbd>T</kbd> on the title screen. **Training** starts with the coxswain's First Watch round every station,
+> then opens five drills: the room, the station controls, sonar and fire control, the periscope, and live exercises. In game, <kbd>F1</kbd> shows the key card and
 > <kbd>F6</kbd> skips a drill.
 
 <details>
@@ -120,6 +159,9 @@ The executable needs no Python install. If it ever crashes, the traceback is app
 
 ## 🎯 How an attack works
 
+<p align="center"><img src="docs/images/gif_attack.gif" width="960" alt="A full attack on the station: slanting contact traces, the dial locking and tracking, a ping for range, a two-fish spread on the wire, homing, detonation and sinking"><br>
+<sub>A whole attack in fifteen seconds: hear her, lock on, range her, solve, fire a spread, steer it home. Real game, scripted run, time-lapsed where it says so.</sub></p>
+
 ```mermaid
 flowchart LR
     A([Detect]) --> B([Classify]) --> C([Bearing<br/>into the TDC]) --> D([Range]) --> E([Solve<br/>course and speed]) --> F([Fire]) --> G([Guide]) --> H([Evade])
@@ -156,7 +198,7 @@ flowchart LR
 
 <table>
 <tr><th>Mode</th><th>What you get</th></tr>
-<tr><td><b>Training</b> <kbd>T</kbd></td><td>Four chapters, each of which can be started on its own: <b>Station drill</b> · <b>Sonar and fire control</b> · <b>The periscope</b> · <b>Live exercises</b> (weather, escort attack, damage control, torpedo evasion, sub hunt). Training warheads leave you shaken, never sunk.</td></tr>
+<tr><td><b>Training</b> <kbd>T</kbd></td><td>Six chapters. <b>First watch</b> runs the whole syllabus with the coxswain; once it's done, each drill can be started on its own: <b>The room</b> · <b>Station drill</b> · <b>Sonar and fire control</b> · <b>The periscope</b> · <b>Live exercises</b> (weather, escort attack, damage control, torpedo evasion, sub hunt). Training warheads leave you shaken, never sunk.</td></tr>
 <tr><td><b>Campaign</b> <kbd>C</kbd></td><td>Six patrols, from <i>Shakedown</i> to <i>Last Patrol</i>, with briefings, tonnage objectives (plus a submarine or an escort to sink on some), harder rules and worse weather as you go. Return to base with <kbd>Enter</kbd> once the objectives are met. Rise from Sub-Lieutenant to Rear Admiral and pick refits along the way.</td></tr>
 <tr><td><b>Endless</b> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>Wave after wave of convoys, each harder than the last, with a resupply from the tender between waves. Your best runs go on the high-score table.</td></tr>
 </table>
@@ -462,6 +504,7 @@ runs.
 uv run checks.py                          # every suite headless (SDL dummy drivers), then ruff; CI runs it too
 uv run --with pillow docs/shots.py        # regenerate the README screenshots from live game states
 uv run --with pillow docs/gifs.py         # film the README GIFs (scripted runs, time-lapse, Dymo captions)
+xvfb-run -a uv run --with pillow docs/room.py  # the control room, stations, training, captions, chart, H.P. air
 uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 ```
 

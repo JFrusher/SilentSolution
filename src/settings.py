@@ -17,12 +17,14 @@ KEYS = {  # action -> pygame key name
     "SLOWER": "z", "FASTER": "x", "RUDDER LEFT": "left", "RUDDER RIGHT": "right", "RUDDER AMIDSHIPS": "c",
     "NOISEMAKER": "n", "SCOPE RANGE": "t", "WIRE LEFT": "[", "WIRE RIGHT": "]", "NEXT FISH": "\\", "CUT WIRE": "l",
     "TMA PAGE": "f2", "DAMAGE BOARD": "f5", "DEBUG": "f3", "ACKNOWLEDGE": "return", "SKIP DRILL": "f6",
-    "BEARING MODE": "f7", "WATERFALL SCALE": "f8", "SCOPE TO SONAR": "o",
+    "BEARING MODE": "f7", "WATERFALL SCALE": "f8", "SCOPE TO SONAR": "o", "STAND UP": "r",
 }
 RESERVED = ("escape", "f1", "p")  # quit / back, help card, pause
 DEFAULTS = dict(volume=dict(MASTER=0.8, SONAR=1.0, EFFECTS=1.0, AMBIENCE=1.0), mouse=1.0, large_text=False,
-                colorblind=False, true_bearings=True, keys=KEYS)
+                colorblind=False, sound_captions=True, caption_scale=1.0, true_bearings=True, trained=False,
+                keys=KEYS)
 SETTINGS = copy.deepcopy(DEFAULTS)
+CAPTION_SIZES = {1.0: "SMALL", 1.3: "LARGE", 1.7: "HUGE"}  # caption_scale -> its name
 
 
 def reset():
@@ -48,6 +50,8 @@ def load(path=PATH):
             SETTINGS[name] = value if isinstance(value, bool) else cur
         elif isinstance(cur, float) and isinstance(value, (int, float)):
             SETTINGS[name] = float(value)
+    if SETTINGS["caption_scale"] not in CAPTION_SIZES:  # a hand-edited file: only the sizes on offer
+        SETTINGS["caption_scale"] = DEFAULTS["caption_scale"]
 
 
 def save(path=PATH):
@@ -123,7 +127,9 @@ class SettingsMenu:
 
     def __init__(self):
         self.rows = [*(("VOLUME", c) for c in DEFAULTS["volume"]), ("MOUSE", None), ("LARGE TEXT", None),
-                     ("COLOUR-BLIND LAMPS", None), ("TRUE BEARINGS", None), *(("KEY", a) for a in KEYS),
+                     ("COLOUR-BLIND LAMPS", None), ("SOUND CAPTIONS", None), ("CAPTION SIZE", None),
+                     ("TRUE BEARINGS", None),
+                     *(("KEY", a) for a in KEYS),
                      ("RESET DEFAULTS", None),
                      ("BACK", None)]
         self.sel = self.top = 0
@@ -143,6 +149,10 @@ class SettingsMenu:
             return kind, None, "ON" if SETTINGS["large_text"] else "OFF"
         if kind == "COLOUR-BLIND LAMPS":
             return kind, None, "ON" if SETTINGS["colorblind"] else "OFF"
+        if kind == "CAPTION SIZE":
+            return kind, None, CAPTION_SIZES[SETTINGS["caption_scale"]]
+        if kind == "SOUND CAPTIONS":
+            return kind, None, "ON" if SETTINGS["sound_captions"] else "OFF"
         if kind == "TRUE BEARINGS":
             return kind, None, "ON (NORTH-STABILISED)" if SETTINGS["true_bearings"] else "OFF (SHIP'S HEAD)"
         if kind == "KEY":
@@ -160,6 +170,11 @@ class SettingsMenu:
             SETTINGS["large_text"] = not SETTINGS["large_text"]
         elif kind == "COLOUR-BLIND LAMPS":
             SETTINGS["colorblind"] = not SETTINGS["colorblind"]
+        elif kind == "CAPTION SIZE":
+            sizes = list(CAPTION_SIZES)
+            SETTINGS["caption_scale"] = sizes[(sizes.index(SETTINGS["caption_scale"]) + d) % len(sizes)]
+        elif kind == "SOUND CAPTIONS":
+            SETTINGS["sound_captions"] = not SETTINGS["sound_captions"]
         elif kind == "TRUE BEARINGS":
             SETTINGS["true_bearings"] = not SETTINGS["true_bearings"]
 
@@ -172,7 +187,9 @@ class SettingsMenu:
         if kind == "KEY":
             self.waiting, self.note = True, "PRESS THE NEW KEY - ESC CANCELS"
         elif kind == "RESET DEFAULTS":
+            trained = SETTINGS["trained"]  # progress, not a preference: restoring defaults keeps it
             reset()
+            SETTINGS["trained"] = trained
             self.note = "DEFAULTS RESTORED"
         elif kind == "BACK":
             save()
@@ -241,6 +258,11 @@ if __name__ == "__main__":  # self-check: load/save round trip, rebinding swaps,
     assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
     assert keyed("PRESS {FIRE}, THEN {SLOWER} - {NOT AN ACTION}") == "PRESS SPACE, THEN Z - {NOT AN ACTION}"
     assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
+    SETTINGS["trained"] = True
+    menu = SettingsMenu()
+    menu.sel = menu.rows.index(("RESET DEFAULTS", None))
+    menu._activate()
+    assert SETTINGS["keys"] == DEFAULTS["keys"] and SETTINGS["trained"], "defaults restored, First Watch kept"
     tmp.write_text("not json")
     load(tmp)
     assert SETTINGS == DEFAULTS
