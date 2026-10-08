@@ -65,8 +65,8 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
     "nmkr": NMKR_BTN.inflate(10, 10),
     "ping": PING_BTN.inflate(10, 10),
     "lamps": pygame.Rect(796, 492, 114, 206),
-    "masts": pygame.Rect(416, 492, 228, 96),
-    "periscope": pygame.Rect(416, 492, 228, 96),  # the full console rings the mast levers; the room, the scope
+    "masts": [(SCOPE_LEVER, 24), (SNORT_LEVER, 24)],  # the two mast levers, and nothing between them
+    "periscope": [(SCOPE_LEVER, 24), (SNORT_LEVER, 24)],  # the full console rings the mast levers; the room, the scope
 }
 
 # periscope screen (look mode): the eyepiece and the instruments you can glimpse around it

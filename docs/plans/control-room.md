@@ -147,6 +147,21 @@ Each milestone ships with its tests; the golden run is regenerated only where pl
    - The green screens are unchanged, each under a plate naming its job. The panels carry no key hints: hover over a
      control to see its keys, or press F1.
 
+10. **The rest of the room** (built)
+    - Fire control's TDC has a drum counter and a setting crank per value (drag the crank or scroll its row); the PPI
+      sits round behind glass in a bezel; the radio's teleprinter is a real machine with a platen and type head.
+    - Captions fade, come in three sizes (CAPTION SIZE), and point the way to a speaker out of view.
+    - H.P. air: three groups, drawn by the blow (harder when deep) and by every torpedo's impulse, recharged by the
+      compressors only on the snorkel; three white gauges at ballast.
+    - The crew work their controls: a hand out to the switches when an order is carried out, the helm wheels turning
+      with the rudder and the planes, and a relieved man getting up and stepping aside.
+    - The plot table's chart is the Iceland-Faroes gap: real latitude and longitude, soundings in fathoms off the
+      ridge, the 1965 variation on the rose, a scale in cables and nautical miles.
+    - Training: **First Watch**, led by the coxswain at the conn (he turns and points to the station he sends you
+      to), walks the whole syllabus round the room, and a drill waits until you've taken its station. The station
+      drills open for practice once it's done.
+    - The models aren't kept in git: built when missing (and rebuilt when the generator's version moves on).
+
 ## 6. Risks
 
 - **Drawing cost.** Several live screens plus the 3D frame. Plan: screens out of view update at 10 Hz and are drawn smaller; measure before optimising.

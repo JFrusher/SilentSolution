@@ -434,13 +434,15 @@ class Workstation:
     def _crt_chapters(self, s, crt):
         cx = s.get_width() // 2
         crt.text(s, "TRAINING", (cx, 40), PHOSPHOR, huge=True, center=True)
-        crt.text(s, f"PICK A CHAPTER. EACH STANDS ON ITS OWN; {keylabel('SKIP DRILL')} SKIPS A DRILL INSIDE ONE.",
+        crt.text(s, f"START WITH THE FIRST WATCH; THE DRILLS OPEN AFTER IT. {keylabel('SKIP DRILL')} SKIPS A DRILL.",
                  (cx, 76), DIM, small=True, center=True)
         for i, (name, blurb) in enumerate(CHAPTERS.items()):
-            box = pygame.Rect(70, 100 + i * 56, 440, 48)
-            crt.frame(s, box, color=PHOSPHOR)
-            crt.text(s, f"[{i + 1}]  {name}", (box.x + 16, box.y + 6), PHOSPHOR, big=True)
-            crt.text(s, blurb, (box.x + 16, box.y + 30), DIM, small=True)
+            locked = i > 0 and not SETTINGS["trained"]
+            box = pygame.Rect(70, 96 + i * 46, 440, 40)
+            crt.frame(s, box, color=DIM if locked else PHOSPHOR)
+            crt.text(s, f"[{i + 1}]  {name}", (box.x + 16, box.y + 4), DIM if locked else PHOSPHOR, big=True)
+            crt.text(s, "LOCKED: FINISH THE FIRST WATCH" if locked else blurb, (box.x + 16, box.y + 25), DIM,
+                     small=True)
             self.buttons.append((box.move(CRT_RECT.topleft), i))
         self._crt_button(s, crt, (220, 336, 140, 26), "[ESC] TITLE", "BACK", DIM)
 
@@ -912,11 +914,12 @@ class Workstation:
         pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 160)
         color = (255, int(150 + 90 * pulse), 40)
         for name in tut.step.highlight:
-            shape = HIGHLIGHTS[name]
-            if isinstance(shape, pygame.Rect):
-                pygame.draw.rect(f, color, shape, 3, border_radius=8)
-            else:
-                pygame.draw.circle(f, color, shape[0], shape[1], 3)
+            shapes = HIGHLIGHTS[name]
+            for shape in shapes if isinstance(shapes, list) else [shapes]:
+                if isinstance(shape, pygame.Rect):
+                    pygame.draw.rect(f, color, shape, 3, border_radius=8)
+                else:
+                    pygame.draw.circle(f, color, shape[0], shape[1], 3)
         slip = ORDER_SLIP
         pygame.draw.rect(f, (250, 246, 226), slip)
         pygame.draw.rect(f, art.INK_RED, slip, 2)

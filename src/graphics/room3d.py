@@ -11,7 +11,16 @@ import pygame
 import control_room as cr
 from graphics import console_art as art
 from graphics import gltf
-from graphics.models import ASSETS, CREW_FILES, HELM_SEATS, SEAT_OUT, STATION_FILES, WHEEL_ANGLES, build_all
+from graphics.models import (
+    ASSETS,
+    COXSWAIN_FILE,
+    CREW_FILES,
+    HELM_SEATS,
+    SEAT_OUT,
+    STATION_FILES,
+    WHEEL_ANGLES,
+    build_all,
+)
 from layout import H, W
 from sim import KNOT
 
@@ -19,6 +28,7 @@ LAMPS = [(0.0, 2.28, z) for z in (-4.2, -1.9, 0.4, 2.7, 4.6)]
 LAMP_COLOUR = (1.15, 0.9, 0.62)
 REACH_TIME = 0.9  # s a crewman's hand takes out to his switches and back
 STEP_TIME = 0.8   # s a crewman takes to get up and stand aside (or sit back down)
+COXSWAIN_AT = (0.95, 0.0, 1.35)  # where the coxswain stands in training: aft of the periscope rail, to starboard
 SCREEN_GLOW = (0.35, 0.95, 0.55)  # the sonar CRT lights its corner
 ALERT_COLOUR = (1.0, 0.42, 0.06)  # orange alarm lenses
 FOG = (0.02, 0.024, 0.026)
@@ -710,6 +720,7 @@ class RoomRenderer:
         self.panels = []  # (vertex array, texture, normal, glow, name)
         self.crew = {}    # crewman -> (seated model, its place, standing model or None, its place)
         self.stepping = {}  # crewman -> (stood aside?, when he last got up or sat down): his step aside, animated
+        self.coxswain = Model(self.ctx, self.model, ASSETS / COXSWAIN_FILE)
         for key, (sat, stood) in crew_places().items():
             seated = Model(self.ctx, self.model, ASSETS / CREW_FILES[key])
             standing = Model(self.ctx, self.model, ASSETS / CREW_FILES[key].replace("seated", "standing")) \
@@ -753,12 +764,13 @@ class RoomRenderer:
         return next(p[1] for p in self.panels if p[4] == name)
 
     def render(self, pose, screens=None, plot_surf=None, legend_surf=None, alert=0.0, aside=(), t=0.0, speaking=None,
-               working=None, wheels=(0.0, 0.0)):
+               working=None, wheels=(0.0, 0.0), coxswain=None):
         """Draw the room from `pose`. screens: fresh station canvases by name (the rest keep their last picture);
         plot_surf: the plot table, when it has changed; legend_surf: the alarm legend; alert: the orange lamps, 0..1;
         aside: stations whose crewman has stood aside for the captain; t: seconds, for the crew's idle life;
         speaking: {crewman: seconds since his last call}, so he looks round at you; working: {crewman: seconds since
-        he put his hand to his controls}; wheels: how far the helmsman's and planesman's wheels are turned, deg."""
+        he put his hand to his controls}; wheels: how far the helmsman's and planesman's wheels are turned, deg;
+        coxswain: in training, the station he's sending you to ("" for none); None when he isn't aboard."""
         for name, surf in (screens or {}).items():
             self.upload(self.texture(name), surf)
         if legend_surf is not None:
@@ -813,6 +825,14 @@ class RoomRenderer:
             pivot = model.parts["head"][0]
             age = (speaking or {}).get(key)
             model.render(self.model, place, {"head": head_turn(place, pivot, pose.pos, t, phase, age)}, arms)
+        if coxswain is not None:  # he turns to the station he's sending you to and points; otherwise he faces you
+            base = np.array(COXSWAIN_AT)
+            goal = crew_places()[coxswain][0][:3, 3] if coxswain else pose.pos
+            face = np.array([goal[0] - base[0], 0.0, goal[2] - base[2]])
+            place = standing_at(base, face / max(np.linalg.norm(face), 1e-6))
+            pivot = self.coxswain.parts["head"][0]
+            turn = head_turn(place, pivot, pose.pos, t, 0.7, (speaking or {}).get("COXSWAIN"))
+            self.coxswain.render(self.model, place, {"head": turn}, 1 if coxswain else 0)
         for vao, tex, n, glow, _ in self.panels:
             tex.use(0)
             self.flat["tex"].value = 0

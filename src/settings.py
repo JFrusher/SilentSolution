@@ -21,7 +21,8 @@ KEYS = {  # action -> pygame key name
 }
 RESERVED = ("escape", "f1", "p")  # quit / back, help card, pause
 DEFAULTS = dict(volume=dict(MASTER=0.8, SONAR=1.0, EFFECTS=1.0, AMBIENCE=1.0), mouse=1.0, large_text=False,
-                colorblind=False, sound_captions=True, caption_scale=1.0, true_bearings=True, keys=KEYS)
+                colorblind=False, sound_captions=True, caption_scale=1.0, true_bearings=True, trained=False,
+                keys=KEYS)
 SETTINGS = copy.deepcopy(DEFAULTS)
 CAPTION_SIZES = {1.0: "SMALL", 1.3: "LARGE", 1.7: "HUGE"}  # caption_scale -> its name
 

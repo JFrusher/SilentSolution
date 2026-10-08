@@ -187,10 +187,11 @@ from layout import HIGHLIGHTS  # noqa: E402
 from tutorial import TRAINING, Tutorial  # noqa: E402
 
 con = Console("TRAINING", app.audio, TRAINING)
-Tutorial(con, 1)  # SONAR AND FIRE CONTROL: the waterfall drill
+Tutorial(con, 2)  # SONAR AND FIRE CONTROL: the coxswain sends you to sonar, then the waterfall drill
 scene = main.Patrol(app, con)
 assert scene.on_foot, "training starts on your feet at the conn too"
-assert stations.station_for(con.tutorial.step.highlight, HIGHLIGHTS) == "SONAR"
+assert con.tutorial.step.station == "SONAR", "first, take the sonar station"
+assert stations.station_for(con.tutorial.steps[con.tutorial.i + 1].highlight, HIGHLIGHTS) == "SONAR"
 assert stations.station_for(("tdc", "waterfall"), HIGHLIGHTS) == "FIRE CONTROL"
 assert stations.station_for(("waterfall", "hull"), HIGHLIGHTS) == "DAMAGE CONTROL"
 scene.go("SONAR")

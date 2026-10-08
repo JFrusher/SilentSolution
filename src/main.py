@@ -7,6 +7,7 @@ import traceback
 from collections import deque
 from pathlib import Path
 
+import numpy as np
 import pygame
 
 import campaign
@@ -18,7 +19,7 @@ import stations
 from audio import AudioSynthesizer
 from console import Console
 from graphics import console_art as art
-from graphics.room3d import RoomRenderer, crew_places, legend_art, plot_art
+from graphics.room3d import COXSWAIN_AT, RoomRenderer, crew_places, legend_art, plot_art
 from graphics.tabletop import ReplayView
 from layout import CRT_RECT, HIGHLIGHTS, STRIP, H, W
 from orders_menu import OrderWheel
@@ -152,6 +153,8 @@ class Chapters(Scene):
             choice = "BACK" if e.key == pygame.K_ESCAPE else e.key - pygame.K_1
         if choice == "BACK":
             return Title(app)
+        if isinstance(choice, int) and 0 < choice < len(CHAPTERS) and not settings.SETTINGS["trained"]:
+            return None  # the station drills open once the first watch is done
         if isinstance(choice, int) and 0 <= choice < len(CHAPTERS):
             con = Console("TRAINING", app.audio, TRAINING)
             Tutorial(con, choice)
@@ -280,7 +283,7 @@ def voice(who):
     who = who.removeprefix("CONN, ").removesuffix(", AYE")
     who = {"CHIEF": "BALLAST CONTROL", "MANEUVERING": "HELM"}.get(who, who)
     return who if who in ("SONAR", "FIRE CONTROL", "RADIO", "BALLAST CONTROL", "DAMAGE CONTROL", "HELM",
-                          "PLANES") else None
+                          "PLANES", "COXSWAIN") else None
 
 
 def captions(screen, lines, bottom):
@@ -314,6 +317,7 @@ def captions(screen, lines, bottom):
 
 
 CREW_AT = {k: sat[:3, 3] + (0.0, 1.2, 0.0) for k, (sat, _) in crew_places().items()}  # each watchkeeper's head
+CREW_AT["COXSWAIN"] = np.array(COXSWAIN_AT) + (0.0, 1.7, 0.0)
 HALF_VIEW = math.degrees(math.atan(math.tan(math.radians(cr.FOVY / 2)) * W / H)) - 4  # just inside the screen edge
 
 
@@ -432,8 +436,10 @@ class OnFoot:
         working = {k: w.time - at for k, at in con.crew.worked.items() if w.time - at < 1.0}
         p = w.player
         wheels = (p.rudder * 1.5, max(-30.0, min(30.0, (p.ordered_depth - p.z) * 1.5)))  # helm; planes diving or rising
+        tut = con.tutorial
+        coxswain = tut.step.station if tut and not tut.finished else None  # in training he's at the conn
         screen.blit(app.room().render(self.room.pose, screens, plot, legend_art(lamps), alert, aside, now / 1000,
-                                      speaking, working, wheels), (0, 0))
+                                      speaking, working, wheels, coxswain), (0, 0))
         if self.fade:
             dark = pygame.Surface((W, H))
             dark.set_alpha(int(255 * self.fade / 0.35))

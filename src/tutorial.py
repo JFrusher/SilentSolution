@@ -1,10 +1,12 @@
 """Training patrol: a scripted walk through every station, then live drills against each threat.
 Runs on top of an ordinary Console. It scripts the world (it may read ground truth to grade the trainee)
 and only talks to the trainee through the console: teleprinter, order slip, highlighted controls."""
+import dataclasses
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import settings
 from ai import PATROL, EscortAI, SubmarineAI
 from geometry import fix
 from settings import keyed
@@ -14,7 +16,8 @@ from tuning import DIFFICULTY
 # Cadet rules with a working battery (for the snorkel drill) and a homing enemy fish (for the decoy drill)
 TRAINING = dict(DIFFICULTY["CADET"], battery=True, enemy_torp_kt=35, enemy_seeker_yd=800, beam_width=2.0)
 HULL_FLOOR = 25.0  # training warheads: shaken, never sunk
-CHAPTERS = {  # chapter -> what it covers; each starts at the step tagged with its name
+CHAPTERS = {  # chapter -> what it covers; the first watch runs the lot, each drill starts at the step tagged with it
+    "FIRST WATCH": "THE COXSWAIN TAKES YOU ROUND EVERY STATION, THEN A LIVE ATTACK",
     "STATION DRILL": "EVERY CONTROL: TELEGRAPH, HELM, DIVING, BLOW, PAGES",
     "SONAR AND FIRE CONTROL": "WATERFALL, PROFILE, MARK, PING, TDC, TMA PLOT",
     "THE PERISCOPE": "MASTS, EYEPIECE, MARKS, BEING SEEN, SNORKEL, A LIVE SHOT",
@@ -31,6 +34,7 @@ class Step:
     highlight: tuple = ()          # workstation parts to ring
     outro: str | Callable = ""     # printed on completion
     chapter: str = ""              # first step of this chapter
+    station: str = ""              # a step that sends you to take this station
 
 
 def _spawn(world, rel_brg, rng_m, course, speed, **kw):
@@ -69,9 +73,15 @@ class Tutorial:
         o.rain = o.front = 0.0
         o.timer = 1e9  # the instructor orders the weather
         con.teletype.cps = 70.0
-        self.steps = self._script()
-        name = list(CHAPTERS)[chapter]
-        self.i = next(i for i, s in enumerate(self.steps) if s.chapter == name) - 1
+        self.steps = self._with_stations(self._script())
+        self.name = list(CHAPTERS)[chapter]
+        starts = [i for i, s in enumerate(self.steps) if s.chapter]
+        if self.name == "FIRST WATCH":  # the whole syllabus, start to finish
+            self.start, self.end = 0, len(self.steps)
+        else:  # one drill: its own steps only
+            self.start = next(i for i, s in enumerate(self.steps) if s.chapter == self.name)
+            self.end = next((i for i in starts if i > self.start), len(self.steps))
+        self.i = self.start - 1
         self.timer = 0.0
         self.memo = {}
         self.merchant = self.escort = self.sub = None
@@ -80,7 +90,7 @@ class Tutorial:
 
     @property
     def step(self):
-        return self.steps[min(self.i, len(self.steps) - 1)]
+        return self.steps[min(self.i, self.end - 1)]
 
     @property
     def goal(self):
@@ -89,12 +99,15 @@ class Tutorial:
 
     @property
     def progress(self):
-        return f"{min(self.i + 1, len(self.steps))}/{len(self.steps)}"
+        return f"{min(self.i + 1, self.end) - self.start}/{self.end - self.start}"
 
     def advance(self):
         self.i += 1
-        if self.i >= len(self.steps):
+        if self.i >= self.end:
             self.finished = True
+            if self.name == "FIRST WATCH":  # the station drills open up for practice
+                settings.SETTINGS["trained"] = True
+                settings.save()
             return
         self.con.actions.clear()
         self.timer = 0.0
@@ -103,7 +116,7 @@ class Tutorial:
         if step.setup:
             step.setup(self, self.con)
         brief = step.brief(self.con) if callable(step.brief) else step.brief
-        self.con.teletype.print(keyed(f"DRILL {self.progress}: {brief}"))
+        self.con.teletype.print(keyed(f"COXSWAIN: {brief}"))
 
     def update(self, dt):
         if self.finished:
@@ -112,7 +125,7 @@ class Tutorial:
         self.timer += dt
         con.world.player.torpedoes = max(con.world.player.torpedoes, 4)  # training racks never run dry
         if "SKIP" in con.actions:
-            con.teletype.print("INSTRUCTOR: DRILL SKIPPED.")
+            con.teletype.print("COXSWAIN: DRILL SKIPPED.")
             return self.advance()
         for kind, a, b in con.frame_events:
             self._watch(kind, a, b)
@@ -133,7 +146,7 @@ class Tutorial:
             con.teletype.print(keyed(text))
         hostile = getattr(a, "hostile", False)
         if kind == "EXHAUSTED" and not hostile and self.merchant in con.world.targets:
-            tt("INSTRUCTOR: MISS. CHECK TGT SPD/CRS - THE TDC TICK MUST SIT ON THE TRACE. RE-MARK ({MARK}) "
+            tt("COXSWAIN: MISS. CHECK TGT SPD/CRS - THE TDC TICK MUST SIT ON THE TRACE. RE-MARK ({MARK}) "
                "AND FIRE AGAIN WHEN A TUBE RELOADS.")
         elif kind in ("DECOYED", "PLAYER_HIT", "EXHAUSTED") and hostile:
             self.memo["outcome"] = kind
@@ -141,6 +154,32 @@ class Tutorial:
             self.memo["outcome"] = kind
         elif kind == "CHARGES":
             self.memo.setdefault("charges_at", self.timer)
+
+    @staticmethod
+    def _with_stations(steps):
+        """The syllabus as walked round the room: wherever the next drill belongs to another station, the coxswain
+        sends you to take it first, and the drill waits until you have."""
+        import stations  # here rather than at the top: stations -> workstation -> tutorial would go round in a loop
+        from layout import HIGHLIGHTS
+
+        out, at = [], None
+        for st in steps:
+            if st.chapter:
+                at = None  # each drill begins at the conn
+            if "periscope" in st.highlight:  # done at the periscope stand itself: you go there by doing it
+                at = "PERISCOPE"
+                out.append(st)
+                continue
+            need = stations.station_for(st.highlight, HIGHLIGHTS)
+            reading = isinstance(st.goal, str) and "{ACKNOWLEDGE}" in st.goal  # a look and ENTER: no walk for that
+            if need and need != at and not reading:
+                out.append(Step(f"NOW THE {need}. WALK TO IT AND PRESS E, OR USE THE STATIONS RING ON THE ORDER WHEEL.",
+                                f"TAKE THE {need} STATION", lambda t, c, need=need: c.crew.captain_at == need,
+                                chapter=st.chapter, station=need))
+                st = dataclasses.replace(st, chapter="")
+                at = need
+            out.append(st)
+        return out
 
     # ------------------------------------------------------------------ the syllabus
     def _script(self):
@@ -269,12 +308,12 @@ class Tutorial:
               "CHECK TGT SPD AND TGT CRS AGAINST HER",
               lambda t, c: abs(c.tdc.get("SPD") - t.merchant.speed / KNOT) <= 1.5 and
               abs(angle_diff(c.tdc.get("CRS"), t.merchant.heading)) <= 15, highlight=("tdc",),
-              outro="INSTRUCTOR: GOOD. WATCH THE CROSS ON THE SCOPE MOVE AS YOU CHANGE THEM."),
+              outro="COXSWAIN: GOOD. WATCH THE CROSS ON THE SCOPE MOVE AS YOU CHANGE THEM."),
             S("NOW SET THE FISH. SKR ARM IS HOW FAR IT RUNS BEFORE ITS SEEKER WAKES: SHORTER THAN THE RUN, OR IT "
               "WAKES PAST HER, BUT NOT SO SHORT IT CAN LISTEN FOR YOU. RUN DEP: SHALLOW (10 M) FOR SHIPS, DEEP FOR "
               "SUBS UNDER THE LAYER. SET SKR ARM TO ABOUT HALF THE RUN AND RUN DEP TO 10 M.",
               "SET SKR ARM AND RUN DEP", self._fish_set, highlight=("tdc",),
-              outro="INSTRUCTOR: SET. THE SEEKER WILL WAKE CLOSE TO HER."),
+              outro="COXSWAIN: SET. THE SEEKER WILL WAKE CLOSE TO HER."),
             S("FIRE ONE FISH: {FIRE TUBE 1} OR FLIP TUBE 1'S GUARDED SWITCH. (WITH SPREAD AT 0, {FIRE} FIRES ONE "
               "TOO.) A LAUNCH IS LOUD - EVERY ESCORT IN EARSHOT HEARS IT. TUBES RELOAD FROM THE RACKS; IN TRAINING "
               "THE RACKS NEVER RUN DRY.",
@@ -290,7 +329,7 @@ class Tutorial:
               "A MISS. CHECK TGT SPD AND TGT CRS AGAINST THE SCOPE, RE-MARK HER ({MARK}) AND FIRE AGAIN WHEN A TUBE "
               "RELOADS.",
               "SINK THE MERCHANT  ({FIRE}, TUBE SWITCH)", lambda t, c: t.merchant in c.world.sunk,
-              highlight=("tdc", "tubes"), outro="INSTRUCTOR: TARGET DESTROYED. WELL SHOT."),
+              highlight=("tdc", "tubes"), outro="COXSWAIN: TARGET DESTROYED. WELL SHOT."),
             S("SALVOS: SET SPREAD (THE LAST TDC ROW) TO A FEW DEGREES AND {FIRE} FIRES EVERY READY TUBE, FANNED "
               "EITHER SIDE OF THE SOLUTION, SO A SMALL ERROR IN HER SPEED OR COURSE STILL PUTS ONE FISH ON HER. "
               "EACH FISH HAS ITS OWN WIRE: {NEXT FISH} PICKS WHICH ONE YOU STEER, {CUT WIRE} CUTS IT. A SOLUTION "
@@ -335,7 +374,7 @@ class Tutorial:
               next(iter(c.world.player.damaged), None) == "PLANES",
               setup=lambda t, c: c.world.player.break_systems(["HYDROPHONES", "PLANES", "TUBE 2"]),
               highlight=("waterfall", "hull"),
-              outro="INSTRUCTOR: GOOD. FOR THE EXERCISE THE DAMAGE IS MADE GOOD; ON PATROL HITS BREAK SYSTEMS AT "
+              outro="COXSWAIN: GOOD. FOR THE EXERCISE THE DAMAGE IS MADE GOOD; ON PATROL HITS BREAK SYSTEMS AT "
                     "RANDOM AND THE PARTY TAKES MINUTES OVER EACH."),
             S("TORPEDO IN THE WATER! AN ENEMY SUBMARINE HAS FIRED ON YOU. THE TORPEDO LAMP FLASHES AND ITS TRACE IS "
               "BRIGHT AND NARROW, BEARING MOVING FAST. PUT THE DIAL ON IT: THE PROFILE SHOWS A SHARP HIGH SPIKE.",
@@ -351,8 +390,8 @@ class Tutorial:
               "THEN FIRE. THE SEEKER WILL HOME.",
               "SINK THE SUBMARINE",
               lambda t, c: t.sub in c.world.sunk or t.timer > 360, highlight=("waterfall", "spectrum", "tdc"),
-              outro=lambda t, c: "INSTRUCTOR: SUBMARINE DESTROYED." if t.sub in c.world.sunk
-              else "INSTRUCTOR: EXERCISE TIME. THE TARGET SUB IS BEING RECALLED."),
+              outro=lambda t, c: "COXSWAIN: SUBMARINE DESTROYED." if t.sub in c.world.sunk
+              else "COXSWAIN: EXERCISE TIME. THE TARGET SUB IS BEING RECALLED."),
 
             # --- graduation ---
             S("DRILL COMPLETE: YOU HAVE WORKED EVERY STATION. ON PATROL, CONVOYS ARRIVE IN WAVES WITH ESCORTS "
@@ -413,11 +452,11 @@ class Tutorial:
 
     def _escort_outro(self, t, con):
         if self.escort_ai.state == PATROL:
-            return "INSTRUCTOR: THE ESCORT HAS LOST YOU. THE LAYER IS YOUR FRIEND."
+            return "COXSWAIN: THE ESCORT HAS LOST YOU. THE LAYER IS YOUR FRIEND."
         if "charges_at" in self.memo:
-            return (f"INSTRUCTOR: YOU RODE OUT A PATTERN - HULL {con.world.hull:.0f}%. CHARGES ARE SET TO A GUESSED "
+            return (f"COXSWAIN: YOU RODE OUT A PATTERN - HULL {con.world.hull:.0f}%. CHARGES ARE SET TO A GUESSED "
                     "DEPTH: DEEP AND MOVING IS HARD TO HIT. EXERCISE ENDED.")
-        return "INSTRUCTOR: EXERCISE TIME. THE ESCORT IS BEING RECALLED."
+        return "COXSWAIN: EXERCISE TIME. THE ESCORT IS BEING RECALLED."
 
     def _spawn_sub_and_fire(self, t, con):
         w = con.world
@@ -434,6 +473,6 @@ class Tutorial:
             con.report(kind, a, b)
 
     def _torpedo_outro(self, t, con):
-        return {"DECOYED": "INSTRUCTOR: IT TOOK THE DECOY. TEXTBOOK.",
-                "PLAYER_HIT": "INSTRUCTOR: YOU WERE HIT - TRAINING WARHEAD. IN COMBAT THAT COSTS 50-90% OF THE HULL.",
-                }.get(t.memo.get("outcome"), "INSTRUCTOR: IT RAN OUT OF FUEL. YOU OUTRAN IT.")
+        return {"DECOYED": "COXSWAIN: IT TOOK THE DECOY. TEXTBOOK.",
+                "PLAYER_HIT": "COXSWAIN: YOU WERE HIT - TRAINING WARHEAD. IN COMBAT THAT COSTS 50-90% OF THE HULL.",
+                }.get(t.memo.get("outcome"), "COXSWAIN: IT RAN OUT OF FUEL. YOU OUTRAN IT.")

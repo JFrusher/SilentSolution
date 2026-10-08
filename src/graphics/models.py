@@ -19,7 +19,7 @@ from graphics import console_art as art
 from graphics import gltf
 
 ASSETS = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "assets"
-MODELS = "Silent Solution graphics/models.py v2"  # bump when the models change, so old copies are rebuilt
+MODELS = "Silent Solution graphics/models.py v3"  # bump when the models change, so old copies are rebuilt
 TILT = math.radians(18.0)  # the console faces lean back this far (control_room._tilted)
 I3 = np.identity(3)
 
@@ -721,6 +721,7 @@ CREW = {  # who keeps each watch: outfit, skin, hair, face hair, headphones
     "DAMAGE CONTROL": ("white sweater", 2, 0, "beard", False),
     "HELM": ("navy jumper", 0, 3, None, False),
     "PLANES": ("working dress", 1, 1, "beard", False),
+    "COXSWAIN": ("navy jumper", 4, 4, "beard", False),  # the chief petty officer who runs training: cap and beard
 }
 UPPER_ARM, FOREARM, THIGH, SHIN = 0.3, 0.27, 0.44, 0.46
 
@@ -894,6 +895,11 @@ def crewman(key, pose, poses=None):
         b.blob(e, I3, (0.0125, 0.0125, 0.0125), (0.75, 0.73, 0.68), "bakelite", nu=12, nv=10,
                shape=lambda d: (1.0, (0.02, 0.015, 0.01) if d[2] > 0.88 else (0.16, 0.1, 0.06) if d[2] > 0.7
                                 else None))
+    if key == "COXSWAIN":  # a chief petty officer's peaked cap: navy crown, black peak, a gilt badge
+        b.blob(hc + (0, 0.085, -0.005), I3, (0.098, 0.04, 0.108), (0.03, 0.035, 0.07), "cloth", nu=24, nv=10)
+        b.cylinder(hc + (0, 0.05, -0.005), hc + (0, 0.085, -0.005), 0.088, (0.02, 0.02, 0.025), "cloth", seg=24)
+        b.box(hc + (0, 0.052, 0.1), (0.15, 0.008, 0.07), BAKELITE, "bakelite", frame((0, -0.25, 1)), r=0.004)
+        b.blob(hc + (0, 0.07, 0.09), I3, (0.016, 0.014, 0.006), BRASS, "metal", nu=10, nv=6)
     if phones:  # a sonarman's or radioman's headset
         for side in (-1, 1):
             b.lathe(hc + (side * 0.082, 0.0, -0.005), (side, 0, 0), [(0, 0), (0.038, 0), (0.04, 0.02), (0.03, 0.03),
@@ -935,10 +941,15 @@ def crew_models():
             out[CREW_FILES[key].replace("seated", "standing")] = lambda key=key: crewman(key, "standing")
     for key in ("HELM", "PLANES"):  # hands on the yoke's grips, at each of the wheel's turns
         out[CREW_FILES[key]] = lambda key=key: crewman(key, "seated", [grips(a) for a in WHEEL_ANGLES])
+    out[COXSWAIN_FILE] = lambda: crewman("COXSWAIN", "standing", [None, POINTING])  # at ease, and pointing the way
     return out
 
 
-CREW_FILES = {key: f"crew/{key.lower().replace(' ', '_')}_seated.glb" for key in CREW}
+COXSWAIN_FILE = "crew/coxswain_standing.glb"
+POINTING = [np.array((-0.2, 1.48, 0.62)), np.array((0.2, 0.86, 0.08))]  # his right arm out ahead, his left at his side
+
+
+CREW_FILES = {key: f"crew/{key.lower().replace(' ', '_')}_seated.glb" for key in CREW if key != "COXSWAIN"}
 
 
 # ---------- writing them all ----------

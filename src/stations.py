@@ -388,15 +388,16 @@ def shape_rect(shape):
 
 
 def rings(view, shape):
-    """Where a highlight on the full console lands on a station canvas: a rect per piece that shows it."""
-    box = shape_rect(shape)
+    """Where a highlight on the full console (a shape, or a list of them) lands on a station canvas: a rect per piece
+    that shows it."""
     out = []
-    for p in view.pieces:
-        cut = box.clip(p.src)
-        if cut.w > 4 and cut.h > 4:
-            d = p.dst
-            out.append(R(d.x + (cut.x - p.src.x) * p.scale, d.y + (cut.y - p.src.y) * p.scale,
-                         cut.w * p.scale, cut.h * p.scale))
+    for box in map(shape_rect, shape if isinstance(shape, list) else [shape]):
+        for p in view.pieces:
+            cut = box.clip(p.src)
+            if cut.w > 4 and cut.h > 4:
+                d = p.dst
+                out.append(R(d.x + (cut.x - p.src.x) * p.scale, d.y + (cut.y - p.src.y) * p.scale,
+                             cut.w * p.scale, cut.h * p.scale))
     return out
 
 
