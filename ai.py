@@ -4,14 +4,15 @@ import math
 import random
 
 from tuning import (ALARM_HEARING, BLIND_RANGE, CALM_TIME, DESPAWN_RANGE, EXPLOSION_HEARING, GIVE_UP,
-                    LATE_DESPAWN_RANGE, LAUNCH_HEARING, LOOKOUT_ALERT, LOOKOUT_IDLE, LOOKOUT_MERCHANT, PING_HEARING,
-                    PING_INTERVAL, RUN_OUT, SCATTER_RANGE, SCATTER_TIME, SEARCH_TIME, SONAR_RANGE, TONNAGE,
+                    LATE_DESPAWN_RANGE, LATE_MERCHANT_RANGE, LAUNCH_HEARING, LOOKOUT_ALERT, LOOKOUT_IDLE,
+                    LOOKOUT_MERCHANT, PING_HEARING, PING_INTERVAL, RUN_OUT, SCATTER_RANGE, SCATTER_TIME, SEARCH_TIME, SONAR_RANGE, TONNAGE,
                     TORPEDO_HEARING, WAKE_SIGHTING, WAVE_GAP, WAVE_TIME_LIMIT)
 from sim import (KNOT, LAYER_DEPTH, YARD, Decoy, DepthCharge, Vessel, angle_diff, bearing, clamp, intercept,
                  spot_probability)
 
 # military states: unaware -> searching -> aware (hunting / attacking) / evading
 PATROL, SEARCH, ALERT, ATTACK, EVADE = "PATROL", "SEARCH", "ALERT", "ATTACK", "EVADE"
+WITHDRAW = "WITHDRAW"  # leaving the area at speed: a stale wave winding down, or a sub with empty racks
 # civilian states: unaware -> alarmed -> scattering
 CRUISE, ALARMED, SCATTER = "CRUISE", "ALARMED", "SCATTER"
 
@@ -190,6 +191,14 @@ class ShipAI:
                      (t.lock is s or s.range_to(t) <= TORPEDO_HEARING * self._trans(world, t))), None)
 
     # --- actions ---
+    def withdraw(self, events):
+        self._set(WITHDRAW, events)
+
+    def _away(self, world):
+        """Course straight away from the boat (or from where it thinks the boat is)."""
+        x, y = self.datum[:2] if self.datum else (world.player.x, world.player.y)
+        return bearing(x, y, self.ship.x, self.ship.y)
+
     def _set(self, state, events):
         if state != self.state:
             events.append(("AI_" + state, self.ship, self.state))
@@ -365,6 +374,8 @@ class EscortAI(ShipAI):
             desired, speed = self._search(world, dt, events)
         elif self.state == EVADE:
             desired, speed = bearing(self.threat.x, self.threat.y, s.x, s.y), ESCORT_FULL
+        elif self.state == WITHDRAW:
+            desired, speed = self._away(world), ESCORT_FULL
         else:  # ALERT / ATTACK: run in on the datum
             dx, dy, dz = self.datum
             dist = math.hypot(dx - s.x, dy - s.y)
@@ -483,11 +494,15 @@ class SubmarineAI(ShipAI):
         self.alarm, self.search_request = False, None
         if self.state == ATTACK and not self.reload:
             self._set(ALERT, events)
+        if self.state == ALERT and not self.torpedoes:  # racks empty: nothing left to do here but get out
+            self.withdraw(events)
 
         if self.state == PATROL:
             desired, speed = self._patrol_course(), self.cruise
         elif self.state == EVADE:
             desired, speed = bearing(self.threat.x, self.threat.y, s.x, s.y), self.top_speed
+        elif self.state == WITHDRAW:
+            desired, speed = self._away(world), self.top_speed
         else:
             dx, dy, dz = self.datum
             dist = math.hypot(dx - s.x, dy - s.y)
@@ -503,6 +518,11 @@ class SubmarineAI(ShipAI):
         s.z += clamp(self.depth_order - s.z, -dt, dt)
         s.noise = self.stealth * (1 + 1.5 * s.speed / self.top_speed)
         return events
+
+    def withdraw(self, events):
+        if self.state != WITHDRAW and random.random() < self.layer_sensitivity:  # leave on the far side of the layer
+            self.depth_order = 60.0 if self.ship.z >= LAYER_DEPTH else 160.0
+        super().withdraw(events)
 
     def _fire(self, world, events):
         """Return fire: lead the datum by our estimated motion, let the seeker do the rest."""
@@ -528,6 +548,7 @@ class ThreatDirector:
         self.boost = boost  # campaign: waves' worth of escalation to start with
         self.waves = waves  # campaign: the patrol ends when this wave clears; None = endless
         self.done = False
+        self.cleared = True  # the current wave has emptied and been resupplied
         self.wave = 0
         self.timer = 8.0
         self.wave_started = 0.0
@@ -535,17 +556,28 @@ class ThreatDirector:
     def update(self, world, dt):
         events, p = [], world.player
         late = self.wave and world.time - self.wave_started > WAVE_TIME_LIMIT  # don't let stragglers stall the patrol
-        reach = LATE_DESPAWN_RANGE if late else DESPAWN_RANGE
-        for t in [t for t in world.targets if not isinstance(t, Decoy) and p.range_to(t) > reach]:
+        if late:  # idle warships wind the wave down; anyone still fighting stays until it gives up
+            for ai in world.ais:
+                if isinstance(ai, (EscortAI, SubmarineAI)) and ai.state in (PATROL, SEARCH):
+                    ai.withdraw(events)
+        state = {id(ai.ship): ai.state for ai in world.ais}
+        for t in [t for t in world.targets if not isinstance(t, Decoy) and p.range_to(t) >
+                  (LATE_DESPAWN_RANGE if late or state.get(id(t)) == WITHDRAW else DESPAWN_RANGE)]:
             world.targets.remove(t)
             events.append(("ESCAPED", t, None))
-        if self.done or any(not isinstance(t, Decoy) for t in world.targets):
+
+        def holds_wave(t):  # a late wave isn't held open by unalarmed merchants steaming off over the horizon
+            return not (late and state.get(id(t)) == CRUISE and p.range_to(t) > LATE_MERCHANT_RANGE)
+        if self.done or any(not isinstance(t, Decoy) and holds_wave(t) for t in world.targets):
             return events
-        if self.timer == WAVE_GAP and self.wave:  # first quiet tick after a wave: resupply
+        if not self.cleared:  # first quiet tick after a wave: resupply
+            self.cleared = True
             p.torpedoes = min(p.torpedoes + 4, 12)
             p.noisemakers = min(p.noisemakers + 2, 6)
             events.append(("WAVE_CLEAR", self.wave, None))
             self.done = self.wave == self.waves
+            if self.done:
+                return events
         self.timer -= dt
         if self.timer <= 0:
             self._spawn(world, events)
@@ -554,7 +586,7 @@ class ThreatDirector:
 
     def _spawn(self, world, events):
         self.wave += 1
-        self.wave_started = world.time
+        self.wave_started, self.cleared = world.time, False
         n, d, p = self.wave + self.boost, self.diff, world.player
         brg = random.uniform(0, 360)
         dist = random.uniform(7000, 9500)

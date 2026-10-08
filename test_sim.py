@@ -5,7 +5,7 @@ import random
 import numpy as np
 
 from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
-                ThreatDirector, frame_point)
+                SubmarineAI, ThreatDirector, WITHDRAW, frame_point)
 from audio import AudioSynthesizer
 from console import Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
@@ -15,7 +15,7 @@ from sensors import PeriscopeOptics, cone_gain
 from tma import TMALog
 from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
                  bearing)
-from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME
+from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME, WAVE_TIME_LIMIT
 
 
 def calm_or_storm(w, rain):
@@ -260,6 +260,27 @@ if __name__ == "__main__":
     w.player.z = 40.0
     w.step(0.1)
     assert PeriscopeOptics(w).look() is None, "masts struck below periscope depth: blind"
+
+    # late waves wind down: idle warships withdraw and far unalarmed merchants stop holding the wave open
+    random.seed(2)
+    w = build_world(DIFFICULTY["COMMANDER"])
+    w.min_hull, w.director.boost = 100.0, 2  # wave 1 brings a submarine; the boat sits still and watches
+    w.player.speed = w.player.ordered_speed = 0.0
+    kinds = []
+    while "WAVE_CLEAR" not in kinds and w.time < WAVE_TIME_LIMIT + 900:
+        kinds += [e[0] for e in w.step(0.2)]
+    assert "WAVE_CLEAR" in kinds and "AI_WITHDRAW" in kinds, (w.time, [(a.ship.kind, a.state) for a in w.ais])
+
+    # a submarine with empty racks breaks off and leaves instead of shadowing the boat
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [])
+    sub = Vessel(0, 400, 90, 0, z=60)
+    hunter = SubmarineAI(sub, 90, torpedoes=0, layer_sensitivity=0.0)
+    w.targets.append(sub)
+    w.ais.append(hunter)
+    hunter._mark(w, 30.0)
+    hunter.alarm = True
+    run(w, 600)
+    assert hunter.state == WITHDRAW and w.player.range_to(sub) > 4000, (hunter.state, w.player.range_to(sub))
 
     # campaign patrol: escalation starts at the boost; the last wave clearing ends the patrol and nothing more spawns
     w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [])
