@@ -17,7 +17,7 @@ from layout import (BLOW_BTN, CRT_RECT, DC_ROW_H, DC_ROW_Y0, DEPTH_C, DEPTH_R, H
                     WHEEL_R)
 import settings
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
-from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
+from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH, TORP_MAX_RUN,
                  YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
 from tma import PLOT_SPAN, TMALog
 from tuning import DIFFICULTY, REPAIR_TIME
@@ -95,6 +95,7 @@ class Console:
         self.tma = TMALog()      # bearing history for the TMA plot
         self.wire_sel = None     # the wired fish the scope clicks steer
         self.wire_hint = False
+        self.long_shot = -99.0  # when F was last refused on a beyond-range solution
         self.crt_page = "SONAR"  # left of the monitor: waterfall, F2 TMA plot, F5 damage board
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
@@ -238,6 +239,9 @@ class Console:
         sol = self.tdc.solve()
         if sol is None:
             return self.say("NO FIRING SOLUTION")
+        if sol.run > TORP_MAX_RUN and self.world.time - self.long_shot > 3:  # a second press within 3 s is a long shot
+            self.long_shot = self.world.time
+            return self.say(f"BEYOND RANGE: RUN {sol.run / YARD:,.0f} YD. FIRE AGAIN TO SHOOT")
         spread = self.tdc.values["SPR"]
         for k, i in enumerate(ready):
             gyro = (sol.gyro + (k - (len(ready) - 1) / 2) * spread) % 360

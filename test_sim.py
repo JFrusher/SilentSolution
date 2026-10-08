@@ -293,6 +293,14 @@ if __name__ == "__main__":
     assert run(w, 0.2).count("WAVE_CLEAR") == 1 and w.director.done
     assert "WAVE" not in run(w, 30) and not w.targets
 
+    # a beyond-range solution needs a second press to fire: one slip doesn't waste a fish
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.tdc.set("RNG", 9000.0)
+    con.fire()
+    assert not con.world.torpedoes and "BEYOND RANGE" in con.log[-1]
+    con.fire()
+    assert len(con.world.torpedoes) == 1
+
     # clicking the TMA plot listens where you click (true bearing), not at a waterfall-scaled relative bearing
     con = Console("COMMANDER", AudioSynthesizer())
     con.world.player.heading = 70.0

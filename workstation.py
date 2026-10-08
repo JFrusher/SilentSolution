@@ -710,7 +710,7 @@ class Workstation:
         sol = con.tdc.solve()
         far = sol is not None and sol.run > TORP_MAX_RUN
         art.counter(f, (56, 438), f"{sol.gyro:05.1f}" if sol else "---.-", 11)
-        art.counter(f, (172, 438), f"{sol.run / YARD:6,.0f}" if sol else "------", 11)
+        art.counter(f, (172, 438), f"{sol.run / YARD:6,.0f}" if sol else "------", 11, art.RED if far else art.AMBER)
         art.lamp(f, (250, 448), sol is not None, art.RED if far else art.GREEN, 5)
 
     def draw_teletype(self, f, con):
