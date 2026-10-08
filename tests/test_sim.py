@@ -444,9 +444,10 @@ if __name__ == "__main__":
     # events are (kind, a, b) by name: every kind the world can raise reaches Console.report, and the replay
     # only keeps kinds that exist, so a misspelt name fails here instead of going quiet in play
     raised = {"ARMED", "HOMING", "LOST", EXHAUSTED}  # the seeker's returns
+    SRC = Path(sim.__file__).parent
     emit = r'(?:events\.append|events \+=|alerts\.append)\(\(?\s*"([A-Z_]+)"'
     for f in ("sim.py", "ai.py"):
-        raised |= set(re.findall(emit, Path(f).read_text()))
+        raised |= set(re.findall(emit, (SRC / f).read_text()))
     told = inspect.getsource(Console.report)
     unheard = {k for k in raised if f'"{k}"' not in told and k not in MAST_MESSAGES and not k.startswith("AI_")}
     assert not unheard, f"raised but never reported: {unheard}"
@@ -455,7 +456,7 @@ if __name__ == "__main__":
     # the world never reaches for the operator layer, audio or graphics: what the crew hears and sees is Console's
     world = {"sim", "ai", "sensors", "geometry", "tma", "fire_control", "tuning"}
     for name in world:
-        tree = ast.parse(Path(f"{name}.py").read_text())
+        tree = ast.parse((SRC / f"{name}.py").read_text())
         mods = {n.name for x in ast.walk(tree) if isinstance(x, ast.Import) for n in x.names}
         mods |= {x.module for x in ast.walk(tree) if isinstance(x, ast.ImportFrom)}
         stray = {m for m in mods if m.split(".")[0] not in world | sys.stdlib_module_names | {"numpy"}}

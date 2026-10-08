@@ -1,14 +1,16 @@
 """Build the single-file Windows executable: uv run --with pyinstaller build.py  ->  dist/SilentSolution.exe
 The licence and third-party notices are copied next to it; ship the whole dist/ folder."""
 import shutil
+import sys
 from importlib.metadata import distribution
 from pathlib import Path
 
 import PyInstaller.__main__
 
-from version import __version__
+sys.path.insert(0, "src")
+from version import __version__  # noqa: E402
 
-PyInstaller.__main__.run(["main.py", "--onefile", "--windowed", "--clean", "--noconfirm",
+PyInstaller.__main__.run(["src/main.py", "--onefile", "--windowed", "--clean", "--noconfirm",
                           "--name", "SilentSolution", "--exclude-module", "tkinter"])
 dist = Path("dist")
 for name in ("LICENSE", "THIRD-PARTY-NOTICES.txt"):

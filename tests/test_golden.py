@@ -1,6 +1,6 @@
 """Golden run: one seeded, scripted patrol through the real console must play out exactly the same every time.
-Run: uv run test_golden.py            (compare with golden/<platform>.json)
-     uv run test_golden.py --update   (after a change that is meant to alter play; commit the new file)
+Run: uv run checks.py, or with PYTHONPATH=src: uv run tests/test_golden.py [--update]
+--update regenerates golden/<platform>.json after a change that is meant to alter play; commit the new file.
 Float maths can differ in the last bit between platforms, so each platform keeps its own file."""
 import json
 import os
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         GOLDEN.write_text(json.dumps(first, indent=1))
         print(f"wrote {GOLDEN}")
         sys.exit(0)
-    assert GOLDEN.exists(), f"no golden file for {sys.platform}: run `uv run test_golden.py --update` and commit it"
+    assert GOLDEN.exists(), f"no golden file for {sys.platform}: run test_golden.py --update and commit it"
     golden = json.loads(GOLDEN.read_text())
     for part in ("end", "events", "log", "teletype"):
         assert first[part] == golden[part], f"{part} differs from {GOLDEN.name}:\n{first[part]}\n!=\n{golden[part]}"
