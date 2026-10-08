@@ -6,22 +6,63 @@ from collections import deque
 import numpy as np
 import pygame
 
+import settings
 from ai import ThreatDirector
 from displays import CLASSES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from graphics import console_art as art
 from graphics.periscope import EYE
-from layout import (BLOW_BTN, CRT_RECT, DC_ROW_H, DC_ROW_Y0, DEPTH_C, DEPTH_R, HOLD_BTN, LOOK_BTN, NMKR_BTN,
-                    ORDER_SLIP, PD_BTN, PING_BTN, RUDDER_BAR, SCOPE_C, SCOPE_LEVER, SCOPE_R, SNORT_LEVER, TDC_PANEL,
-                    TDC_ROW_H, TDC_ROW_Y0, TELEGRAPH_BTNS, TELEGRAPH_RECT, TUBE_SW, WF_H, WF_POS, WF_W, WHEEL_C,
-                    WHEEL_R)
-import settings
+from layout import (
+    BLOW_BTN,
+    CRT_RECT,
+    DC_ROW_H,
+    DC_ROW_Y0,
+    DEPTH_C,
+    DEPTH_R,
+    HOLD_BTN,
+    LOOK_BTN,
+    NMKR_BTN,
+    ORDER_SLIP,
+    PD_BTN,
+    PING_BTN,
+    RUDDER_BAR,
+    SCOPE_C,
+    SCOPE_LEVER,
+    SCOPE_R,
+    SNORT_LEVER,
+    TDC_PANEL,
+    TDC_ROW_H,
+    TDC_ROW_Y0,
+    TELEGRAPH_BTNS,
+    TELEGRAPH_RECT,
+    TUBE_SW,
+    WF_H,
+    WF_POS,
+    WF_W,
+    WHEEL_C,
+    WHEEL_R,
+)
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
-from sim import (CRUSH_DEPTH, KNOT, MAX_DEPTH, MAX_RUDDER, MIN_ORDER_DEPTH, PERISCOPE_DEPTH, TELEGRAPH,
-                 YARD, Decoy, Submarine, Torpedo, WorldSimulation, angle_diff, clamp, spot_probability)
-from tma import TMALog
+from sim import (
+    CRUSH_DEPTH,
+    KNOT,
+    MAX_DEPTH,
+    MAX_RUDDER,
+    MIN_ORDER_DEPTH,
+    PERISCOPE_DEPTH,
+    TELEGRAPH,
+    TORP_MAX_RUN,
+    YARD,
+    Decoy,
+    Submarine,
+    Torpedo,
+    WorldSimulation,
+    angle_diff,
+    clamp,
+    spot_probability,
+)
+from tma import PLOT_SPAN, TMALog
 from tuning import DIFFICULTY, REPAIR_TIME
-
 
 DIAL_RATE = 60.0          # hydrophone dial deg/s
 RUDDER_RATE = 20.0        # deg/s while LEFT/RIGHT held
@@ -33,7 +74,7 @@ MAST_MESSAGES = {  # own mast events: (sonar log line, teleprinter line or "")
     "HEAD_VALVE": ("HEAD VALVE SHUT - WAVE OVER SNORKEL", ""),
     "SNORKEL_FLOODED": ("SNORKEL FLOODED - DIESELS TRIPPED", "ENGINE ROOM: SNORKEL HEAD FLOODED AT SPEED. DIESELS "
                         "STOPPED FOR TEN SECONDS. KEEP UNDER EIGHT KNOTS WHILE SNORKELLING."),
-    "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST (F5)."),
+    "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST ({DAMAGE BOARD})."),
 }
 ECHO_FADE = 40.0          # s an echo blip glows on the scope
 SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
@@ -95,6 +136,7 @@ class Console:
         self.tma = TMALog()      # bearing history for the TMA plot
         self.wire_sel = None     # the wired fish the scope clicks steer
         self.wire_hint = False
+        self.long_shot = -99.0  # when F was last refused on a beyond-range solution
         self.crt_page = "SONAR"  # left of the monitor: waterfall, F2 TMA plot, F5 damage board
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
@@ -169,7 +211,7 @@ class Console:
         if self.looking:
             self.looking = False
         elif not self.world.player.scope_up:
-            self.say("SCOPE IS DOWN  (U TO RAISE)")
+            self.say(settings.keyed("SCOPE IS DOWN  ({RAISE SCOPE} TO RAISE)"))
         else:
             self.looking = True
             self.actions.add("LOOK")
@@ -238,6 +280,9 @@ class Console:
         sol = self.tdc.solve()
         if sol is None:
             return self.say("NO FIRING SOLUTION")
+        if sol.run > TORP_MAX_RUN and self.world.time - self.long_shot > 3:  # a second press within 3 s is a long shot
+            self.long_shot = self.world.time
+            return self.say(f"BEYOND RANGE: RUN {sol.run / YARD:,.0f} YD. FIRE AGAIN TO SHOOT")
         spread = self.tdc.values["SPR"]
         for k, i in enumerate(ready):
             gyro = (sol.gyro + (k - (len(ready) - 1) / 2) * spread) % 360
@@ -249,9 +294,10 @@ class Console:
         self.actions.add("FIRE")
         if not self.wire_hint:
             self.wire_hint = True
-            self.teletype.print("WEAPONS: FISH ARE ON THE WIRE. CLICK ONE ON THE TACTICAL SCOPE, THEN CLICK WHERE TO "
-                                "SEND IT. [ ] NUDGE, BACKSLASH NEXT FISH, L CUTS THE WIRE. OVER 12 KNOTS THE WIRE "
-                                "PARTS.")
+            self.teletype.print(settings.keyed(
+                "WEAPONS: FISH ARE ON THE WIRE. CLICK ONE ON THE TACTICAL SCOPE, THEN CLICK WHERE TO SEND IT. "
+                "{WIRE LEFT} {WIRE RIGHT} NUDGE, {NEXT FISH} NEXT FISH, {CUT WIRE} CUTS THE WIRE. OVER 12 KNOTS THE "
+                "WIRE PARTS."))
 
     # --- wire guidance ---
     def wired_fish(self):
@@ -412,6 +458,9 @@ class Console:
                 self.world.player.repair_first(rows[k])
                 self.actions.add("REPAIR_FIRST")
                 self.say(f"PARTY TO THE {rows[k]}")
+        elif wf.collidepoint(pos) and self.crt_page == "TMA":  # the plot's x is true bearing round the TDC's
+            centre = math.degrees(math.atan2(self.tdc.x, self.tdc.y))
+            self.dial = (centre + (x - wf.centerx) / WF_W * PLOT_SPAN - self.world.player.heading) % 360
         elif wf.collidepoint(pos):
             self.dial = (x - wf.x) / WF_W * 360
         elif math.hypot(x - SCOPE_C[0], y - SCOPE_C[1]) <= SCOPE_R:
@@ -440,7 +489,8 @@ class Console:
             self.scope_brg = (self.scope_brg - dx * settings.SETTINGS["mouse"] * SCOPE_FOV[self.high_power] / EYE) % 360
             self.dragging = ("scope", pos[0])
         elif self.dragging == "wheel":
-            self.world.player.rudder = round(clamp((pos[0] - WHEEL_C[0]) / (WHEEL_R + 16) * MAX_RUDDER, -MAX_RUDDER, MAX_RUDDER))
+            ordered = (pos[0] - WHEEL_C[0]) / (WHEEL_R + 16) * MAX_RUDDER
+            self.world.player.rudder = round(clamp(ordered, -MAX_RUDDER, MAX_RUDDER))
 
     def scroll(self, pos, dy):
         x, y = pos
@@ -456,7 +506,7 @@ class Console:
             p.rudder = clamp(p.rudder + 5 * dy, -MAX_RUDDER, MAX_RUDDER)
         elif TELEGRAPH_RECT.collidepoint(pos):
             self.telegraph(self.telegraph_index() + dy)
-        elif CRT_RECT.collidepoint(pos):
+        elif CRT_RECT.collidepoint(pos) and self.crt_page == "SONAR":
             self.dial = (self.dial + dy) % 360
 
     # --- simulation tick ---
@@ -554,11 +604,14 @@ class Console:
         if kind == "WAVE":
             m, e, s, brg = b
             fuzz = 0 if self.diff["ping_warning"] else random.uniform(-25, 25)
-            tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR {(brg + fuzz) % 360:03.0f} TRUE, "
+            tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR "
+               f"{(brg + fuzz) % 360:03.0f} TRUE, "
                f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")
             return
         if kind == "WAVE_CLEAR":
-            tt(f"WAVE {a} DISPERSED. TENDER RESUPPLY: +4 TORPEDOES, +2 NOISEMAKERS. TOTAL {self.score:,} GRT.")
+            torps, decoys = b
+            tt(f"WAVE {a} DISPERSED. TENDER RESUPPLY: +{torps} TORPEDOES{' (RACKS FULL)' if torps < 4 else ''}, "
+               f"+{decoys} NOISEMAKERS{' (LOCKER FULL)' if decoys < 2 else ''}. TOTAL {self.score:,} GRT.")
             return
         if kind == "ESCAPED":
             if a.kind == "MERCHANT":
@@ -568,7 +621,8 @@ class Console:
             self.say(f"T{a.tube} WIRE PARTED - " + ("TOO FAST" if b == "SPEED" else "END OF SPOOL"))
             return
         if kind == "DAMAGE":
-            tt(f"DAMAGE CONTROL: {', '.join(b)} DAMAGED. ONE PARTY WORKS THE LIST TOP FIRST - F5 TO SET IT.")
+            tt(f"DAMAGE CONTROL: {', '.join(b)} DAMAGED. ONE PARTY WORKS THE LIST TOP FIRST - "
+               + settings.keyed("{DAMAGE BOARD} TO SET IT."))
             return
         if kind == "REPAIRED":
             self.say(f"{b} REPAIRED")
@@ -583,7 +637,7 @@ class Console:
             self.last_valve = world.time if kind == "HEAD_VALVE" else self.last_valve
             self.say(log)
             if teletype:
-                tt(teletype)
+                tt(settings.keyed(teletype))
             if kind in ("HEAD_VALVE", "SNORKEL_FLOODED"):
                 self.audio.play_thunk()
             if kind == "MASTS_LOWERED":
@@ -634,6 +688,7 @@ class Console:
                    ("ESCORT", "AI_ATTACK"): "FAST SCREWS CLOSING",
                    ("ESCORT", "AI_SEARCH"): "SEARCHING, ACTIVE SONAR",
                    ("ESCORT", "AI_PATROL"): "REVS DOWN",
+                   ("ESCORT", "AI_WITHDRAW"): "REVS UP, OPENING",
                    ("MERCHANT", "AI_ALARMED"): "REVS UP, ZIG-ZAGGING",
                    ("MERCHANT", "AI_SCATTER"): "FULL REVS, TURNING AWAY",
                    ("MERCHANT", "AI_CRUISE"): "REVS DOWN, STEADY"}.get((a.kind, kind))

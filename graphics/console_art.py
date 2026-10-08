@@ -5,7 +5,7 @@ Static pieces are built once at startup; per-frame helpers draw only the moving 
 import math
 import random
 import zlib
-from functools import lru_cache
+from functools import cache, lru_cache
 
 import numpy as np
 import pygame
@@ -40,17 +40,17 @@ def _seed(*parts):
     return zlib.crc32(repr(parts).encode())
 
 
-@lru_cache(maxsize=None)
+@cache
 def sans(size, bold=True):
     return pygame.font.SysFont("arialnarrow,dejavusanscondensed,arial,helvetica", size, bold=bold)
 
 
-@lru_cache(maxsize=None)
+@cache
 def mono(size, bold=False):
     return pygame.font.SysFont("consolas,couriernew,monospace", size, bold=bold)
 
 
-@lru_cache(maxsize=None)
+@cache
 def hand(size):
     return pygame.font.SysFont("inkfree,segoeprint,comicsansms,bradleyhanditc", size, bold=True)
 
@@ -258,7 +258,8 @@ def gauge_face(radius, title, lo, hi, major, minor, red=None, units="", start=22
     for v in np.arange(lo, hi + minor / 2, minor):
         a = value_angle(v, lo, hi, start, sweep)
         is_major = abs((v - lo) / major - round((v - lo) / major)) < 1e-6
-        pygame.draw.line(surf, LEGEND if is_major else LEGEND_DIM, polar(c, rr, a), polar(c, rr - (9 if is_major else 4), a),
+        inner = polar(c, rr - (9 if is_major else 4), a)
+        pygame.draw.line(surf, LEGEND if is_major else LEGEND_DIM, polar(c, rr, a), inner,
                          2 if is_major else 1)
         if is_major:
             engrave(surf, labels.get(v, "") if labels else f"{v:g}", polar(c, rr - 19, a), 11, LEGEND, center=True)
@@ -410,7 +411,8 @@ def button(surf, rect, text, lit=False, color=AMBER):
     cap = _warm(color, True) if lit else (78, 78, 74)
     pygame.draw.rect(surf, cap, r, border_radius=2)
     pygame.draw.line(surf, tuple(min(255, v + 40) for v in cap), (r.left + 3, r.top + 1), (r.right - 4, r.top + 1))
-    pygame.draw.ellipse(surf, tuple(max(0, v - 18) for v in cap), (r.centerx - r.w // 4, r.centery - 3, r.w // 2, 8))  # thumb wear
+    thumb = (r.centerx - r.w // 4, r.centery - 3, r.w // 2, 8)  # worn where the thumb lands
+    pygame.draw.ellipse(surf, tuple(max(0, v - 18) for v in cap), thumb)
     size = 11
     while size > 7 and sans(size, True).size(text)[0] > r.w - 4:  # shrink the legend to fit the cap
         size -= 1
@@ -471,7 +473,8 @@ def bezel_overlay(size, frames):
             dist = np.hypot(qx, qy) - radius
         u = (x - (hole.x - outer.x)) / hole.w
         v = (y - (hole.y - outer.y)) / hole.h
-        glare = np.clip(1 - (u + v) * 1.3, 0, 1) ** 2 * 26 + np.exp(-((u - 0.75) ** 2 / 0.02 + (v - 0.12) ** 2 / 0.002)) * 30
+        sheen = np.exp(-((u - 0.75) ** 2 / 0.02 + (v - 0.12) ** 2 / 0.002))  # a window reflected top right
+        glare = np.clip(1 - (u + v) * 1.3, 0, 1) ** 2 * 26 + sheen * 30
         alpha = np.where(dist > 0, 255, glare + 6).astype(np.uint8)  # +6: smoke film on the glass
         rgb = pygame.surfarray.pixels3d(tex)
         rgb[dist <= 0] = (255, 248, 230)

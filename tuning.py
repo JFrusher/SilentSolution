@@ -49,6 +49,10 @@ WAVE_GAP = 30.0           # s of quiet between waves
 TONNAGE = {"MERCHANT": 6500, "ESCORT": 1600, "SUB": 1100}
 WAVE_TIME_LIMIT = 900.0       # s; after this a wave's far-off stragglers count as gone
 LATE_DESPAWN_RANGE = 9000.0   # m, the despawn range once a wave is over its time limit
+LATE_MERCHANT_RANGE = 6000.0  # m; once a wave is late, unalarmed merchants beyond this no longer hold it open
+
+# Wire guidance: the spool is shorter than the run, so the seeker finishes the job on its own
+WIRE_LENGTH = 4000.0  # m of guidance wire (the fish runs 5,486 m)
 
 # Damage control: seconds one repair party needs per system. It works the top of the list first.
 REPAIR_TIME = {"HYDROPHONES": 90.0, "ACTIVE SONAR": 60.0, "PLANES": 75.0, "RUDDER": 60.0, "TUBE 1": 90.0,

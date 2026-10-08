@@ -4,7 +4,7 @@
 - **Language:** Python 3.11+
 - **Primary Libraries:** Pygame-ce, NumPy
 - **Execution:** Always use `uv run main.py` for testing (on this machine `uv` lives at `.venv/Scripts/uv.exe`)
-- **Checks:** `uv run test_sim.py`, `uv run test_tutorial.py`, `uv run test_periscope.py` (headless; set `SDL_VIDEODRIVER=dummy` for ad-hoc scripts)
+- **Checks:** `uv run checks.py` runs every suite headless plus `ruff check` (lint only, line length 120; set `SDL_VIDEODRIVER=dummy` for ad-hoc scripts)
 - **Git:** git flow — `main` releases, `develop` integration, `feature/*` merged into `develop` with `--no-ff`
 
 ## Core Architecture

@@ -9,7 +9,6 @@ import pygame
 from layout import WF_H, WF_W
 from settings import SETTINGS
 
-
 ROW_INTERVAL = 0.1        # sim seconds per waterfall row
 
 
@@ -32,7 +31,7 @@ def _template(*peaks, floor=0.0, slope=0.0):
 TEMPLATES = np.array([
     _template((30, 1.0, .06), (60, .8, .06), (90, .55, .06), (120, .35, .06), floor=.25, slope=.6),  # 2-blade shaft hum
     _template((60, .5, .08), (120, .45, .08), (450, .9, .05), (900, 1.0, .04), (1350, .6, .04), floor=.45, slope=.1),
-    _template((50, 1.0, .03), (300, .3, .03), floor=.05, slope=.5),                                 # one faint narrow line
+    _template((50, 1.0, .03), (300, .3, .03), floor=.05, slope=.5),                              # one faint narrow line
     _template((1500, 1.0, .03), (750, .35, .04), floor=.1, slope=-.3),                              # high-speed screw
     _template(floor=1.0),                                                                           # broadband bubbles
 ])
@@ -114,8 +113,8 @@ class WaterfallDisplay:
         if widths is None:
             widths = np.full(len(levels), 1.5)
         if self.blips:
-            b, l, w = np.array(self.blips).T
-            bearings, levels, widths = (np.concatenate(p) for p in ((bearings, b), (levels, l), (widths, w)))
+            b, lv, w = np.array(self.blips).T
+            bearings, levels, widths = (np.concatenate(p) for p in ((bearings, b), (levels, lv), (widths, w)))
             self.blips.clear()
         self.buffer = np.roll(self.buffer, shift=1, axis=0)
         row = np.clip(np.random.normal(22.5, 6.0, WF_W), 10, 35)                                 # thermal / self noise

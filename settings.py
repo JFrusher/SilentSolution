@@ -2,6 +2,7 @@
 Saved as JSON in the user's home folder; a missing or broken file just means defaults."""
 import copy
 import json
+import re
 from pathlib import Path
 
 import pygame
@@ -65,7 +66,10 @@ def _valid(name):
 
 
 def code(action):
-    return pygame.key.key_code(SETTINGS["keys"][action])
+    try:
+        return pygame.key.key_code(SETTINGS["keys"][action])
+    except ValueError:  # a name SDL can't resolve: fall back rather than crash the frame
+        return pygame.key.key_code(KEYS[action])
 
 
 def action_for(k):
@@ -80,11 +84,27 @@ def volume(category):
     return v["MASTER"] * v[category]
 
 
+SHOWN = {"return": "ENTER", "space": "SPACE"}  # key names as the station prints them
+TOKEN = re.compile(r"\{([A-Z0-9 -]+)\}")
+
+
+def label(*actions):
+    """Display name of the key(s) bound to these actions: label("SLOWER", "FASTER") -> "Z / X"."""
+    return " / ".join(SHOWN.get(n, n.upper()) for n in (SETTINGS["keys"][a] for a in actions))
+
+
+def keyed(text):
+    """Fill {ACTION} tokens with the bound key: "PRESS {MARK}" -> "PRESS M"."""
+    return TOKEN.sub(lambda m: label(m.group(1)) if m.group(1) in KEYS else m.group(0), text)
+
+
 def bind(action, k):
     """Put `action` on key k; whatever had k takes this action's old key. Returns an error or None."""
     name = pygame.key.name(k)
     if name in RESERVED:
         return f"{name.upper()} IS RESERVED"
+    if not _valid(name):  # media / OEM keys SDL can't name
+        return "KEY CAN'T BE BOUND"
     keys = SETTINGS["keys"]
     other = next((a for a, n in keys.items() if n == name), None)
     if other:
@@ -204,9 +224,17 @@ if __name__ == "__main__":  # self-check: load/save round trip, rebinding swaps,
     assert SETTINGS["volume"]["MASTER"] == 0.3 and SETTINGS["mouse"] == 2.0 and SETTINGS["keys"]["FIRE"] == "f"
     assert bind("FIRE", pygame.K_SPACE) is None and SETTINGS["keys"]["PING"] == "f"
     assert action_for(pygame.K_SPACE) == "FIRE" and bind("FIRE", pygame.K_p)
+    assert bind("TRAIN LEFT", 0) and SETTINGS["keys"]["TRAIN LEFT"] == "a"  # an unnamed key is refused
+    SETTINGS["keys"]["TRAIN LEFT"] = ""
+    assert code("TRAIN LEFT") == pygame.K_a  # and a bad stored name never raises
+    SETTINGS["keys"]["TRAIN LEFT"] = "a"
     save(tmp)
     load(tmp)
     assert SETTINGS["keys"]["FIRE"] == "space"
+    assert keyed("PRESS {FIRE}, THEN {SLOWER} - {NOT AN ACTION}") == "PRESS SPACE, THEN Z - {NOT AN ACTION}"
+    assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
+    assert keyed("PRESS {FIRE}, THEN {SLOWER} - {NOT AN ACTION}") == "PRESS SPACE, THEN Z - {NOT AN ACTION}"
+    assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
     tmp.write_text("not json")
     load(tmp)
     assert SETTINGS == DEFAULTS

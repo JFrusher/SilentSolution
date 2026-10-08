@@ -3,19 +3,33 @@ import math
 import random
 
 import numpy as np
+import pygame
 
-from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
-                ThreatDirector, frame_point)
+from ai import (
+    ALARMED,
+    ALERT,
+    ATTACK,
+    CRUISE,
+    PATROL,
+    SCATTER,
+    SEARCH,
+    WITHDRAW,
+    Convoy,
+    EscortAI,
+    MerchantAI,
+    SubmarineAI,
+    ThreatDirector,
+    frame_point,
+)
 from audio import AudioSynthesizer
 from console import Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
-from layout import WF_W
+from layout import CRT_RECT, WF_H, WF_POS, WF_W
 from sensors import PeriscopeOptics, cone_gain
+from sim import EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff, bearing
 from tma import TMALog
-from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
-                 bearing)
-from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME
+from tuning import DAMAGED_MOTOR_KT, DIFFICULTY, REPAIR_TIME, WAVE_TIME_LIMIT
 
 
 def calm_or_storm(w, rain):
@@ -261,6 +275,27 @@ if __name__ == "__main__":
     w.step(0.1)
     assert PeriscopeOptics(w).look() is None, "masts struck below periscope depth: blind"
 
+    # late waves wind down: idle warships withdraw and far unalarmed merchants stop holding the wave open
+    random.seed(2)
+    w = build_world(DIFFICULTY["COMMANDER"])
+    w.min_hull, w.director.boost = 100.0, 2  # wave 1 brings a submarine; the boat sits still and watches
+    w.player.speed = w.player.ordered_speed = 0.0
+    kinds = []
+    while "WAVE_CLEAR" not in kinds and w.time < WAVE_TIME_LIMIT + 900:
+        kinds += [e[0] for e in w.step(0.2)]
+    assert "WAVE_CLEAR" in kinds and "AI_WITHDRAW" in kinds, (w.time, [(a.ship.kind, a.state) for a in w.ais])
+
+    # a submarine with empty racks breaks off and leaves instead of shadowing the boat
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [])
+    sub = Vessel(0, 400, 90, 0, z=60)
+    hunter = SubmarineAI(sub, 90, torpedoes=0, layer_sensitivity=0.0)
+    w.targets.append(sub)
+    w.ais.append(hunter)
+    hunter._mark(w, 30.0)
+    hunter.alarm = True
+    run(w, 600)
+    assert hunter.state == WITHDRAW and w.player.range_to(sub) > 4000, (hunter.state, w.player.range_to(sub))
+
     # campaign patrol: escalation starts at the boost; the last wave clearing ends the patrol and nothing more spawns
     w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [])
     w.director = ThreatDirector(DIFFICULTY["CADET"], boost=4, waves=1)
@@ -270,6 +305,36 @@ if __name__ == "__main__":
     w.ais.clear()
     assert run(w, 0.2).count("WAVE_CLEAR") == 1 and w.director.done
     assert "WAVE" not in run(w, 30) and not w.targets
+
+    # the resupply report says what was actually loaded: full racks get nothing
+    con = Console("COMMANDER", AudioSynthesizer())
+    p = con.world.player
+    p.torpedoes, p.noisemakers = 12, 5
+    con.world.targets.clear()
+    con.world.director.wave, con.world.director.cleared = 1, False
+    ev = [e for e in con.world.step(0.1) if e[0] == "WAVE_CLEAR"]
+    assert ev and ev[0][2] == (0, 1) and (p.torpedoes, p.noisemakers) == (12, 6), ev
+    con.report(*ev[0])
+    assert "RACKS FULL" in " ".join(con.teletype.queue), con.teletype.queue
+
+    # a beyond-range solution needs a second press to fire: one slip doesn't waste a fish
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.tdc.set("RNG", 9000.0)
+    con.fire()
+    assert not con.world.torpedoes and "BEYOND RANGE" in con.log[-1]
+    con.fire()
+    assert len(con.world.torpedoes) == 1
+
+    # clicking the TMA plot listens where you click (true bearing), not at a waterfall-scaled relative bearing
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.world.player.heading = 70.0
+    con.tdc.set("BRG", 30.0)
+    con.crt_page = "TMA"
+    wf = pygame.Rect(CRT_RECT.x + WF_POS[0], CRT_RECT.y + WF_POS[1], WF_W, WF_H)
+    con.click(wf.center)
+    assert abs(angle_diff(con.dial, 30.0)) < 0.5, con.dial
+    con.scroll(wf.center, 1)
+    assert abs(angle_diff(con.dial, 30.0)) < 0.5  # the wheel only trains the dial on the waterfall page
 
     # damage control: a hit breaks systems; one party repairs them in the order set, one at a time
     w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [], systems_damage=True)
@@ -308,8 +373,7 @@ if __name__ == "__main__":
     assert "WIRE_CUT" in run(w, 0.2) and not t.wired
     t2 = w.fire(0.0, wired=True, arm_distance=1e9)
     w.player.speed = w.player.ordered_speed = 0.0
-    t2.run = 8001.0
-    assert "WIRE_CUT" in run(w, 0.2) and not t2.wired
+    assert "WIRE_CUT" in run(w, 230) and not t2.wired and t2 in w.torpedoes  # end of spool, before fuel out
 
     # TMA: noisy bearings across an own-ship leg change plus one echo let auto-solve recover the target
     random.seed(7)
@@ -326,7 +390,8 @@ if __name__ == "__main__":
         t += 0.5
     result = log.auto_solve(t, own, tdc)
     assert result[1] is False, "two legs and an echo: the solution should be well conditioned"
-    assert abs(angle_diff(tdc.get("CRS"), 250)) <= 15 and abs(tdc.get("SPD") - 10) <= 2, (tdc.get("CRS"), tdc.get("SPD"), result)
+    assert abs(angle_diff(tdc.get("CRS"), 250)) <= 15, (tdc.get("CRS"), result)
+    assert abs(tdc.get("SPD") - 10) <= 2, (tdc.get("SPD"), result)
     assert abs(tdc.get("RNG") * YARD - own.range_to(tgt)) / own.range_to(tgt) < 0.15, tdc.get("RNG")
     assert log.fit(t, own, tdc) < 1.5
 

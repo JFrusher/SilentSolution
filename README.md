@@ -12,9 +12,11 @@ but while the mast is up, the sea can see you too.
 [![pygame-ce](https://img.shields.io/badge/pygame--ce-2.5-6aa84f)](https://pyga.me/)
 [![NumPy](https://img.shields.io/badge/NumPy-procedural-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![uv](https://img.shields.io/badge/run%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
-![Version](https://img.shields.io/badge/version-0.2.0-ffbe56)
+![Version](https://img.shields.io/badge/version-0.2.1-ffbe56)
 ![Asset files](https://img.shields.io/badge/asset%20files-0-84d670)
 ![Platform](https://img.shields.io/badge/build-Windows%20.exe-0078D6?logo=windows&logoColor=white)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
+[![checks](https://github.com/JFrusher/SilentSolution/actions/workflows/checks.yml/badge.svg)](https://github.com/JFrusher/SilentSolution/actions/workflows/checks.yml)
 
 [Quick start](#-quick-start) · [The station](#-the-station) · [How an attack works](#-how-an-attack-works) ·
 [Game modes](#-game-modes) · [Controls](#-controls) · [Under the hood](#-under-the-hood) · [Development](#-development)
@@ -124,7 +126,7 @@ flowchart LR
     D -.- d[Ping: echo delay x c / 2<br/>or a stadimeter mark]
     E -.- e[TMA plot: two legs<br/>until the curve fits the dots]
     F -.- f[Salvo fanned across SPREAD<br/>seekers arm at SKR ARM]
-    G -.- g[Steer on the wire<br/>parts above 12 kt or 8 km]
+    G -.- g[Steer on the wire<br/>parts above 12 kt or 4 km]
     H -.- h[Go deep, under the layer<br/>slow and quiet]
 ```
 
@@ -315,7 +317,7 @@ stateDiagram-v2
 ```
 
 - **Wire guidance.** A wired fish steers toward its aim point until its seeker takes over. The wire parts above
-  12 kt of own speed or past 8,000 m of run.
+  12 kt of own speed or past 4,000 m of run, leaving the last stretch to the seeker.
 - **TMA auto-solve.** Bearings-only TMA is ill-conditioned, so the solver searches rather than iterating: course
   (72 × 5°) × speed (21 × 1 kt) × present range (23 steps along the latest bearing) gives **34,776 hypotheses**,
   each back-propagated through the own-ship track and scored by mean bearing error in a single NumPy broadcast.
@@ -408,7 +410,7 @@ runs.
 ## 🧰 Development
 
 ```bash
-uv run checks.py                          # every suite, headless (SDL dummy drivers)
+uv run checks.py                          # every suite headless (SDL dummy drivers), then ruff; CI runs it too
 uv run --with pillow docs/shots.py        # regenerate every image in this README from live game states
 uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 ```
@@ -459,7 +461,8 @@ SilentSolution/
 
 <div align="center">
 
-**Silent Solution** · v0.2.0 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/)
+**Silent Solution** · v0.2.1 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/) ·
+[MIT licence](LICENSE) ([third-party notices](THIRD-PARTY-NOTICES.txt))
 
 <sub>Run silent, run deep.</sub>
 

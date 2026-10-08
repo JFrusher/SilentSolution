@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 
 from console import Console
+from settings import keyed
 from tuning import DIFFICULTY
 
 PATH = Path.home() / ".silent_solution" / "career.json"
@@ -77,6 +78,8 @@ class Career:
         return self.patrol >= len(PATROLS)
 
     def add_score(self, mode, grt, waves):
+        if grt <= 0:  # nothing sunk: history for the log, not a score
+            return
         self.scores.append(dict(mode=mode, grt=grt, waves=waves, rank=self.rank, date=today()))
         self.scores = sorted(self.scores, key=lambda s: -s["grt"])[:10]
         self.save()
@@ -95,7 +98,8 @@ class Career:
         promoted = run.result == "SUCCESS"
         if promoted:
             self.patrol += 1
-        self.add_score(f"P{PATROLS.index(p) + 1} {p['name']}", grt, con.wave)  # also saves
+        self.add_score(f"P{PATROLS.index(p) + 1} {p['name']}", grt, con.wave)
+        self.save()
         return dict(patrol=p, result=run.result, grt=grt, sunk=sunk, hull=con.world.hull, time=con.world.time,
                     promoted=self.rank if promoted else None,
                     offer=self.offer() if promoted and not self.finished else [])
@@ -123,8 +127,8 @@ class PatrolRun:
         elif self.met(con):
             if not self.announced:
                 self.announced = True
-                con.teletype.print("FROM FLAG OFFICER SUBMARINES: OBJECTIVES MET. RETURN TO BASE WHEN READY "
-                                   "(ENTER), OR STAY AND HUNT.")
+                con.teletype.print(keyed("FROM FLAG OFFICER SUBMARINES: OBJECTIVES MET. RETURN TO BASE WHEN READY "
+                                         "({ACKNOWLEDGE}), OR STAY AND HUNT."))
             if "ENTER" in con.actions or con.world.director.done:
                 self.result = "SUCCESS"
         elif con.world.director.done:
@@ -169,6 +173,7 @@ if __name__ == "__main__":  # self-check: save round trip, ranks, objectives, re
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
     import pygame
+
     from audio import AudioSynthesizer
     from sim import Vessel
     pygame.init()
@@ -188,13 +193,17 @@ if __name__ == "__main__":  # self-check: save round trip, ranks, objectives, re
     assert debrief["promoted"] == "LIEUTENANT" and len(debrief["offer"]) == 2
     assert not set(debrief["offer"]) & {"THICK HULL", "QUIET SCREWS"}
     again = Career(tmp)
-    assert again.patrol == 1 and again.upgrades == ["THICK HULL", "QUIET SCREWS"] and again.log[0]["result"] == "SUCCESS"
+    assert again.patrol == 1 and again.upgrades == ["THICK HULL", "QUIET SCREWS"]
+    assert again.log[0]["result"] == "SUCCESS"
     con, run = sail(again, AudioSynthesizer())
     con.world.director.done = True
     assert run.update(con) == "FAILED" and again.record(run, con)["promoted"] is None and again.patrol == 1
+    assert Career(tmp).log[-1]["result"] == "FAILED"  # a 0 GRT patrol is still saved to the log
     for g in (500, 90000, 20):
         again.add_score("COMMANDER", g, 3)
     assert [s["grt"] for s in Career(tmp).scores][:2] == [90000, 6500]
+    assert all(s["grt"] > 0 for s in Career(tmp).scores)
+    assert len(Career(tmp).log) == 2  # the 0 GRT patrol is logged, not scored
     tmp.write_text("{broken")
     assert Career(tmp).patrol == 0
     print("campaign ok")

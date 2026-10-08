@@ -4,7 +4,6 @@ from collections import namedtuple
 
 from sim import KNOT, TORP_SPEED, YARD, bearing, clamp, intercept
 
-
 # ---------- fire control ----------
 Solution = namedtuple("Solution", "gyro lead time run intercept")
 
