@@ -17,6 +17,7 @@ dependencies = [
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+src = ["src"]  # first-party modules for import sorting
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
