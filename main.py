@@ -126,7 +126,9 @@ def main():
                 elif choice:
                     console, state = Console(choice, audio), "PLAY"
             elif state == "OVER":
-                if e.type == pygame.KEYDOWN and e.key == pygame.K_r:
+                if e.type == pygame.KEYDOWN and e.key == pygame.K_r:  # straight back out at the same difficulty
+                    console, state = Console(console.level, audio), "PLAY"
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_t:
                     console, state = None, "TITLE"
             elif e.type == pygame.KEYDOWN and e.key == pygame.K_p:
                 paused = not paused

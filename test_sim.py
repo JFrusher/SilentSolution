@@ -293,6 +293,17 @@ if __name__ == "__main__":
     assert run(w, 0.2).count("WAVE_CLEAR") == 1 and w.director.done
     assert "WAVE" not in run(w, 30) and not w.targets
 
+    # the resupply report says what was actually loaded: full racks get nothing
+    con = Console("COMMANDER", AudioSynthesizer())
+    p = con.world.player
+    p.torpedoes, p.noisemakers = 12, 5
+    con.world.targets.clear()
+    con.world.director.wave, con.world.director.cleared = 1, False
+    ev = [e for e in con.world.step(0.1) if e[0] == "WAVE_CLEAR"]
+    assert ev and ev[0][2] == (0, 1) and (p.torpedoes, p.noisemakers) == (12, 6), ev
+    con.report(*ev[0])
+    assert "RACKS FULL" in " ".join(con.teletype.queue), con.teletype.queue
+
     # a beyond-range solution needs a second press to fire: one slip doesn't waste a fish
     con = Console("COMMANDER", AudioSynthesizer())
     con.tdc.set("RNG", 9000.0)

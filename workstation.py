@@ -282,7 +282,7 @@ class Workstation:
             if state == "OVER":
                 self._crt_box(s, crt, ["LOST WITH ALL HANDS" if con.cause == "HULL BREACHED" else "CREW UNCONSCIOUS",
                                        con.cause, f"WAVE {con.wave}   {con.score:,} GRT SUNK", "",
-                                       "[R] NEW PATROL     [ESC] QUIT"])
+                                       "[R] NEW PATROL   [T] TITLE   [ESC] QUIT"])
             elif self.confirm:
                 self._crt_box(s, crt, self.confirm)
             elif paused:

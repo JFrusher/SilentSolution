@@ -566,7 +566,9 @@ class Console:
                f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")
             return
         if kind == "WAVE_CLEAR":
-            tt(f"WAVE {a} DISPERSED. TENDER RESUPPLY: +4 TORPEDOES, +2 NOISEMAKERS. TOTAL {self.score:,} GRT.")
+            torps, decoys = b
+            tt(f"WAVE {a} DISPERSED. TENDER RESUPPLY: +{torps} TORPEDOES{' (RACKS FULL)' if torps < 4 else ''}, "
+               f"+{decoys} NOISEMAKERS{' (LOCKER FULL)' if decoys < 2 else ''}. TOTAL {self.score:,} GRT.")
             return
         if kind == "ESCAPED":
             if a.kind == "MERCHANT":
