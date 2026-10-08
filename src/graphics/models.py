@@ -150,8 +150,8 @@ class Builder:
         L = np.linalg.norm(b - a)
         self.lathe(a, b - a, ([(0, 0)] if caps else []) + [(r, 0), (r, L)] + ([(0, L)] if caps else []), col, mat, seg)
 
-    def tube(self, points, radius, col, mat="paint", seg=8, closed=False, ellipse=None):
-        """Sweep a circle (or ellipse (rx, ry) per point, its rx along `ellipse` side vectors) along a polyline."""
+    def tube(self, points, radius, col, mat="paint", seg=8, closed=False, ellipse=None, side=None):
+        """Sweep a circle (or an ellipse (rx, ry) per point, rx along `side` as it's carried along) down a polyline."""
         P = np.asarray(points, float)
         n = len(P)
         R = np.broadcast_to(np.asarray(radius, float), (n,)) if np.ndim(radius) == 0 else np.asarray(radius, float)
@@ -159,7 +159,9 @@ class Builder:
         if closed:
             T = np.roll(P, -1, 0) - np.roll(P, 1, 0)
         T = T / np.linalg.norm(T, axis=1, keepdims=True)
-        side = unit(np.cross(T[0], (0.0, 1.0, 0.0) if abs(T[0][1]) < 0.9 else (1.0, 0.0, 0.0)))
+        if side is None:
+            side = np.cross(T[0], (0.0, 1.0, 0.0) if abs(T[0][1]) < 0.9 else (1.0, 0.0, 0.0))
+        side = unit(side)
         sides = []
         for k in range(n):  # parallel transport, so the tube doesn't twist
             side = side - T[k] * np.dot(side, T[k])
@@ -343,28 +345,34 @@ class Station:
         a = self.at_panel(-pw / 2, h / 2 + 0.07, 0.003)
         b.quad(a, a + self.X * pw, a + self.X * pw + self.U * ph, a + self.U * ph, (1, 1, 1), plate)
 
-    def cabinet(self):
+    def cabinet(self, knees):
+        """The desk's carcass: a full-width band under the top, pedestals with doors and louvres, and a knee hole
+        (with a footrest) wherever a man sits at it."""
         b, w = self.b, self.w
-        top, z0, z1 = self.desk_y - 0.035, -0.3, self.desk_z1 - 0.06
-        zc, depth = (z0 + z1) / 2, z1 - z0
-        b.box((0, (top + 0.09) / 2 + 0.045, zc), (w + 0.14, top - 0.09, depth), HAMMERTONE, r=0.02)
-        b.box((0, 0.045, zc - 0.03), (w + 0.1, 0.09, depth - 0.06), PLINTH)  # kick plinth, set back
-        doors = 2 if w > 1.3 else 1
-        dw = (w - 0.12) / doors
-        for k in range(doors):  # cabinet doors, a latch handle on each, and a louvred vent low down
-            x = -w / 2 + 0.06 + dw * (k + 0.5)
-            b.box((x, (top + 0.14) / 2, z1 + 0.004), (dw - 0.03, top - 0.2, 0.01), HAMMERTONE, r=0.004)
-            hx = x + (dw / 2 - 0.07) * (1 if k == 0 else -1)
-            b.box((hx, top - 0.12, z1 + 0.02), (0.018, 0.1, 0.02), CHROME, "metal", r=0.006)
-            for j in range(6):
-                y = 0.18 + j * 0.022
-                b.box((x, y, z1 + 0.012), (dw * 0.5, 0.008, 0.012), PLINTH, axes=frame((0, -0.5, 1)))
+        top, z0, z1, knee_y = self.desk_y - 0.035, -0.3, self.desk_z1 - 0.06, 0.66
+        W = w + 0.14
+        b.box((0, (top + knee_y) / 2, (z0 + z1) / 2), (W, top - knee_y, z1 - z0), HAMMERTONE, r=0.02)
+        edges = sorted([-W / 2, W / 2] + [x + d for x in knees for d in (-0.28, 0.28)])
+        for x0, x1 in zip(edges[::2], edges[1::2]):  # pedestals between the knee holes
+            x, dw = (x0 + x1) / 2, x1 - x0
+            b.box((x, (knee_y + 0.09) / 2, (z0 + z1) / 2), (dw, knee_y - 0.09, z1 - z0), HAMMERTONE, r=0.015)
+            b.box((x, 0.045, (z0 + z1) / 2 - 0.03), (max(dw - 0.04, 0.01), 0.09, z1 - z0 - 0.06), PLINTH)
+            if dw > 0.25:  # room for a door: its latch, and a louvred vent low down
+                b.box((x, (top + 0.14) / 2, z1 + 0.004), (dw - 0.05, top - 0.2, 0.01), HAMMERTONE, r=0.004)
+                b.box((x + (dw / 2 - 0.07) * (1 if x < 0 else -1), top - 0.12, z1 + 0.02), (0.018, 0.1, 0.02), CHROME,
+                      "metal", r=0.006)
+                for j in range(6):
+                    b.box((x, 0.18 + j * 0.022, z1 + 0.012), (dw * 0.5, 0.008, 0.012), PLINTH,
+                          axes=frame((0, -0.5, 1)))
+        for x in knees:  # knee holes: a back panel set in, a chrome footrest
+            b.box((x, (knee_y + 0.02) / 2, (z0 + 0.05) / 2), (0.56, knee_y - 0.02, 0.05 - z0), HAMMERTONE)
+            b.cylinder((x - 0.25, 0.12, 0.16), (x + 0.25, 0.12, 0.16), 0.014, CHROME, "metal", seg=8)
         for x in (-1, 1):  # rivets down the cabinet's front corners
             for y in np.arange(0.16, top - 0.04, 0.09):
-                b.lathe((x * (w / 2 + 0.055), y, z1 + 0.004), (0, 0, 1), [(0, 0), (0.006, 0), (0.004, 0.004),
+                b.lathe((x * (W / 2 - 0.015), y, z1 + 0.004), (0, 0, 1), [(0, 0), (0.006, 0), (0.004, 0.004),
                                                                           (0, 0.005)], HAMMERTONE, seg=6)
         maker = b.texture("maker", maker_art(), rough=0.4)
-        a = np.array((w / 2 - 0.2, 0.36, z1 + 0.011))
+        a = np.array((W / 2 - 0.2, top - 0.1, z1 + 0.011))
         b.quad(a, a + (0.12, 0, 0), a + (0.12, 0.06, 0), a + (0, 0.06, 0), (1, 1, 1), maker)
 
     def desk(self):
@@ -555,6 +563,16 @@ def dial(b, centre, normal, r, name, surf):
     b.grid(face, P, (1, 1, 1), uv=uv, normals=np.broadcast_to(z, P.shape))
 
 
+def stool(b, p):
+    """A watchkeeper's swivel stool: a steel column on a foot ring, a padded round seat."""
+    b.lathe(p, (0, 1, 0), [(0, 0), (0.2, 0), (0.19, 0.02), (0, 0.03)], PLINTH, "metal", seg=16)
+    b.cylinder(p, p + (0, 0.44, 0), 0.03, CHROME, "metal", seg=10)
+    rim = [p + (0.16 * math.cos(t), 0.2, 0.16 * math.sin(t)) for t in np.linspace(0, 2 * math.pi, 20, endpoint=False)]
+    b.tube(rim, 0.008, CHROME, "metal", seg=6, closed=True)
+    b.lathe(p + (0, 0.44, 0), (0, 1, 0), [(0, 0), (0.18, 0), (0.19, 0.03), (0.17, 0.065), (0, 0.07)], LEATHER,
+            "cloth", seg=20, crisp=False)
+
+
 def seat(b, p, facing):
     """A helmsman's seat: pedestal, padded leather seat and back, a footrest."""
     fr = frame(facing)
@@ -600,6 +618,9 @@ RAIL = {  # each station's switch rail, left to right
     "NAVIGATION": [("toggle", "LOG"), ("knob", "SOUNDER"), ("lamp", "GYRO"), ("toggle", "LIGHTS"), ("knob", "DIM")],
 }
 PHONE_SIDE = {"BALLAST CONTROL": -1, "HELM AND PLANES": 0}
+KNEES = {"HELM AND PLANES": (-0.6, 0.6)}  # where men sit at a desk (default: its middle)
+SEAT_OUT = 0.74  # how far out from a station's panel its watchkeeper's stool stands
+HELM_SEATS = ((-0.6, 0.75), (0.6, 0.75))  # the helmsman's and planesman's seats, x and out, in the helm's model space
 
 
 def station(s):
@@ -607,7 +628,10 @@ def station(s):
     b = Builder()
     st = Station(b, s)
     st.housing()
-    st.cabinet()
+    knees = KNEES.get(s.name, (0.0,)) if s.working else ()
+    st.cabinet(knees)
+    if s.working and s.name != "HELM AND PLANES":  # the watchkeeper's stool
+        stool(b, np.array((0.0, 0.0, SEAT_OUT)))
     st.desk()
     st.rail(RAIL[s.name])
     if PHONE_SIDE.get(s.name, 1):
@@ -615,7 +639,6 @@ def station(s):
     st.cables((-s.w / 2 + 0.18, s.w / 2 - 0.18))
     w, y, z = s.w, st.desk_y, (st.desk_z0 + st.desk_z1) / 2 + 0.07
     if s.name == "SONAR":
-        headphones(b, np.array((-w / 2 + 0.2, y, z)), 0.3)
         logbook(b, np.array((w / 2 - 0.22, y, z)), -0.15)
         pencil(b, (w / 2 - 0.38, y + 0.005, z + 0.06), (w / 2 - 0.3, y + 0.005, z - 0.08))
         mug(b, np.array((w / 2 + 0.02, y, z + 0.04)))
@@ -629,7 +652,6 @@ def station(s):
         a = np.array((-w / 2 - 0.075, y + 0.15, 0.1))
         b.quad(a, a + (0, 0, -0.16), a + (0, 0.065, -0.16), a + (0, 0.065, 0), (1, 1, 1), placard)
     elif s.name == "RADIO":
-        headphones(b, np.array((-w / 2 + 0.18, y, z)), -0.2)
         clipboard(b, np.array((w / 2 - 0.22, y, z)), -0.1, "SIGNAL PAD",
                   ["FOSM 041200Z", "CONVOY 6M 2E", "RV 040 9NM", "ACK"], "signal pad")
         k = np.array((0.05, y, z + 0.05))  # morse key
@@ -640,9 +662,9 @@ def station(s):
         b.box(st.at_panel(w / 2 + 0.12, 0.25, -0.12), (0.12, 0.04, 0.03), HAMMERTONE, axes=st.tilted, r=0.008)
         dial(b, st.at_panel(w / 2 + 0.2, 0.25, -0.06), st.N, 0.075, "clock", clock_art())
     elif s.name == "HELM AND PLANES":
-        for side in (-0.6, 0.6):  # the helmsman's and planesman's seats and columns, as control_room has them
-            seat(b, np.array((side, 0.0, 0.75)), (0, 0, -1))
-            yoke(b, np.array((side, 0.0, 0.42)), (0, 0, 1))
+        for x, out in HELM_SEATS:  # the helmsman's and planesman's seats and their columns
+            seat(b, np.array((x, 0.0, out)), (0, 0, -1))
+            yoke(b, np.array((x, 0.0, out - 0.33)), (0, 0, 1))
         for side, title in ((-1, "FWD PLANES"), (1, "AFT PLANES")):
             c = st.at_panel(side * (w / 2 + 0.2), 0.2, -0.04)
             b.box(st.at_panel(side * (w / 2 + 0.1), 0.2, -0.09), (0.16, 0.05, 0.03), HAMMERTONE, axes=st.tilted,
@@ -676,6 +698,225 @@ def station(s):
     return b
 
 
+# ---------- the crew ----------
+SKINS = ((0.62, 0.43, 0.33), (0.55, 0.37, 0.27), (0.29, 0.18, 0.11), (0.66, 0.5, 0.41), (0.5, 0.33, 0.22))
+HAIRS = ((0.05, 0.035, 0.02), (0.16, 0.09, 0.04), (0.36, 0.14, 0.05), (0.42, 0.34, 0.2), (0.3, 0.3, 0.29))
+OUTFITS = {  # 1960s RN at sea: the submariner's white sweater, the navy jumper, working dress, a boiler suit
+    "white sweater": dict(top=(0.7, 0.68, 0.6), sleeve=(0.7, 0.68, 0.6), legs=(0.03, 0.035, 0.06), collar="roll"),
+    "navy jumper": dict(top=(0.04, 0.05, 0.1), sleeve=(0.04, 0.05, 0.1), legs=(0.03, 0.035, 0.06), collar="shirt"),
+    "working dress": dict(top=(0.32, 0.42, 0.58), sleeve=None, legs=(0.03, 0.035, 0.07), collar="open"),
+    "overalls": dict(top=(0.06, 0.08, 0.16), sleeve=(0.06, 0.08, 0.16), legs=(0.06, 0.08, 0.16), collar="open"),
+}
+CREW = {  # who keeps each watch: outfit, skin, hair, face hair, headphones
+    "SONAR": ("white sweater", 0, 1, None, True),
+    "FIRE CONTROL": ("navy jumper", 1, 0, "beard", False),
+    "RADIO": ("working dress", 3, 2, None, True),
+    "BALLAST CONTROL": ("overalls", 4, 4, "moustache", False),
+    "DAMAGE CONTROL": ("white sweater", 2, 0, "beard", False),
+    "HELM": ("navy jumper", 0, 3, None, False),
+    "PLANES": ("working dress", 1, 1, "beard", False),
+}
+UPPER_ARM, FOREARM, THIGH, SHIN = 0.3, 0.27, 0.44, 0.46
+
+
+def ik(root, target, l1, l2, pole):
+    """Where the middle joint of a two-bone limb goes so its end reaches `target`, bending toward `pole`."""
+    d = np.asarray(target, float) - root
+    L = min(max(np.linalg.norm(d), 1e-3), (l1 + l2) * 0.999)
+    n = d / np.linalg.norm(d)
+    x = (l1 * l1 - l2 * l2 + L * L) / (2 * L)
+    p = unit(np.asarray(pole, float) - n * np.dot(pole, n))
+    return root + n * x + p * math.sqrt(max(l1 * l1 - x * x, 0.0)), root + n * L
+
+
+def growth(d, beard):
+    """How far past the hairline (or beard line) direction d on the head is: > 0 where it grows."""
+    x, y, z = d
+    if beard is None:
+        grow = max(y - (0.3 + 0.3 * max(z, 0.0) - 0.25 * max(-z, 0.0)), min(-0.12 - z, y + 0.42))
+        return min(grow, 0.9 - abs(x) + 0.6 * max(abs(y) - 0.3, 0.0))  # clear of the ears
+    if beard == "beard":
+        return min(-0.1 - y, z + 0.3, max(abs(x) - 0.26, -0.3 - y, y + 0.5) * 0.6)  # jaw and chin, the mouth clear
+    return min(z - 0.83, 0.3 - abs(x), y + 0.37, -0.25 - y)  # a moustache
+
+
+def ease(v, width):
+    k = min(max(v / width + 0.5, 0.0), 1.0)
+    return k * k * (3 - 2 * k)
+
+
+def face(skin, hair, beard):
+    """shape(d) for the head: jaw, brow, nose, cheeks and ears pushed out, the lips and brows painted on.
+    d is a unit direction in the head's frame: +z the face, +y up, +x his left."""
+    skin, hair = np.array(skin), np.array(hair)
+    lips = skin * np.array((1.15, 0.72, 0.7))
+
+    def g(v, w):
+        return math.exp(-(v / w) ** 2)
+
+    def shape(d):
+        x, y, z = d
+        ax, front = abs(x), max(z, 0.0)
+        s = 1.0
+        s -= 0.16 * max(-y - 0.15, 0.0) * (0.6 + 0.4 * ax)        # jaw narrows to the chin
+        s += 0.06 * max(-z, 0.0) * max(y + 0.2, 0.0)               # the back of the skull
+        s += 0.2 * g(x, 0.11) * g(y + 0.1, 0.16) * front ** 6      # nose
+        s += 0.05 * g(y - 0.22, 0.07) * front ** 3 * (ax < 0.6)    # brow ridge
+        s -= 0.045 * g(ax - 0.32, 0.11) * g(y - 0.1, 0.08) * front ** 2  # eye sockets
+        s += 0.035 * g(ax - 0.55, 0.15) * g(y + 0.05, 0.12)        # cheekbones
+        s += 0.04 * g(x, 0.3) * g(y + 0.62, 0.12) * front           # chin
+        s += 0.16 * g(ax - 0.97, 0.05) * g(y - 0.02, 0.2) * g(z + 0.05, 0.15)  # ears
+        colour = skin
+        if front > 0.85 and ax < 0.22 and -0.47 < y < -0.36:
+            colour = lips
+        elif front > 0.5 and 0.18 < ax < 0.48 and 0.2 < y < 0.27:
+            colour = hair * 0.8 + skin * 0.2  # eyebrows
+        k = max(ease(growth(d, None), 0.1), ease(growth(d, beard), 0.1) if beard else 0.0)
+        return s, colour + (hair - colour) * k  # the hair line painted on, soft; the shell gives it body
+    return shape
+
+
+def hair_shape(beard):
+    """shape(d) for the hair shell (or the beard): out past the skin well inside where it grows, tucked into the head
+    elsewhere, so its edge hides under hair already painted on the skin."""
+    top = 1.065 if beard is None else 1.045
+
+    def shape(d):
+        return 0.94 + (top - 0.94) * ease(growth(d, beard) - 0.1, 0.12), None
+    return shape
+
+
+def hand(b, wrist, forward, side, skin, grip=False):
+    """A hand at the wrist, palm down along `forward`: a palm, four fingers curled over, a thumb."""
+    f = unit(forward)
+    up = np.array((0.0, 1.0, 0.0))
+    x = unit(np.cross(up, f))
+    up = np.cross(f, x)
+    palm = wrist + f * 0.045
+    b.blob(palm, np.column_stack((x, up, f)), (0.042, 0.016, 0.05), skin, "skin", nu=12, nv=8)
+    curl = 0.03 if grip else 0.016
+    for k in range(4):
+        base = wrist + f * 0.085 + x * (k - 1.5) * 0.018
+        L = (0.042, 0.048, 0.045, 0.036)[k]
+        pts = [base, base + f * L * 0.45 - up * curl * 0.3, base + f * L * 0.8 - up * curl,
+               base + f * L - up * curl * 2]
+        b.tube(pts, 0.0075, skin, "skin", seg=6)
+    t0 = wrist + f * 0.03 - x * side * 0.035
+    b.tube([t0, t0 + f * 0.03 - x * side * 0.012, t0 + f * 0.05 - x * side * 0.004 - up * 0.01], 0.009, skin, "skin",
+           seg=6)
+
+
+def crewman(key, pose, hands=None):
+    """A rating, seated with his hands at `hands` (two points, model space) or standing; the head a separate part
+    turning on his neck. Model space: the floor under his seat, facing +z."""
+    outfit, skin_i, hair_i, beard, phones = CREW[key]
+    o, skin, hair = OUTFITS[outfit], SKINS[skin_i], HAIRS[hair_i]
+    b = Builder()
+    b.materials["cloth"] = dict(rough=1.0, wear=0.6)
+    seated = pose == "seated"
+    hip_y = 0.56 if seated else 0.94
+    lean = 0.07 if seated else 0.0
+    spine = [np.array((0.0, hip_y - 0.02, -0.04)), np.array((0.0, hip_y + 0.18, -0.02 + lean * 0.3)),
+             np.array((0.0, hip_y + 0.38, 0.0 + lean * 0.7)), np.array((0.0, hip_y + 0.52, 0.02 + lean)),
+             np.array((0.0, hip_y + 0.6, 0.03 + lean))]
+    spine = bezier(spine, 9)
+    widths = np.interp(np.linspace(0, 1, 9), (0, 0.25, 0.55, 0.85, 1), (0.165, 0.15, 0.185, 0.2, 0.07))
+    depths = np.interp(np.linspace(0, 1, 9), (0, 0.25, 0.55, 0.85, 1), (0.11, 0.1, 0.12, 0.1, 0.06))
+    b.tube(spine, 0, o["top"], "cloth", seg=18, ellipse=np.column_stack((widths, depths)), side=(1.0, 0.0, 0.0))
+    b.blob(spine[0], I3, (0.165, 0.07, 0.11), o["legs"], "cloth", nu=16, nv=8)  # seat of his trousers
+    neck0, head_pivot = spine[-1], spine[-1] + np.array((0.0, 0.035, 0.01))
+    b.cylinder(neck0 - (0, 0.03, 0), head_pivot + (0, 0.05, 0.005), 0.05, skin, "skin", seg=12)
+    if o["collar"] == "roll":  # the submariner's sweater: a thick roll neck
+        b.tube([neck0 + (0, k * 0.02, 0.004 * k) for k in range(4)], 0.072, o["top"], "cloth", seg=14)
+    elif o["collar"] == "shirt":
+        b.tube([neck0 + (0, 0.005 + k * 0.012, 0.003 * k) for k in range(3)], 0.062, (0.55, 0.62, 0.72), "cloth",
+               seg=12)
+    else:  # an open neck: a vee of shirt, skin showing
+        b.blob(neck0 + (0, -0.04, 0.085 + lean * 0.2), I3, (0.05, 0.06, 0.02), skin, "skin", nu=10, nv=6)
+    for side in (-1, 1):  # arms
+        shoulder = spine[-2] + np.array((side * 0.18, -0.035, 0.0))
+        if hands is not None:
+            target = np.asarray(hands[(side + 1) // 2], float)
+            elbow, wrist = ik(shoulder, target - np.array((0, 0.012, 0.0)), UPPER_ARM, FOREARM,
+                              (side * 0.8, -1.0, -0.3))
+            forward = target - elbow
+            forward[1] = 0.0
+        else:
+            elbow, wrist = shoulder + (side * 0.04, -0.29, 0.02), shoulder + (side * 0.06, -0.55, 0.06)
+            forward = np.array((side * 0.15, -1.0, 0.2))
+        sleeve = o["sleeve"] or o["top"]
+        b.tube(bezier([shoulder - (side * 0.03, -0.01, 0), shoulder, (shoulder + elbow) / 2, elbow], 6),
+               np.interp(np.linspace(0, 1, 6), (0, 0.2, 1), (0.05, 0.058, 0.046)), sleeve, "cloth", seg=12)
+        fore = bezier([elbow, (elbow + wrist) / 2, wrist], 5)
+        if o["sleeve"]:
+            b.tube(fore, np.linspace(0.046, 0.036, 5), sleeve, "cloth", seg=12)
+        else:  # sleeves rolled to the elbow
+            b.tube(fore[:2], 0.052, o["top"], "cloth", seg=12)
+            b.tube(fore[1:], np.linspace(0.04, 0.032, 4), skin, "skin", seg=10)
+        if hands is not None:
+            hand(b, wrist, forward, side, skin, grip=key in ("HELM", "PLANES"))
+        else:
+            b.blob(wrist + (0, -0.05, 0.01), I3, (0.03, 0.055, 0.04), skin, "skin", nu=10, nv=8)
+        hip = spine[0] + np.array((side * 0.095, 0.0, 0.0))  # legs
+        if seated:
+            knee = np.array((side * 0.11, hip_y - 0.02, THIGH - 0.04))
+            ankle = np.array((side * 0.12, 0.09, THIGH + 0.02))
+        else:
+            knee, ankle = hip + (0.005 * side, -0.44, 0.02), np.array((side * 0.1, 0.09, -0.01))
+        b.tube(bezier([hip, (hip + knee) / 2, knee], 5), np.linspace(0.085, 0.062, 5), o["legs"], "cloth", seg=12)
+        b.tube(bezier([knee, (knee + ankle) / 2, ankle], 5), np.linspace(0.062, 0.045, 5), o["legs"], "cloth", seg=12)
+        b.blob(knee, I3, (0.062, 0.062, 0.062), o["legs"], "cloth", nu=10, nv=8)
+        b.box(ankle + (0, -0.055, 0.05), (0.1, 0.07, 0.27), (0.02, 0.02, 0.02), "bakelite", r=0.03)  # boots
+    if o["collar"] != "roll" and outfit == "overalls":
+        b.tube([spine[1] + (np.cos(t) * 0.152, 0, np.sin(t) * 0.103) for t in np.linspace(0, 2 * math.pi, 24,
+                                                                                         endpoint=False)],
+               0.012, (0.03, 0.03, 0.03), "rubber", seg=6, closed=True)  # belt
+
+    b.part = "head"
+    b.pivots["head"] = head_pivot
+    hc = head_pivot + np.array((0.0, 0.09, 0.02))
+    b.blob(hc, I3, (0.082, 0.112, 0.098), skin, "skin", nu=48, nv=34, shape=face(skin, hair, beard))
+    b.blob(hc + (0, 0.004, -0.004), I3, (0.082, 0.112, 0.098), hair, "cloth", nu=48, nv=34, shape=hair_shape(None))
+    if beard:
+        b.blob(hc, I3, (0.082, 0.112, 0.098), hair, "cloth", nu=48, nv=34, shape=hair_shape(beard))
+    for side in (-1, 1):  # eyes: white, an iris and pupil looking ahead
+        e = hc + np.array((side * 0.029, 0.012, 0.079))
+        b.blob(e, I3, (0.0125, 0.0125, 0.0125), (0.75, 0.73, 0.68), "bakelite", nu=12, nv=10,
+               shape=lambda d: (1.0, (0.02, 0.015, 0.01) if d[2] > 0.88 else (0.16, 0.1, 0.06) if d[2] > 0.7
+                                else None))
+    if phones:  # a sonarman's or radioman's headset
+        for side in (-1, 1):
+            b.lathe(hc + (side * 0.082, 0.0, -0.005), (side, 0, 0), [(0, 0), (0.038, 0), (0.04, 0.02), (0.03, 0.03),
+                                                                    (0, 0.03)], BAKELITE, "bakelite", seg=14,
+                    crisp=False)
+        band = [hc + (0.1 * math.cos(t), 0.118 * math.sin(t) + 0.0, -0.005) for t in np.linspace(0, math.pi, 14)]
+        b.tube(band, 0.007, (0.3, 0.3, 0.3), "metal", seg=6)
+    return b
+
+
+def crew_hands(s):
+    """Where the man on the stool at station s rests his hands, in his own model space."""
+    st = Station(Builder(), s)
+    z = SEAT_OUT - (st.desk_z0 + st.desk_z1) / 2 - 0.06  # the desk's middle, seen from his seat
+    return [np.array((side * 0.17, st.desk_y + 0.02, z)) for side in (-1, 1)]
+
+
+def crew_models():
+    """{file: Builder} for every crewman: seated at his station, and stood aside (helm crew stay seated)."""
+    out = {}
+    for s in cr.STATIONS:
+        if s.working and s.name != "HELM AND PLANES":
+            key = s.name
+            out[CREW_FILES[key]] = crewman(key, "seated", crew_hands(s))
+            out[CREW_FILES[key].replace("seated", "standing")] = crewman(key, "standing")
+    for key in ("HELM", "PLANES"):  # hands on the yoke's grips: the column stands 0.33 in front of the seat
+        out[CREW_FILES[key]] = crewman(key, "seated", [np.array((side * 0.17, 0.92, 0.23)) for side in (-1, 1)])
+    return out
+
+
+CREW_FILES = {key: f"crew/{key.lower().replace(' ', '_')}_seated.glb" for key in CREW}
+
+
 # ---------- writing them all ----------
 STATION_FILES = {s.name: f"stations/{s.name.lower().replace(' ', '_')}.glb" for s in cr.STATIONS}
 
@@ -683,6 +924,8 @@ STATION_FILES = {s.name: f"stations/{s.name.lower().replace(' ', '_')}.glb" for 
 def build_all(root=ASSETS):
     for s in cr.STATIONS:
         station(s).save(root / STATION_FILES[s.name])
+    for path, b in crew_models().items():
+        b.save(root / path)
 
 
 if __name__ == "__main__":

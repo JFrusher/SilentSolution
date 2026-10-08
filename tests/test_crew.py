@@ -135,6 +135,10 @@ con.hear("SOUND", "[HULL CREAKS]")
 scene.hear()
 assert scene.captions[-1][0] == said[3], "SOUND CAPTIONS off: noises aren't captioned"
 settings.reset()
+assert [main.voice(w) for w in ("CONN, SONAR", "HELM, AYE", "CHIEF, AYE", "MANEUVERING, AYE", "RADIO", "INSTRUCTOR")] \
+    == ["SONAR", "HELM", "BALLAST CONTROL", "HELM", "RADIO", None], "a caller's caption is his crewman's to say"
+scene.say("CONN, SONAR: CONTACT 045, CLASSIFIED MERCHANT")
+assert "SONAR" in scene.spoke, "the sonarman made that call"
 print("captions ok")
 
 # quick travel from the order wheel: on foot or from another station, a dip to black and you're carried in

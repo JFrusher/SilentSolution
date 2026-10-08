@@ -275,6 +275,14 @@ def speaker(line):
     return (who, said) if sep and len(who) <= 30 and not any(c.isdigit() for c in who) else ("", line)
 
 
+def voice(who):
+    """The crewman behind a caption's caller ("CONN, SONAR" or "CHIEF, AYE"), or None for nobody in the room."""
+    who = who.removeprefix("CONN, ").removesuffix(", AYE")
+    who = {"CHIEF": "BALLAST CONTROL", "MANEUVERING": "HELM"}.get(who, who)
+    return who if who in ("SONAR", "FIRE CONTROL", "RADIO", "BALLAST CONTROL", "DAMAGE CONTROL", "HELM",
+                          "PLANES") else None
+
+
 def captions(screen, lines, bottom):
     """What's said, printed and heard aboard, newest at the bottom: the caller in amber, a sound in [brackets]."""
     font = art.mono(18 if settings.SETTINGS["large_text"] else 15, True)
@@ -378,7 +386,8 @@ class OnFoot:
             self.focus = None
         return then
 
-    def draw(self, screen, dt):
+    def draw(self, screen, dt, spoke=None):
+        """spoke: crewman -> ticks of his last call."""
         app, con, w = self.app, self.con, self.con.world
         if self.focus:  # gliding to or from a station: only its screen, kept exact for the cut
             page, names = stations.VIEWS[self.focus].page, (self.focus,)
@@ -398,7 +407,10 @@ class OnFoot:
         lamps = alerts(con)  # the lamps flash with their alarms; the legend at the conn says which
         alert = float(any(on for _, on, _ in lamps))
         aside = (self.focus,) if self.focus else ()  # his crewman steps out of the way of the station you take
-        screen.blit(app.room().render(self.room.pose, screens, plot, legend_art(lamps), alert, aside), (0, 0))
+        now = pygame.time.get_ticks()
+        speaking = {k: (now - at) / 1000 for k, at in (spoke or {}).items() if now - at < 4000}
+        screen.blit(app.room().render(self.room.pose, screens, plot, legend_art(lamps), alert, aside, now / 1000,
+                                      speaking), (0, 0))
         if self.fade:
             dark = pygame.Surface((W, H))
             dark.set_alpha(int(255 * self.fade / 0.35))
@@ -434,6 +446,7 @@ class Patrol(Scene):
         self.from_room = False     # at the eyepiece by way of the room: stepping back puts you there again
         self.grip = None           # the station piece a drag started on
         self.captions = deque(maxlen=4)  # (line, when it went up): the newest of what's been heard aboard
+        self.spoke = {}  # crewman -> when he last made a call, so he looks round at you as he does
         self.heard = console.heard[-1][0] if console.heard else 0  # the last of console.heard captioned
         self.at = None  # the station you're working (the full console, "ALL", once the boat is lost)
         self.on_foot = OnFoot(app, console, cr.by_periscope())  # you start on your feet at the conn
@@ -552,7 +565,11 @@ class Patrol(Scene):
                 con.scroll(stations.through(piece, pygame.mouse.get_pos()), e.y)
 
     def say(self, text):
-        self.captions.append((text, pygame.time.get_ticks()))
+        now = pygame.time.get_ticks()
+        self.captions.append((text, now))
+        who = voice(speaker(text)[0])
+        if who:
+            self.spoke[who] = now
 
     def hear(self):
         """Caption every new line heard aboard, wherever you are. Sounds only with SOUND CAPTIONS on; the
@@ -656,7 +673,7 @@ class Patrol(Scene):
             st.draw(screen, con, self.name, self.paused, self.app.show_help, dt)
         else:
             if self.on_foot:
-                self.on_foot.draw(screen, dt)
+                self.on_foot.draw(screen, dt, self.spoke)
                 if con.shake > 0:  # a hit or a near charge throws the whole boat about
                     j, t = con.shake * 8, pygame.time.get_ticks()
                     screen.scroll(int(j * math.sin(t * 0.09)), int(j * math.cos(t * 0.13)))

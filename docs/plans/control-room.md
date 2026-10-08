@@ -119,10 +119,16 @@ Each milestone ships with its tests; the golden run is regenerated only where pl
        extinguisher
    - Built in code by `graphics/models.py` and saved as `.glb` under `assets/`, so a better model can be dropped in;
      `graphics/gltf.py` reads them. The live panel stays the 2D station, so the seated cut is still invisible.
-8. **Detail: crew** (next)
-   - Stylised-realistic RN ratings (modelled heads and hands, jumpers and overalls, some bearded), each his own.
-   - Idle life (breathing, weight shifts, glances) and turning to face you when he makes a call, so a caption has
-     a face.
+8. **Detail: crew** (built)
+   - Stylised-realistic RN ratings, each his own man:
+     - smooth bodies; a sculpted head (brow, nose, cheekbones, chin, ears), eyes, a soft painted hairline with a
+       shell for body, beards and a moustache, hands with fingers on the desk or round the yoke's grips
+     - the submariner's white roll-neck sweater, the navy jumper over a shirt collar, working dress with rolled
+       sleeves, a boiler suit; headsets on the sonarman and radioman
+   - Seated men sit on stools at knee holes in their desks (footrests); the helmsman and planesman hold their columns;
+     a man you relieve stands aside.
+   - Idle life (breathing, a slow shift of weight, glances about his work). When a caption names him ("CONN, SONAR",
+     "HELM, AYE", "CHIEF, AYE") he looks round at you as he says it.
 
 ## 6. Risks
 

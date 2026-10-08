@@ -14,6 +14,7 @@ import main  # noqa: E402
 import settings  # noqa: E402
 import stations  # noqa: E402
 from console import Console  # noqa: E402
+from graphics import room3d  # noqa: E402
 from layout import TELEGRAPH_BTNS, TELEGRAPH_RECT  # noqa: E402
 from sim import KNOT, TELEGRAPH  # noqa: E402
 
@@ -79,8 +80,19 @@ def take(station):
 
 # the patrol starts on your feet at the conn, the crew on watch
 frames(5)
-manned = {s.name for s in cr.STATIONS if s.working} - {"HELM AND PLANES"}  # the helm's pair belong to the room
-assert set(app.room().crew) == manned, "every crewed station has its crewman, seated or stood aside"
+manned = {s.name for s in cr.STATIONS if s.working} - {"HELM AND PLANES"} | {"HELM", "PLANES"}
+assert set(app.room().crew) == manned, "every crewed station has its crewman, the helm its helmsman and planesman"
+
+# a crewman making a call looks round at you; otherwise he keeps to his work
+seated, place, _, _ = app.room().crew["SONAR"]
+pivot = seated.parts["head"][0]
+neck = place[:3, :3] @ pivot + place[:3, 3]
+eye = neck + place[:3, :3] @ np.array((0.9, 0.3, 0.6))  # off to his side and above
+look = place[:3, :3] @ room3d.head_turn(place, pivot, eye, 5.0, 0.0, age=1.0) @ np.array((0.0, 0.0, 1.0))
+want = (eye - neck) / np.linalg.norm(eye - neck)
+assert float(look @ want) > 0.99, "he faces you while he speaks"
+idle = place[:3, :3] @ room3d.head_turn(place, pivot, eye, 5.0, 0.0) @ np.array((0.0, 0.0, 1.0))
+assert float(idle @ want) < 0.8, "and not otherwise"
 assert scene.on_foot and scene.at is None and con.crew.captain_at is None
 assert np.linalg.norm(scene.on_foot.room.pose.pos - cr.by_periscope().pos) < 0.05
 
