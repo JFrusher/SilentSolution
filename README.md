@@ -21,9 +21,9 @@ but while the mast is up, the sea can see you too.
 [Quick start](#-quick-start) · [The station](#-the-station) · [How an attack works](#-how-an-attack-works) ·
 [Game modes](#-game-modes) · [Controls](#-controls) · [Under the hood](#-under-the-hood) · [Development](#-development)
 
-<img src="docs/images/periscope_hit.gif" width="660" alt="High-power periscope view: a torpedo hits a merchant, a blast column rises and she settles by the stern">
+<img src="docs/images/gif_attack.gif" width="960" alt="A full attack on the station: slanting contact traces, the dial locking and tracking, a ping for range, a two-fish spread on the wire, homing, detonation and sinking">
 
-<sub>High power, 6x. The fish arrives, the column goes up, and she goes down by the stern. Every pixel is drawn in code.</sub>
+<sub>A whole attack in fifteen seconds: hear her, lock on, range her, solve, fire a spread, steer it home. Real game, scripted run, time-lapsed where it says so.</sub>
 
 </div>
 
@@ -143,6 +143,9 @@ flowchart LR
    $`\sin\lambda = \tfrac{v_t}{v_{torp}}\sin\theta`$.
 6. **Guide, then go.** Fish run on the wire, so you can steer them with clicks on the scope. Then get under the layer,
    ring down to SLOW, and let the escort's pattern land where you used to be.
+
+<p align="center"><img src="docs/images/gif_wire.gif" width="640" alt="Wire guidance: clicking a torpedo on the tactical scope, clicking an aim point ahead of the target, the fish turning onto her, homing and hitting"><br>
+<sub><b>On the wire.</b> A poor solution, rescued: click the fish, click where to send it, and the seeker does the rest.</sub></p>
 
 ## 🎮 Game modes
 
@@ -275,6 +278,10 @@ flowchart TB
   side is quieter, its echo is in the shadow, and the layer itself returns reverb.
 - **Weather fronts** roll in over about 20 s. Rain raises the noise floor on the waterfall and the profile, the
   wind builds the sea over a minute, and the sea state feeds the periscope picture, spotting and snorkel flooding.
+
+  <p align="center"><img src="docs/images/gif_storm.gif" width="640" alt="A storm: rain flooding the waterfall and profile, heavy sea through the periscope, then the snorkel diesels deafening the sonar"><br>
+  <sub><b>Weather is a sensor problem.</b> Rain drowns the traces; a heavy sea breaks over the lens; your own diesels fog the waterfall.</sub></p>
+
 - **Masts are physical.** The scope head clears the water by `SCOPE_TOP − z − wave`, measured against the live
   swell at the boat's position. Waves slam the snorkel head valve. Speed throws a feather, floods the snorkel,
   and on Iron Captain bends the scope.
@@ -328,6 +335,9 @@ stateDiagram-v2
   each back-propagated through the own-ship track and scored by mean bearing error in a single NumPy broadcast.
   Measured ranges (echoes, stadimeter) are folded in as a penalty. When near-equal fits disagree on course by
   more than 40°, the solver reports **AMBIGUOUS: NEW LEG**.
+
+  <p align="center"><img src="docs/images/gif_tma.gif" width="640" alt="TMA plot: bearing dots building over two legs while the TDC's curve peels away, then auto-solve snapping the curve through the dots"><br>
+  <sub><b>Target motion analysis.</b> A wrong course and speed peel the TDC's curve off your bearings; a second leg and a ping let auto-solve put it back.</sub></p>
 </details>
 
 <details>
@@ -363,6 +373,9 @@ stateDiagram-v2
     }
 ```
 
+<p align="center"><img src="docs/images/gif_escort.gif" width="720" alt="An escort attack: fast screws closing on the waterfall, enemy pings, a depth-charge pattern, the hull needle dropping and the damage board"><br>
+<sub><b>Caught.</b> Fast screws, the enemy sonar lamp, a pattern rolled overhead, and the damage party's list.</sub></p>
+
 Escorts drop five-charge patterns at a guessed depth and search in an expanding square. When they hear a
 torpedo with no fresh contact, they back-plot its track (with error growing along the run) to find where you
 fired from. Enemy submarines stalk you, fire homing fish and drop decoys. The **wave director** escalates each
@@ -381,6 +394,8 @@ convoy and its screen, and in the campaign it starts several waves' worth of esc
 - **Periscope** (`graphics/periscope.py`): a pre-rendered sky panorama, the sea at one-third resolution with
   ripple texture, ship silhouettes by class (with smoke, bow waves and wakes, settling by the stern when sunk),
   burst columns, and lens effects. It runs in about 9 ms a frame.
+
+  <p align="center"><img src="docs/images/periscope_hit.gif" width="560" alt="High-power periscope view: a torpedo hits a merchant, a blast column rises and she settles by the stern"></p>
 - **Accessibility:** large teleprinter text, and colour-blind lamps that use the Okabe–Ito palette.
 </details>
 
@@ -416,7 +431,8 @@ runs.
 
 ```bash
 uv run checks.py                          # every suite headless (SDL dummy drivers), then ruff; CI runs it too
-uv run --with pillow docs/shots.py        # regenerate every image in this README from live game states
+uv run --with pillow docs/shots.py        # regenerate the README screenshots from live game states
+uv run --with pillow docs/gifs.py         # film the README GIFs (scripted runs, time-lapse, Dymo captions)
 uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 ```
 
