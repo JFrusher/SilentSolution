@@ -10,6 +10,7 @@ from sim import KNOT, YARD
 
 HISTORY = 480.0     # s of bearings kept
 PLOT_WINDOW = 360.0  # s shown on the plot
+PLOT_SPAN = 40.0     # deg of true bearing across the plot, centred on the TDC bearing
 AUTO_LOG = 4.0      # s between automatic bearings while the hydrophone holds a lock
 TRACK_STEP = 2.0    # s between own-ship track points
 FIT_WINDOW = 300.0  # s of bearings the fit figure uses

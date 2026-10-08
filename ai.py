@@ -572,9 +572,9 @@ class ThreatDirector:
             return events
         if not self.cleared:  # first quiet tick after a wave: resupply
             self.cleared = True
-            p.torpedoes = min(p.torpedoes + 4, 12)
-            p.noisemakers = min(p.noisemakers + 2, 6)
-            events.append(("WAVE_CLEAR", self.wave, None))
+            got = (min(p.torpedoes + 4, 12) - p.torpedoes, min(p.noisemakers + 2, 6) - p.noisemakers)  # racks cap it
+            p.torpedoes, p.noisemakers = p.torpedoes + got[0], p.noisemakers + got[1]
+            events.append(("WAVE_CLEAR", self.wave, got))
             self.done = self.wave == self.waves
             if self.done:
                 return events

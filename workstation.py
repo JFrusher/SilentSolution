@@ -19,6 +19,7 @@ from layout import (ANNUNCIATORS, BLOW_BTN, CONSOLE, CRT_RECT, DC_ROW_H, DC_ROW_
                     SCOPE_LEVER, SCOPE_PANEL, SCOPE_R, SNORT_LEVER, SPEC_RECT, STRIP, TDC_PANEL, TDC_ROW_H, TDC_ROW_Y0,
                     TELEGRAPH_BTNS, TELEGRAPH_RECT, TELETYPE, TUBE_SW, W, WF_H, WF_POS, WF_W, WHEEL_C, WHEEL_R)
 from sensors import SCOPE_FOV
+from tma import PLOT_SPAN
 from tma import PLOT_WINDOW as TMA_WINDOW
 from sim import (CRUSH_DEPTH, FEATHER_KT, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, SCOPE_TOP, SOUND_SPEED,
                  TELEGRAPH, TORP_MAX_RUN, YARD)
@@ -55,6 +56,7 @@ class Workstation:
         self.career = None   # campaign career, for its page
         self.debrief = None  # the last patrol's debrief
         self.confirm = None  # lines of a yes/no question over the patrol, or None
+        self.over_hint = None  # game-over key line, when it isn't the endless one
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
         self.scope_surround = self.scope_bg.convert_alpha()  # same art with a round hole: hides the square corners
@@ -281,7 +283,7 @@ class Workstation:
             if state == "OVER":
                 self._crt_box(s, crt, ["LOST WITH ALL HANDS" if con.cause == "HULL BREACHED" else "CREW UNCONSCIOUS",
                                        con.cause, f"WAVE {con.wave}   {con.score:,} GRT SUNK", "",
-                                       "[R] NEW PATROL     [ESC] QUIT"])
+                                       self.over_hint or "[R] NEW PATROL   [T] TITLE   [ESC] QUIT"])
             elif self.confirm:
                 self._crt_box(s, crt, self.confirm)
             elif paused:
@@ -493,7 +495,7 @@ class Workstation:
         x0, y0 = WF_POS
         now, own, tdc, log = con.world.time, con.world.player, con.tdc, con.tma
         centre = math.degrees(math.atan2(tdc.x, tdc.y)) % 360
-        span = 40.0
+        span = PLOT_SPAN
 
         def X(b):
             return x0 + WF_W / 2 + ((b - centre + 180) % 360 - 180) / span * WF_W
@@ -709,7 +711,7 @@ class Workstation:
         sol = con.tdc.solve()
         far = sol is not None and sol.run > TORP_MAX_RUN
         art.counter(f, (56, 438), f"{sol.gyro:05.1f}" if sol else "---.-", 11)
-        art.counter(f, (172, 438), f"{sol.run / YARD:6,.0f}" if sol else "------", 11)
+        art.counter(f, (172, 438), f"{sol.run / YARD:6,.0f}" if sol else "------", 11, art.RED if far else art.AMBER)
         art.lamp(f, (250, 448), sol is not None, art.RED if far else art.GREEN, 5)
 
     def draw_teletype(self, f, con):

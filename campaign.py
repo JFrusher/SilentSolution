@@ -78,6 +78,8 @@ class Career:
         return self.patrol >= len(PATROLS)
 
     def add_score(self, mode, grt, waves):
+        if grt <= 0:  # nothing sunk: history for the log, not a score
+            return
         self.scores.append(dict(mode=mode, grt=grt, waves=waves, rank=self.rank, date=today()))
         self.scores = sorted(self.scores, key=lambda s: -s["grt"])[:10]
         self.save()
@@ -96,7 +98,8 @@ class Career:
         promoted = run.result == "SUCCESS"
         if promoted:
             self.patrol += 1
-        self.add_score(f"P{PATROLS.index(p) + 1} {p['name']}", grt, con.wave)  # also saves
+        self.add_score(f"P{PATROLS.index(p) + 1} {p['name']}", grt, con.wave)
+        self.save()
         return dict(patrol=p, result=run.result, grt=grt, sunk=sunk, hull=con.world.hull, time=con.world.time,
                     promoted=self.rank if promoted else None,
                     offer=self.offer() if promoted and not self.finished else [])
@@ -193,9 +196,11 @@ if __name__ == "__main__":  # self-check: save round trip, ranks, objectives, re
     con, run = sail(again, AudioSynthesizer())
     con.world.director.done = True
     assert run.update(con) == "FAILED" and again.record(run, con)["promoted"] is None and again.patrol == 1
+    assert Career(tmp).log[-1]["result"] == "FAILED"  # a 0 GRT patrol is still saved to the log
     for g in (500, 90000, 20):
         again.add_score("COMMANDER", g, 3)
     assert [s["grt"] for s in Career(tmp).scores][:2] == [90000, 6500]
+    assert all(s["grt"] > 0 for s in Career(tmp).scores) and len(Career(tmp).log) == 2  # the 0 GRT patrol is logged only
     tmp.write_text("{broken")
     assert Career(tmp).patrol == 0
     print("campaign ok")

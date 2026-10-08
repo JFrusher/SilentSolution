@@ -124,7 +124,7 @@ flowchart LR
     D -.- d[Ping: echo delay x c / 2<br/>or a stadimeter mark]
     E -.- e[TMA plot: two legs<br/>until the curve fits the dots]
     F -.- f[Salvo fanned across SPREAD<br/>seekers arm at SKR ARM]
-    G -.- g[Steer on the wire<br/>parts above 12 kt or 8 km]
+    G -.- g[Steer on the wire<br/>parts above 12 kt or 4 km]
     H -.- h[Go deep, under the layer<br/>slow and quiet]
 ```
 
@@ -315,7 +315,7 @@ stateDiagram-v2
 ```
 
 - **Wire guidance.** A wired fish steers toward its aim point until its seeker takes over. The wire parts above
-  12 kt of own speed or past 8,000 m of run.
+  12 kt of own speed or past 4,000 m of run, leaving the last stretch to the seeker.
 - **TMA auto-solve.** Bearings-only TMA is ill-conditioned, so the solver searches rather than iterating: course
   (72 × 5°) × speed (21 × 1 kt) × present range (23 steps along the latest bearing) gives **34,776 hypotheses**,
   each back-propagated through the own-ship track and scored by mean bearing error in a single NumPy broadcast.

@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 
 from tuning import (CHARGE_LETHAL, CHARGE_REACH, DAMAGED_BATTERY, DAMAGED_MOTOR_KT, DAMAGED_PLANES, DAMAGED_RUDDER,
-                    REPAIR_TIME, SPOT_BASE, SPOT_REACH)
+                    REPAIR_TIME, SPOT_BASE, SPOT_REACH, WIRE_LENGTH)
 
 SOUND_SPEED = 1500.0  # m/s
 KNOT = 0.514444       # m/s
@@ -46,7 +46,6 @@ FEATHER_KT = 6.0         # kt, scope up faster than this throws a feather
 SCOPE_DAMAGE_KT = 10.0   # kt, scope up faster than this can bend it (if the difficulty says so)
 SNORKEL_FLOOD_KT = 8.0   # kt, snorkel head floods faster than this
 DIESEL_TRIP = 10.0       # s the diesels stay stalled after the snorkel floods
-WIRE_LENGTH = 8000.0     # m of guidance wire on the spool
 WIRE_MAX_KT = 12.0       # kt; faster than this and the wire parts
 R_EFF = 7.6e6            # m, effective earth radius with refraction (hull-down maths)
 

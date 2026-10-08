@@ -3,6 +3,7 @@ import math
 import random
 
 import numpy as np
+import pygame
 
 from ai import (ALARMED, ALERT, ATTACK, CRUISE, PATROL, SCATTER, SEARCH, Convoy, EscortAI, MerchantAI,
                 SubmarineAI, ThreatDirector, WITHDRAW, frame_point)
@@ -10,7 +11,7 @@ from audio import AudioSynthesizer
 from console import Console, build_world
 from displays import ROW_INTERVAL, TEMPLATES, SpectrumAnalyzer, WaterfallDisplay
 from fire_control import TargetDataComputer
-from layout import WF_W
+from layout import CRT_RECT, WF_H, WF_POS, WF_W
 from sensors import PeriscopeOptics, cone_gain
 from tma import TMALog
 from sim import (EXHAUSTED, KNOT, YARD, Decoy, Submarine, Torpedo, Vessel, WorldSimulation, angle_diff,
@@ -292,6 +293,36 @@ if __name__ == "__main__":
     assert run(w, 0.2).count("WAVE_CLEAR") == 1 and w.director.done
     assert "WAVE" not in run(w, 30) and not w.targets
 
+    # the resupply report says what was actually loaded: full racks get nothing
+    con = Console("COMMANDER", AudioSynthesizer())
+    p = con.world.player
+    p.torpedoes, p.noisemakers = 12, 5
+    con.world.targets.clear()
+    con.world.director.wave, con.world.director.cleared = 1, False
+    ev = [e for e in con.world.step(0.1) if e[0] == "WAVE_CLEAR"]
+    assert ev and ev[0][2] == (0, 1) and (p.torpedoes, p.noisemakers) == (12, 6), ev
+    con.report(*ev[0])
+    assert "RACKS FULL" in " ".join(con.teletype.queue), con.teletype.queue
+
+    # a beyond-range solution needs a second press to fire: one slip doesn't waste a fish
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.tdc.set("RNG", 9000.0)
+    con.fire()
+    assert not con.world.torpedoes and "BEYOND RANGE" in con.log[-1]
+    con.fire()
+    assert len(con.world.torpedoes) == 1
+
+    # clicking the TMA plot listens where you click (true bearing), not at a waterfall-scaled relative bearing
+    con = Console("COMMANDER", AudioSynthesizer())
+    con.world.player.heading = 70.0
+    con.tdc.set("BRG", 30.0)
+    con.crt_page = "TMA"
+    wf = pygame.Rect(CRT_RECT.x + WF_POS[0], CRT_RECT.y + WF_POS[1], WF_W, WF_H)
+    con.click(wf.center)
+    assert abs(angle_diff(con.dial, 30.0)) < 0.5, con.dial
+    con.scroll(wf.center, 1)
+    assert abs(angle_diff(con.dial, 30.0)) < 0.5  # the wheel only trains the dial on the waterfall page
+
     # damage control: a hit breaks systems; one party repairs them in the order set, one at a time
     w = WorldSimulation(Submarine(0, 0, 0, 0, z=60), [], systems_damage=True)
     w.damage(75, ev := [])
@@ -329,8 +360,7 @@ if __name__ == "__main__":
     assert "WIRE_CUT" in run(w, 0.2) and not t.wired
     t2 = w.fire(0.0, wired=True, arm_distance=1e9)
     w.player.speed = w.player.ordered_speed = 0.0
-    t2.run = 8001.0
-    assert "WIRE_CUT" in run(w, 0.2) and not t2.wired
+    assert "WIRE_CUT" in run(w, 230) and not t2.wired and t2 in w.torpedoes  # end of spool, before fuel out
 
     # TMA: noisy bearings across an own-ship leg change plus one echo let auto-solve recover the target
     random.seed(7)

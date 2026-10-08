@@ -30,12 +30,14 @@ def main():
     console, state, paused, show_help = None, "TITLE", False, False
     run = None  # the campaign patrol at sea, if any
     confirm = False  # Esc during a patrol: "quit this patrol?" waiting for Y / N
+    lost_at, leave_over = 0, False  # a lost campaign boat: when, and whether the player has moved on
 
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.1)
         for e in pygame.event.get():
             pages = ("SETTINGS", "CAREER", "DEBRIEF", "CHAPTERS", "PLAY")  # Esc means "back" or "ask" on these
-            quit_key = e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state not in pages
+            quit_key = (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state not in pages
+                        and not (state == "OVER" and run))
             if e.type == pygame.QUIT or quit_key:
                 pygame.quit()
                 return
@@ -125,8 +127,12 @@ def main():
                     state = "CHAPTERS"
                 elif choice:
                     console, state = Console(choice, audio), "PLAY"
+            elif state == "OVER" and run:  # campaign loss: any key on to the debrief
+                leave_over = leave_over or e.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN)
             elif state == "OVER":
-                if e.type == pygame.KEYDOWN and e.key == pygame.K_r:
+                if e.type == pygame.KEYDOWN and e.key == pygame.K_r:  # straight back out at the same difficulty
+                    console, state = Console(console.level, audio), "PLAY"
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_t:
                     console, state = None, "TITLE"
             elif e.type == pygame.KEYDOWN and e.key == pygame.K_p:
                 paused = not paused
@@ -148,12 +154,16 @@ def main():
                 if console.tutorial.finished:
                     console, state = None, "TITLE"
             elif run:
-                if run.update(console):
+                result = run.update(console)
+                if result == "LOST" and state == "PLAY":  # let the loss sink in before the debrief
+                    state, lost_at = "OVER", pygame.time.get_ticks()
+                elif result and (state == "PLAY" or leave_over or pygame.time.get_ticks() - lost_at > 8000):
                     station.debrief = career.record(run, console)
-                    console, run, state = None, None, "DEBRIEF"
+                    console, run, state, leave_over = None, None, "DEBRIEF", False
             elif console.dead and state == "PLAY":
                 state = "OVER"
                 career.add_score(console.level, console.score, console.wave)
+        station.over_hint = "ANY KEY: DEBRIEF" if run else None
         station.confirm = None
         if confirm:
             station.confirm = (["LEAVE TRAINING?", "BACK TO THE CHAPTER LIST"] if console.tutorial else
