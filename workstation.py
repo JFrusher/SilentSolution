@@ -540,7 +540,7 @@ class Workstation:
         for i, (k, v, color) in enumerate(rows):
             crt.text(s, k, (hx, hy + i * 19), DIM, small=True)
             crt.text(s, v, (hx + 52, hy + i * 19 - 1), color)
-        crt.rect(s, (hx + 104, hy + 24, int(min(con.signal, 1.0) * 64), 5))
+        crt.rect(s, (hx + 52, hy + 35, int(min(con.signal, 1.0) * 96), 2))  # signal strength, under SIG
 
         text, left = con.banner
         if left > 0 and int(left * 4) % 2 == 0:  # cadet: clear visual ping warning

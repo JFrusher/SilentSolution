@@ -12,7 +12,7 @@ but while the mast is up, the sea can see you too.
 [![pygame-ce](https://img.shields.io/badge/pygame--ce-2.5-6aa84f)](https://pyga.me/)
 [![NumPy](https://img.shields.io/badge/NumPy-procedural-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![uv](https://img.shields.io/badge/run%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
-![Version](https://img.shields.io/badge/version-0.2.1-ffbe56)
+![Version](https://img.shields.io/badge/version-0.2.2-ffbe56)
 ![Asset files](https://img.shields.io/badge/asset%20files-0-84d670)
 ![Platform](https://img.shields.io/badge/build-Windows%20.exe-0078D6?logo=windows&logoColor=white)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
@@ -88,7 +88,7 @@ The executable needs no Python install. If it ever crashes, the traceback is app
 |:-:|---|---|
 | 1 | **Tactical PPI** | Own ship at the centre. Echo fixes, enemy ping lines, your torpedoes, and the wire's aim point. Click a wired fish, then click the water to steer it. |
 | 2 | **Fire control (TDC)** | Target bearing, range, speed and course; seeker arm distance, run depth and salvo spread. Mechanical drum counters show the gyro angle and the run. The lamp lights when there is a valid solution. |
-| 3 | **Passive waterfall** | Bearing across, time down. Contacts are vertical traces. The red line is your hydrophone dial; the bright ticks show where the TDC thinks the target is. |
+| 3 | **Passive waterfall** | Bearing across, time down, north-stabilised by default (<kbd>F7</kbd> for ship's head), 1 s a line (<kbd>F8</kbd> for 0.1 / 1 / 3 s). A contact's trace slants and curves with its real bearing drift and holds still through your own turns. The red line is your hydrophone dial; the bright ticks show where the TDC thinks the target is. |
 | 4 | **Acoustic profile** | The spectrum of whatever the dial hears, matched live against the signature library: merchant, warship, submarine, torpedo, noisemaker. |
 | 5 | **Sonar log** | Timestamped contacts, echoes, launches and detonations. |
 | 6 | **Readouts** | Dial bearing, signal strength, classification confidence, the layer, the sea state, and the gyro solution. |
@@ -130,8 +130,9 @@ flowchart LR
     H -.- h[Go deep, under the layer<br/>slow and quiet]
 ```
 
-1. **Listen.** A contact is a bright vertical trace. Train the dial onto it until `SIG` reads `LOCK`. Hold it
-   there and the bearing logs itself to the TMA plot every four seconds.
+1. **Listen.** A contact is a bright trace, slanting as its bearing drifts. Train the dial by the `SIG < 3.2`
+   guide until it reads `LOCK` (on the trace, within 1.5° on Commander); from then on the dial **tracks** it on
+   its own, and the bearing logs to the TMA plot every four seconds.
 2. **Classify.** The profiler compares the spectrum with its library. Merchants show low shaft lines. Warships
    whine high. A submarine is one faint line. A torpedo is a sharp spike. A noisemaker is a flat wall.
 3. **Mark and range.** <kbd>M</kbd> sends the bearing to the TDC. <kbd>Space</kbd> pings, and the echo delay gives
@@ -208,6 +209,7 @@ colour-blind lamps.
 | <kbd>[</kbd> <kbd>]</kbd> · <kbd>\\</kbd> · <kbd>L</kbd> | nudge wired fish · next fish · cut wire | <kbd>U</kbd> · <kbd>K</kbd> | raise scope · raise snorkel |
 | <kbd>N</kbd> | noisemaker | <kbd>V</kbd> · <kbd>Tab</kbd> | look through scope · power 1.5x / 6x |
 | <kbd>T</kbd> | scope range 5k / 10k / 20k yd | <kbd>F2</kbd> · <kbd>F5</kbd> | TMA plot · damage board |
+| <kbd>F7</kbd> · <kbd>F8</kbd> | true / ship's-head bearings · waterfall time scale | <kbd>O</kbd> | swing the periscope onto the sonar bearing |
 | <kbd>F4</kbd> | auto-solve (Cadet and Training) | <kbd>P</kbd> · <kbd>F1</kbd> · <kbd>Esc</kbd> | pause · key card · quit / back |
 </details>
 
@@ -223,7 +225,10 @@ Saved to `~/.silent_solution/settings.json`. If a key you choose is already in u
 ## 🔬 Under the hood
 
 About 6,000 lines of Python in two halves that never mix: a **world** that holds the truth, and an **operator** side
-that only ever sees it through sensors.
+that only ever sees it through sensors. Every bearing, range and angle between two bodies (true and relative
+bearing, horizontal and slant range, depression angle, bearing rate, range rate, target angle) comes from one 3D
+**geometry core**, `geometry.py`, and `test_geometry.py` cross-checks every sensor and display against it on
+random 3D scenarios through hard turns.
 
 ```mermaid
 flowchart TB
@@ -288,7 +293,7 @@ $$
 
 | Sensor | Model |
 |---|---|
-| **Passive sonar** | Relative bearings with 0.8° noise, quantised to 0.5°. Level falls off as $`160\,N\,T\,\min(1, 3000/r)`$, with flicker; hostile fish sound louder. The hydrophone dial has a gain cone, so contacts near the dial dominate. |
+| **Passive sonar** | Bearings with 0.8° noise, quantised to 0.5°. Level falls off as $`160\,N\,T\,\min(1, 3000/r)`$ along the 3D slant range, with flicker; hostile fish sound louder. The hydrophone dial has a gain cone, but `LOCK` needs the dial *on* the trace (3° / 1.5° / 1° by difficulty), after which a tracker servo holds it there. |
 | **Active sonar** | Echoes arrive after $`2d/c`$ with $`c = 1500`$ m/s and 1% timing jitter, out to 12 km. There is no echo across the layer, only reverb. Every ping is heard by every AI in earshot. |
 | **Periscope optics** | Sightings, wakes and bursts within the horizon and the visibility. Silhouette class from recognition-manual dimensions; stadimeter range with error. |
 | **Signature library** | The spectral templates for merchant, warship, submarine, torpedo and noisemaker are matched live against the dial's spectrum to give a classification and a confidence. |
@@ -418,6 +423,7 @@ uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 | Suite | Covers |
 |---|---|
 | `test_sim.py` | engagements, escort hunts and counter-fire, masts, spotting, optics, convoys and scatter, TMA auto-solve, damage control, spreads and wire guidance, campaign waves |
+| `test_geometry.py` | the positional backbone: sonar, echoes, periscope, eyepiece image, TDC position keeping and TMA all agree with the geometry core in 3D through a turn; LOCK and scope-to-sonar put the ship in the eyepiece; bearing stabilisation and the waterfall's true/relative frames |
 | `test_tutorial.py` | a scripted trainee plays the whole training patrol on three seeds, then each chapter on its own, then a run that skips every drill |
 | `test_periscope.py` | the eyepiece renderer: ships on the horizon, nothing astern, a wave over the lens, frame time |
 | `settings.py` · `audio.py` · `campaign.py` | self-checks: save round trips, key rebinding, the pan law, reverb loops, objectives, refits and patrol outcomes |
@@ -428,6 +434,7 @@ uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 ```text
 SilentSolution/
 ├── main.py              game loop, screen states, crash log
+├── geometry.py          the 3D positional backbone: bearings, ranges, angles, rates
 ├── sim.py               WORLD: vessels, torpedoes, ocean and weather, masts, damage, world step
 ├── ai.py                WORLD: merchants, escorts, submarines, convoys, wave director
 ├── tuning.py            every balance knob and difficulty preset in one place
@@ -461,7 +468,7 @@ SilentSolution/
 
 <div align="center">
 
-**Silent Solution** · v0.2.1 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/) ·
+**Silent Solution** · v0.2.2 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/) ·
 [MIT licence](LICENSE) ([third-party notices](THIRD-PARTY-NOTICES.txt))
 
 <sub>Run silent, run deep.</sub>

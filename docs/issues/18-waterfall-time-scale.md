@@ -2,6 +2,7 @@
 title: 'Waterfall time scale: only ~21 s of history is too short to see bearing drift'
 labels: enhancement, area:sensors, area:ui, priority:medium
 milestone: v0.3 Polish & UX
+fixed_in: 6c93032
 ---
 ## Motivation
 
