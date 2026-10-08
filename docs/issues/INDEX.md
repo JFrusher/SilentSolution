@@ -47,11 +47,11 @@ Once the issues exist, this folder can be deleted.
 |:-:|---|---|---|---|
 | 16 | [Pause menu: resume, settings, quit to title, quit game](16-pause-menu.md) | feature | high | ui, settings |
 | 17 | [Objective tracker and a "return to base" cue for campaign patrols](17-objective-tracker.md) | feature | medium | campaign, ui |
-| 18 | [Waterfall time scale: only ~21 s of history is too short to see bearing drift](18-waterfall-time-scale.md) | enhancement | medium | sensors, ui |
+| 18 | ✅ [Waterfall time scale: only ~21 s of history is too short to see bearing drift](18-waterfall-time-scale.md) | enhancement | medium | sensors, ui |
 | 19 | [Damage alarm lamp and audible alarm when systems are knocked out](19-damage-alarm.md) 🟢 | enhancement | low | damage, ui |
 | 20 | [Seeded per-world RNG instead of the global random module](20-seeded-world-rng.md) | tech-debt | medium | sim |
 | 21 | [Mid-patrol save and load (campaign and endless)](21-mid-patrol-save-load.md) | feature | medium | sim, campaign |
-| 22 | [After-action replay plot at the debrief](22-after-action-replay.md) | feature | medium | ui, campaign |
+| 22 | [2.5D tabletop replay of every patrol](22-after-action-replay.md) | feature | high | ui, campaign, sim |
 | 23 | [Achievements and medals](23-achievements-medals.md) | feature | low | campaign |
 | 24 | [Hover tooltips on every control](24-hover-tooltips.md) | feature | low | ui |
 | 25 | [Localisation: move player-facing strings into a translatable table](25-localisation.md) | feature | low | ui |

@@ -5,6 +5,7 @@ from collections import namedtuple
 
 import numpy as np
 
+from geometry import fix, relate
 from sim import (
     R_EFF,
     SCOPE_TOP,
@@ -46,18 +47,19 @@ class PassiveSonar:
         sources = [*self.world.targets, *self.world.torpedoes]
         if not sources:
             return np.empty(0), np.empty(0), np.empty(0), np.empty(0, int), np.empty(0, bool)
-        src = np.array([(s.x, s.y, s.noise * ocean.transmission(p, s) * (1.5 if getattr(s, "hostile", False) else 1.0),
+        src = np.array([(s.x, s.y, s.z,
+                         s.noise * ocean.transmission(p, s) * (1.5 if getattr(s, "hostile", False) else 1.0),
                          DECOY_WIDTH if isinstance(s, Decoy) else HOSTILE_WIDTH if getattr(s, "hostile", False)
                          else self.beam_width, KIND_INDEX.get(s.kind, 0), getattr(s, "hostile", False))
                         for s in sources])
-        dx, dy = src[:, 0] - p.x, src[:, 1] - p.y
-        rel = np.degrees(np.arctan2(dx, dy)) - p.heading + np.random.normal(0, self.noise_deg, len(src))
+        true_brg, _, slant = relate(p, src[:, 0], src[:, 1], src[:, 2])
+        rel = true_brg - p.heading + np.random.normal(0, self.noise_deg, len(src))
         rel = (np.round(rel / self.resolution) * self.resolution) % 360
-        rng = np.maximum(np.hypot(dx, dy), 1.0)
-        level = 160 * src[:, 2] * np.minimum(1.0, 3000 / rng) * np.random.uniform(0.75, 1.0, len(src))
+        rng = np.maximum(slant, 1.0)  # sound spreads along the slant path
+        level = 160 * src[:, 3] * np.minimum(1.0, 3000 / rng) * np.random.uniform(0.75, 1.0, len(src))
         if "HYDROPHONES" in getattr(p, "damaged", ()):
             level *= DAMAGED_HYDROPHONES
-        return rel, level, src[:, 3], src[:, 4].astype(int), src[:, 5].astype(bool)
+        return rel, level, src[:, 4], src[:, 5].astype(int), src[:, 6].astype(bool)
 
     def bearing_of(self, source):
         """Noisy relative bearing of a transient (detonation, splash, ping)."""
@@ -67,7 +69,7 @@ class PassiveSonar:
     def loudness(self, source, ref=3000.0):
         """0..1 how loud a transient at source sounds here."""
         p = self.world.player
-        return min(1.0, ref / max(p.range_to(source), 1.0)) * self.world.ocean.transmission(p, source)
+        return min(1.0, ref / max(p.slant_to(source), 1.0)) * self.world.ocean.transmission(p, source)
 
 
 class ActiveSonar:
@@ -83,9 +85,10 @@ class ActiveSonar:
         self.world.emit_ping()
         p, ocean = self.world.player, self.world.ocean
         for t in self.world.targets:
-            r = p.range_to(t)
+            f = fix(p, t)
+            r = f.slant  # the echo's delay measures the slant path
             if r <= MAX_ECHO_RANGE and not ocean.crosses_layer(p, t):
-                rel = (bearing(p.x, p.y, t.x, t.y) - p.heading + random.gauss(0, self.noise_deg)) % 360
+                rel = (f.rel_brg + random.gauss(0, self.noise_deg)) % 360
                 delay = ping_delay(r)
                 self.pending.append((self.clock + delay, rel, delay + random.gauss(0, self.timing_jitter)))
         layer = ping_delay(abs(ocean.layer_depth - p.z))
