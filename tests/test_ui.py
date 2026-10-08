@@ -22,9 +22,9 @@ seen = []  # the state each frame was drawn in
 
 
 class Station(main.Workstation):
-    def draw(self, screen, con, state, *args):
+    def draw(self, screen, con, state, *args, **kw):
         seen.append(state)
-        super().draw(screen, con, state, *args)
+        super().draw(screen, con, state, *args, **kw)
 
 
 def key(k, mod=0):
