@@ -36,9 +36,10 @@ orders; when it matters you take a station yourself, and the boat keeps fighting
 | **Plot table** | centre | you | the table itself | D.R. track plus the attack plot: our bearings as lines, the TDC's solution track |
 
 - **In the room:**
-  - the master alarm board is overhead, centred, and visible from everywhere
-  - depth, speed and heading repeaters hang over the helm and over the periscope stand
-  - the klaxon and collision alarm play aloud
+  - a caged orange alarm lamp over every station and one on the periscope barrel; they flash for a torpedo, enemy
+    sonar, a leak or hull stress
+  - a small tile panel at the conn names which alarm it is
+  - the klaxon sounds when a torpedo is first heard
 - **Each 2D close-up** is built for its own job: bigger, more detailed, and readable. Most use the existing `console_art` and `crt_renderer` pieces.
 - **The big screens** are the stations' own live textures. A screen you look at updates every frame; others update at 10 Hz.
 
@@ -84,10 +85,13 @@ Each milestone ships with its tests; the golden run is regenerated only where pl
    - All station panels become 16:9 and seatable.
    - Big screens are live in the room; the patrol starts at the conn.
    - **Tests:** every station sits and stands with the invisible cut; clicks reach the right control; WASD never leaks into a station.
-3. **Repeaters, alarms and the attack plot**
-   - Overhead alarm board, depth/speed/heading repeaters, klaxon.
-   - The plot table shows bearing lines and the TDC solution.
-   - **Tests:** an alarm state lights the board; the plot shows the marks the TMA log holds.
+3. **Alarms and the attack plot** (built)
+   - Caged orange alarm lamps, one per station plus one at the conn, a small legend panel at the conn, the klaxon.
+     (An overhead board with repeaters was tried and dropped: not realistic.)
+   - The plot table is tracing paper over a printed sea chart, worked in pencil: own track with times, bearing lines,
+     convoy and sonar reports, the TDC target in red. A parallel ruler, dividers, pencils and a rubber lie on it.
+   - **Tests:** the klaxon sounds once; the lamps follow the four alarms; the legend lights the cause; marks,
+     solution and reports show on the plot.
 4. **Crew figures**
    - Procedural seated crewmen whose arms reach the controls; they stand aside when you take over.
 5. **Quick-glide and polish**

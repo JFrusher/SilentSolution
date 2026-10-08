@@ -92,6 +92,9 @@ class AudioSynthesizer:
         thunk = (0.9 * np.sin(2 * np.pi * 55 * t) * np.exp(-14 * t)
                  + 0.3 * lowpass(np.random.uniform(-1, 1, t.size), 40) * np.exp(-20 * t))
         self.thunk = self._sound(reverb(thunk, self.ir))
+        t = self._t(1.6)  # klaxon: a raw square-ish horn sliding down, twice ("aa-oo-ga")
+        horn = np.tanh(4 * np.sin(sweep_phase(520.0, 380.0, 0.8, t % 0.8))) * (np.sin(np.pi * (t % 0.8) / 0.8) ** 0.3)
+        self.klaxon = self._sound(reverb(horn * 0.5, self.ir))
         t = self._t(2.0)  # diesel: 25 Hz firing pulses (whole cycles in 2 s -> seamless) through the hull
         chug = np.maximum(0, np.sin(2 * np.pi * 25 * t)) ** 4 - 0.25
         diesel = reverb(lowpass(chug + 0.3 * np.random.uniform(-1, 1, t.size), 12), self.ir, loop=True)
@@ -194,6 +197,9 @@ class AudioSynthesizer:
 
     def play_mast(self):
         self._play(self.mast, 0.6)
+
+    def play_klaxon(self):
+        self._play(self.klaxon, 0.8)
 
     def play_thunk(self):
         self._play(self.thunk, 0.8)

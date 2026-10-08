@@ -151,6 +151,7 @@ class Console:
         self.long_shot = -99.0  # when F was last refused on a beyond-range solution
         self.crt_page = "SONAR"  # left of the monitor: waterfall, F2 TMA plot, F5 damage board
         self.crew = Crew(self)
+        self.plot_notes = deque(maxlen=24)  # for the plot: (time, own x, own y, true brg, range m or None, text)
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
@@ -666,7 +667,10 @@ class Console:
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
         self.audio.set_hydrophone(self.signal, self.dial)
         self.tma.update(world.time, p, self.locked, self.dial_true)
-        self.torpedo_warning = bool(np.any(hostile & (levels > 30)))
+        warning = bool(np.any(hostile & (levels > 30)))
+        if warning and not self.torpedo_warning:  # torpedo in the water: the klaxon, through the whole boat
+            self.audio.play_klaxon()
+        self.torpedo_warning = warning
 
         self.flash = max(0.0, self.flash - dt * 2.5)
         self.shake = max(0.0, self.shake - dt * 1.5)
@@ -704,6 +708,8 @@ class Console:
         if kind == "WAVE":
             m, e, s, brg = b
             fuzz = 0 if self.diff["ping_warning"] else sim.DICE.uniform(-25, 25)
+            p = self.world.player
+            self.plot_notes.append((self.world.time, p.x, p.y, (brg + fuzz) % 360, 8000.0, f"CONVOY {m}M {e}E"))
             tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR "
                f"{(brg + fuzz) % 360:03.0f} TRUE, "
                f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")

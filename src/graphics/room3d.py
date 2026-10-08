@@ -2,6 +2,7 @@
 read back as a pygame Surface. Panels are textures: the sonar console shows the live 2D station, the others carry
 panel art built with console_art, and the plot table shows our dead-reckoning track."""
 import math
+import random
 
 import moderngl
 import numpy as np
@@ -10,10 +11,12 @@ import pygame
 import control_room as cr
 from graphics import console_art as art
 from layout import H, W
+from sim import KNOT
 
 LAMPS = [(0.0, 2.28, z) for z in (-4.2, -1.9, 0.4, 2.7, 4.6)]
 LAMP_COLOUR = (1.15, 0.9, 0.62)
 SCREEN_GLOW = (0.35, 0.95, 0.55)  # the sonar CRT lights its corner
+ALERT_COLOUR = (1.0, 0.42, 0.06)  # orange alarm lenses
 FOG = (0.02, 0.024, 0.026)
 
 LIGHTING = """
@@ -65,6 +68,7 @@ void main() {
 }
 """
 SOLID_FS = "#version 330\n" + LIGHTING + """
+uniform float alert;  // 0..1: the alarm lenses, dark or lit
 in vec3 pos; in vec3 norm; in vec3 col; flat in int mat;
 out vec4 frag;
 void main() {
@@ -81,6 +85,7 @@ void main() {
         shine = 0.6;
     }
     if (mat == 2) { frag = vec4(pow(col, vec3(1.0 / 2.2)), 1.0); return; }  // lamps and lit indicators
+    if (mat == 4) { frag = vec4(pow(col * mix(0.08, 1.0, alert), vec3(1.0 / 2.2)), 1.0); return; }  // alarm lenses
     if (mat == 3) shine = 1.2;  // bright-work
     frag = vec4(finish(lit(base, pos, n, shine), pos), 1.0);
 }
@@ -276,6 +281,12 @@ def build_room():
     for s in cr.STATIONS:
         console(m, s)
     trim_valves(m)
+    for pos, out in ALERT_LAMPS:
+        alert_lamp(m, pos, out)
+    lx, ly, lz = LEGEND_AT  # the alarm legend's post
+    m.cylinder((lx, 0.0, lz - 0.02), (lx, ly - 0.2, lz - 0.02), 0.02, CONSOLE, mat=3, seg=8)
+    m.box((lx, ly, lz - 0.03), (0.24, 0.42, 0.04), CONSOLE)
+    table_props(m)
     return m.array()
 
 
@@ -306,6 +317,53 @@ def console(m, s):
             m.wheel((seat[0], 0.95, seat[2] - 0.45), (0, 0, 1), 0.17, DARK, mat=0)
 
 
+def _alert_lamps():
+    """Where the alarm lamps hang: over each station's panel, toward the hull, and on the periscope barrel."""
+    lamps = []
+    for s in cr.STATIONS:
+        c, n = np.array(s.centre), np.array(s.normal)
+        flat = np.array([n[0], 0.0, n[2]]) / math.hypot(n[0], n[2])
+        lamps.append((tuple(c - flat * 0.18 + np.array([0.0, s.h / 2 + 0.38, 0.0])), tuple(flat)))
+    px, pz = cr.PERISCOPE
+    lamps.append(((px, 2.4, pz + 0.12), (0.0, 0.0, 1.0)))
+    return tuple(lamps)
+
+
+ALERT_LAMPS = _alert_lamps()
+LEGEND_AT = (0.62, 1.42, cr.PERISCOPE[1] + 0.5)  # the alarm legend panel by the periscope stand, facing aft
+
+
+def alert_lamp(m, pos, out):
+    """A caged orange lens on a dark base, pointing into the room."""
+    p, o = np.array(pos), np.array(out)
+    m.cylinder(p - o * 0.03, p, 0.06, DARK, seg=10)
+    m.cylinder(p, p + o * 0.07, 0.045, ALERT_COLOUR, mat=4, seg=12)
+    up = np.array([0.0, 1.0, 0.0]) if abs(o[1]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    side = np.cross(o, up)
+    for a in np.linspace(0, 2 * math.pi, 5)[:-1]:  # the cage
+        r = (math.cos(a) * up + math.sin(a) * side) * 0.058
+        m.cylinder(p + r, p + r + o * 0.085, 0.004, DARK, seg=4, caps=False)
+    m.cylinder(p + o * 0.085, p + o * 0.088, 0.06, DARK, seg=10)
+
+
+def table_props(m):
+    """On the plot table: a parallel ruler, brass dividers, pencils and a rubber."""
+    tx, tz, sx, sz = cr.TABLE
+    y = cr.TABLE_TOP + 0.04
+    for dz in (0.3, 0.345):  # parallel ruler, off the plot's centre and the rose: two ebony rules on brass links
+        m.box((tx - 0.05, y, tz + dz), (0.3, 0.006, 0.028), (0.08, 0.07, 0.06))
+    for dx in (-0.15, 0.05):
+        m.box((tx + dx, y + 0.004, tz + 0.3225), (0.012, 0.003, 0.06), BRASS, mat=3)
+    apex = (tx - 0.42, y + 0.02, tz - 0.22)  # dividers
+    for leg in ((tx - 0.27, y, tz - 0.31), (tx - 0.3, y, tz - 0.13)):
+        m.cylinder(apex, leg, 0.004, BRASS, mat=3, seg=5)
+    for (a, b, colour) in (((tx - 0.5, y, tz + 0.28), (tx - 0.34, y, tz + 0.34), (0.86, 0.7, 0.12)),
+                           ((tx - 0.48, y, tz + 0.36), (tx - 0.33, y, tz + 0.4), (0.62, 0.12, 0.08))):
+        m.cylinder(a, b, 0.0045, colour, seg=6)  # a pencil and a red pencil
+        m.cylinder(a, np.array(a) + (np.array(a) - np.array(b)) * 0.07, 0.0045, (0.85, 0.55, 0.55), seg=6)
+    m.box((tx + 0.3, y, tz + 0.33), (0.05, 0.012, 0.025), (0.86, 0.6, 0.58))  # rubber
+
+
 def trim_valves(m):
     """The trim manifold's valve wheels and the pipes they sit on, to the left of its panel."""
     s = next(s for s in cr.STATIONS if s.name == "DAMAGE CONTROL")
@@ -332,24 +390,121 @@ def panel_art(name, size):
     return surf
 
 
-def plot_art(track, heading, size=(520, 360), span=4000.0):
-    """The dead-reckoning plot: our own track on squared paper, last hour, centred on where we are now."""
-    surf = art.texture(size, art.PAPER, grain=2, mottle=6)
+def stamp(t):
+    """Patrol time as a navigator writes it: minutes and seconds run together."""
+    return f"{int(t // 60) % 100:02d}{int(t % 60):02d}"
+
+
+SEA = (204, 220, 226)
+PRINT = (86, 112, 134)      # the chart's own printing
+MAGENTA = (150, 64, 120)    # compass rose
+PENCIL = (64, 64, 70)
+RED_PENCIL = (170, 44, 32)
+_SMUDGE_RNG = random.Random(7)  # drawing's own dice: the rubbed-out patches sit in the same places every time
+SMUDGES = [(_SMUDGE_RNG.uniform(0.1, 0.9), _SMUDGE_RNG.uniform(0.1, 0.9)) for _ in range(3)]
+
+
+def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 720), span=8000.0):
+    """The attack plot: tracing paper over a printed sea chart, worked in pencil. Our dead-reckoning track with time
+    marks, each bearing ruled from where we took it, the reports, and the TDC's target in red. Centred on where we
+    are, north up, `span` metres across. track: (t, x, y); bearings: (t, true brg, kind, range); solution:
+    (x, y, vx, vy) relative to us; notes: (t, own x, own y, true brg, range or None, text)."""
     w, h = size
-    for k in range(0, w, 26):
-        pygame.draw.line(surf, (178, 196, 200), (k, 0), (k, h))
-    for k in range(0, h, 26):
-        pygame.draw.line(surf, (178, 196, 200), (0, k), (w, k))
+    k = w / span  # px per metre
+    x0, y0 = (track[-1][1], track[-1][2]) if track else (0.0, 0.0)
+
+    def at(x, y):
+        return (w / 2 + (x - x0) * k, h / 2 - (y - y0) * k)
+    chart = pygame.Surface(size)
+    chart.fill(SEA)
+    small, tiny = art.mono(13), art.mono(11)
+    for gx in range(int((x0 - span / 2) // 2000) * 2000, int(x0 + span / 2) + 2000, 2000):  # graticule, 2 km
+        px = at(gx, 0)[0]
+        pygame.draw.line(chart, PRINT, (px, 0), (px, h))
+        chart.blit(small.render(f"12°{30 + gx / 1852:04.1f}'W", True, PRINT), (px + 3, h - 18))
+    for gy in range(int((y0 - span / 2) // 2000) * 2000, int(y0 + span / 2) + 2000, 2000):
+        py = at(0, gy)[1]
+        pygame.draw.line(chart, PRINT, (0, py), (w, py))
+        chart.blit(small.render(f"47°{15 + gy / 1852:04.1f}'N", True, PRINT), (4, py + 2))
+    for sx in range(int((x0 - span / 2) // 700) * 700, int(x0 + span / 2) + 700, 700):  # soundings, fixed to the sea
+        for sy in range(int((y0 - span / 2) // 700) * 700, int(y0 + span / 2) + 700, 700):
+            depth = 1900 + 650 * math.sin(sx / 9000) + 420 * math.cos(sy / 7000 + sx / 15000)
+            chart.blit(tiny.render(f"{depth:.0f}", True, PRINT), at(sx + 120 * math.sin(sy), sy))
+    rose, r = (w - 120, h - 130), 92  # the printed compass rose
+    for rr in (r, r - 14):
+        pygame.draw.circle(chart, MAGENTA, rose, rr, 1)
+    for d in range(0, 360, 10):
+        a = math.radians(d)
+        inner = r - (12 if d % 30 == 0 else 6)
+        pygame.draw.line(chart, MAGENTA, (rose[0] + inner * math.sin(a), rose[1] - inner * math.cos(a)),
+                         (rose[0] + r * math.sin(a), rose[1] - r * math.cos(a)))
+    pygame.draw.polygon(chart, MAGENTA, [(rose[0], rose[1] - r + 16), (rose[0] - 8, rose[1]), (rose[0] + 8, rose[1])])
+    chart.blit(small.render("N", True, MAGENTA), (rose[0] - 4, rose[1] - r - 18))
+    paper = art.texture(size, art.PAPER, grain=2, mottle=6)  # tracing paper: the chart shows through
+    paper.set_alpha(105)
+    chart.blit(paper, (0, 0))
+    for fx, fy in SMUDGES:  # old work rubbed out
+        smudge = pygame.Surface((160, 70), pygame.SRCALPHA)
+        pygame.draw.ellipse(smudge, (120, 120, 118, 30), smudge.get_rect())
+        chart.blit(smudge, (fx * w - 80, fy * h - 35))
+    pen = art.hand(17)
     if track:
-        x0, y0 = track[-1]
-        pts = [(w / 2 + (x - x0) / span * w, h / 2 - (y - y0) / span * w) for x, y in track]
+        def where(t):
+            return min(track, key=lambda r: abs(r[0] - t))[1:3]
+        labelled = -1e9
+        for t, brg, _, _ in bearings:  # each bearing ruled from where we took it; a time on one a minute
+            ox, oy = where(t)
+            b = math.radians(brg)
+            end = at(ox + 0.4 * span * math.sin(b), oy + 0.4 * span * math.cos(b))
+            pygame.draw.line(chart, PENCIL, at(ox, oy), end)
+            if t - labelled >= 60:
+                labelled = t
+                chart.blit(pen.render(stamp(t), True, PENCIL), (end[0] + 2, end[1] - 10))
+        pts = [at(x, y) for _, x, y in track]
         if len(pts) > 1:
-            pygame.draw.lines(surf, art.INK, False, pts, 2)
-        for p in pts[::60]:  # a tick every minute
-            pygame.draw.circle(surf, art.INK_RED, p, 3)
+            pygame.draw.lines(chart, PENCIL, False, pts, 3)
+        last = -1e9
+        for t, x, y in track:  # a tick and the time every three minutes
+            if t - last >= 180:
+                last = t
+                q = at(x, y)
+                pygame.draw.circle(chart, PENCIL, q, 4, 2)
+                chart.blit(pen.render(stamp(t), True, PENCIL), (q[0] + 8, q[1] - 22))
         hd = math.radians(heading)
-        pygame.draw.line(surf, art.INK_RED, (w / 2, h / 2), (w / 2 + 30 * math.sin(hd), h / 2 - 30 * math.cos(hd)), 3)
-    art.engrave(surf, "D.R. PLOT  1:4000", (12, 10), 13, art.INK)
+        pygame.draw.circle(chart, PENCIL, (w / 2, h / 2), 7, 2)
+        pygame.draw.line(chart, PENCIL, (w / 2, h / 2), (w / 2 + 40 * math.sin(hd), h / 2 - 40 * math.cos(hd)), 3)
+        for t, ox, oy, brg, rng, text in notes:  # reports: a cross where placed, else a note along the bearing
+            b = math.radians(brg)
+            d = rng if rng is not None else 2500.0
+            q = at(ox + d * math.sin(b), oy + d * math.cos(b))
+            if rng is not None:
+                pygame.draw.line(chart, PENCIL, (q[0] - 9, q[1] - 9), (q[0] + 9, q[1] + 9), 2)
+                pygame.draw.line(chart, PENCIL, (q[0] - 9, q[1] + 9), (q[0] + 9, q[1] - 9), 2)
+            chart.blit(pen.render(f"{stamp(t)} {text}", True, PENCIL), (q[0] + 12, q[1] + 2))
+        if solution:  # the TDC's target, in red pencil: where, and where in five minutes
+            tx, ty, vx, vy = solution
+            here, later = at(x0 + tx, y0 + ty), at(x0 + tx + vx * 300, y0 + ty + vy * 300)
+            pygame.draw.circle(chart, RED_PENCIL, here, 10, 2)
+            pygame.draw.line(chart, RED_PENCIL, here, later, 3)
+            crs, spd = math.degrees(math.atan2(vx, vy)) % 360, math.hypot(vx, vy) / KNOT
+            chart.blit(art.hand(19).render(f"TGT C{crs:03.0f} S{spd:.0f}", True, RED_PENCIL),
+                       (here[0] + 14, here[1] + 8))
+    bar = w * 2000 / span  # scale bar and title block, bottom left
+    pygame.draw.line(chart, PENCIL, (20, h - 50), (20 + bar, h - 50), 3)
+    for kx in (0, bar / 2, bar):
+        pygame.draw.line(chart, PENCIL, (20 + kx, h - 56), (20 + kx, h - 44), 2)
+    chart.blit(pen.render("0      1      2 KM", True, PENCIL), (16, h - 44))
+    chart.blit(art.hand(22).render("ATTACK PLOT", True, PENCIL), (20, 12))
+    return chart
+
+
+def legend_art(alarms, size=(200, 360)):
+    """The small alarm panel at the conn: which thing the orange lamps are for."""
+    surf = art.texture(size, art.FACE, grain=3)
+    w, h = size
+    art.label_plate(surf, (w // 2, 22), "ALARM", 12)
+    for i, (name, on, _) in enumerate(alarms):
+        art.annunciator(surf, pygame.Rect(16, 52 + i * 74, w - 32, 58), name, on, art.AMBER)
     return surf
 
 
@@ -371,8 +526,9 @@ class RoomRenderer:
             surf = None if s.working else panel_art(s.name, tex_size)
             self._panel(s.centre, s.normal, s.w, s.h, tex_size, surf, glow=1.0 if s.working else 0.0, name=s.name)
         tx, tz, sx, sz = cr.TABLE
-        self._panel((tx, cr.TABLE_TOP + 0.03, tz), (0.0, 1.0, 0.0), sx - 0.1, sz - 0.1, (520, 360), None, 0.35,
+        self._panel((tx, cr.TABLE_TOP + 0.03, tz), (0.0, 1.0, 0.0), sx - 0.1, sz - 0.1, (1040, 720), None, 0.35,
                     "TABLE")
+        self._panel(LEGEND_AT, (0.0, 0.1, 0.995), 0.2, 0.36, (200, 360), None, 1.0, "ALARMS")
         self.msaa = self.ctx.framebuffer(self.ctx.renderbuffer(size, samples=4),
                                          self.ctx.depth_renderbuffer(size, samples=4))
         self.out = self.ctx.framebuffer(self.ctx.renderbuffer(size))
@@ -402,18 +558,22 @@ class RoomRenderer:
     def texture(self, name):
         return next(p[1] for p in self.panels if p[4] == name)
 
-    def render(self, pose, screens=None, plot_surf=None):
+    def render(self, pose, screens=None, plot_surf=None, legend_surf=None, alert=0.0):
         """Draw the room from `pose`. screens: fresh station canvases by name (the rest keep their last picture);
-        plot_surf: the plot table, when it has changed."""
+        plot_surf: the plot table, when it has changed; legend_surf: the alarm legend; alert: the orange lamps, 0..1."""
         for name, surf in (screens or {}).items():
             self.upload(self.texture(name), surf)
+        if legend_surf is not None:
+            self.upload(self.texture("ALARMS"), legend_surf)
         if plot_surf is not None:
             self.upload(self.texture("TABLE"), plot_surf)
         w, h = self.size
         mvp = perspective(cr.FOVY, w / h, 0.05, 40.0) @ look_at(pose.pos, pose.forward())
         sonar = next(s for s in cr.STATIONS if s.working)
-        lights = [*LAMPS, tuple(np.array(sonar.centre) + np.array(sonar.normal) * 0.5)]
-        colours = [LAMP_COLOUR] * len(LAMPS) + [tuple(0.6 * c for c in SCREEN_GLOW)]
+        lights = [*LAMPS, tuple(np.array(sonar.centre) + np.array(sonar.normal) * 0.5),
+                  ALERT_LAMPS[-1][0], ALERT_LAMPS[3][0]]  # the conn's and the helm's alarm lamps throw light too
+        colours = [LAMP_COLOUR] * len(LAMPS) + [tuple(0.6 * c for c in SCREEN_GLOW)] + \
+            [tuple(1.4 * alert * c for c in ALERT_COLOUR)] * 2
         for prog in (self.solid, self.flat):
             prog["mvp"].write(mvp.T.astype("f4").tobytes())
             prog["eye"].value = tuple(pose.pos)
@@ -422,6 +582,7 @@ class RoomRenderer:
             prog["light_col"].write(np.array(colours + [(0, 0, 0)] * (8 - len(colours)), "f4").tobytes())
             prog["fog_col"].value = FOG
             prog["view"].value = (float(w), float(h))
+        self.solid["alert"].value = alert
         self.msaa.use()
         self.ctx.clear(*FOG, depth=1.0)
         self.room.render()

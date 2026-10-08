@@ -114,6 +114,8 @@ class Crew:
             self.reported = (true, now)
             kind = con.classification or "UNKNOWN"
             con.say(f"CONN, SONAR: CONTACT {true:03.0f}, CLASSIFIED {kind}")
+            p = con.world.player
+            con.plot_notes.append((now, p.x, p.y, true, None, f"SONAR {kind}"))
         if now - self.marked > MARK_EVERY:
             self.marked = now
             con.mark()

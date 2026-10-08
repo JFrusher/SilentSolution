@@ -96,6 +96,28 @@ WEAPONS_PLATE = pygame.Rect(634, 486, 160, 214)
 ALARM_PLATE = pygame.Rect(796, 486, 114, 214)
 
 
+def alarm_states(con):
+    """The warning lamps, (legend, lit, colour) in panel order; the console panel and the overhead board share them."""
+    p, world = con.world.player, con.world
+    blink = int(world.time * 4) % 2 == 0
+    exposed = con.exposure > 0.25
+    masts = p.scope_up or p.snorkel_up
+    states = (con.lamp_enemy > 0 and blink, con.torpedo_warning and blink, p.cavitating, p.snorkeling,
+              masts and (blink or not exposed), p.broached and blink, bool(p.leaks),
+              p.z > CRUSH_DEPTH - 20 and blink, p.z >= world.ocean.layer_depth)
+    colors = (art.AMBER, art.RED, art.AMBER, art.GREEN, art.RED if exposed else art.AMBER, art.RED, art.RED,
+              art.RED, art.BLUE)
+    return list(zip(LAMPS, states, colors))
+
+
+ALERTS = ("ENEMY SONAR", "TORPEDO", "LEAK", "HULL STRESS")  # what the orange alarm lamps in the room are for
+
+
+def alerts(con):
+    """The alarms that light the control room's orange lamps, (legend, lit, colour), as the conn's panel names them."""
+    return [a for a in alarm_states(con) if a[0] in ALERTS]
+
+
 class Workstation:
     """Renders the operator station around the console state."""
 
@@ -827,14 +849,7 @@ class Workstation:
         art.button(f, PING_BTN, f"ACTIVE PING  [{keylabel('PING')}]", lit=world.time - con.ping_time < 0.6,
                    color=art.RED)
         # annunciator panel: legend on every tile, so colour is never the only cue
-        exposed = con.exposure > 0.25
-        masts = p.scope_up or p.snorkel_up
-        states = (con.lamp_enemy > 0 and blink, con.torpedo_warning and blink, p.cavitating, p.snorkeling,
-                  masts and (blink or not exposed), p.broached and blink, bool(p.leaks),
-                  p.z > CRUSH_DEPTH - 20 and blink, p.z >= world.ocean.layer_depth)
-        colors = (art.AMBER, art.RED, art.AMBER, art.GREEN, art.RED if exposed else art.AMBER, art.RED, art.RED,
-                  art.RED, art.BLUE)
-        for rect, name, on, color in zip(ANNUNCIATORS, LAMPS, states, colors):
+        for rect, (name, on, color) in zip(ANNUNCIATORS, alarm_states(con)):
             art.annunciator(f, rect, name, on, color)
         # TDC readouts
         for i, (name, (_, _, fmt, *_)) in enumerate(FIELDS.items()):

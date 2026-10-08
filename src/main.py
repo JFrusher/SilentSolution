@@ -15,14 +15,14 @@ import stations
 from audio import AudioSynthesizer
 from console import Console
 from graphics import console_art as art
-from graphics.room3d import RoomRenderer, plot_art
+from graphics.room3d import RoomRenderer, legend_art, plot_art
 from graphics.tabletop import ReplayView
 from layout import CRT_RECT, H, W
 from orders_menu import OrderWheel
 from tuning import DIFFICULTY
 from tutorial import CHAPTERS, TRAINING, Tutorial
 from version import __version__
-from workstation import Workstation
+from workstation import Workstation, alerts
 
 FPS = 60
 SIM_DT = 1 / 60  # s per sim step, fixed
@@ -289,7 +289,7 @@ class OnFoot:
         if to is not None:  # carried somewhere first: you have your feet once it's done
             self.room.carry(to, "ROOM")
         self.focus = focus  # the station being left or approached: its screen is kept exact for the cut
-        self.plot, self.plot_at, self.turn = None, -1e9, 0
+        self.plot_at, self.turn = -1e9, 0
         con.crew.captain_at = None  # the crew has the watch
         pygame.mouse.set_relative_mode(True)
 
@@ -344,10 +344,16 @@ class OnFoot:
             names = [n for n in self.WORKING if stations.VIEWS[n].page == page]
         frame = app.console_frame(con, page, False, dt)  # the full console is drawn once a frame, at most
         screens = {n: stations.compose(stations.VIEWS[n], frame, app.backdrop) for n in names}
-        if w.time - self.plot_at >= self.PLOT_EVERY:
-            track = con.recorder.tracks.get(w.player.uid, [])[-3600:]
-            self.plot, self.plot_at = plot_art([(r[1], r[2]) for r in track], w.player.heading), w.time
-        screen.blit(app.room().render(self.room.pose, screens, self.plot), (0, 0))
+        plot = None
+        if w.time - self.plot_at >= self.PLOT_EVERY:  # from our own navigation and the TMA log: what we know
+            tdc, p = con.tdc, w.player
+            solution = (tdc.x, tdc.y, *tdc.target_velocity())
+            marks = [b for b in con.tma.recent(w.time, 600.0) if b[2] != "HYD"]  # marks and fixes, not the trace
+            plot = plot_art(list(con.tma.track), p.heading, marks, solution, con.plot_notes)
+            self.plot_at = w.time
+        lamps = alerts(con)  # the lamps flash with their alarms; the legend at the conn says which
+        alert = float(any(on for _, on, _ in lamps))
+        screen.blit(app.room().render(self.room.pose, screens, plot, legend_art(lamps), alert), (0, 0))
         if self.room.moving:
             return
         font = art.mono(15, True)
