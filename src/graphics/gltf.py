@@ -12,10 +12,11 @@ import pygame
 GLB, JSON_CHUNK, BIN_CHUNK = 0x46546C67, 0x4E4F534A, 0x004E4942
 COMPONENTS = {5120: np.int8, 5121: np.uint8, 5122: np.int16, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}
 WIDTH = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
+MOVING = ("arms_", "wheel_")  # parts the game moves besides the head: a crewman's arm poses, a helm's wheels
 
 
 # ---------- writing ----------
-def write(path, parts, materials):
+def write(path, parts, materials, generator="Silent Solution"):
     """parts: {name: (pivot or None, [(material name, verts N x 11 f4: pos, normal, uv, colour; indices)])}.
     A part with a pivot becomes a node placed at it (a head turns about its neck); its vertices are model space.
     materials: {name: dict(color=(r, g, b, a), rough, metal, emissive=(r, g, b), png=bytes or None, wear)}."""
@@ -64,7 +65,7 @@ def write(path, parts, materials):
         meshes.append(dict(name=part, primitives=out))
         nodes.append(dict(name=part, mesh=len(meshes) - 1, **({} if pivot is None else
                                                               {"translation": [float(x) for x in shift]})))
-    doc = dict(asset=dict(version="2.0", generator="Silent Solution graphics/models.py"), scene=0,
+    doc = dict(asset=dict(version="2.0", generator=generator), scene=0,
                scenes=[dict(nodes=list(range(len(nodes))))], nodes=nodes, meshes=meshes, materials=mats,
                accessors=accessors, bufferViews=views, buffers=[dict(byteLength=len(blob))])
     if images:
@@ -80,6 +81,13 @@ def write(path, parts, materials):
 
 
 # ---------- reading ----------
+def generator(path):
+    """The asset.generator a .glb names: who made it."""
+    data = Path(path).read_bytes()
+    jlen = struct.unpack_from("<I", data, 12)[0]
+    return json.loads(data[20:20 + jlen]).get("asset", {}).get("generator", "")
+
+
 def _matrix(node):
     if "matrix" in node:
         return np.array(node["matrix"], float).reshape(4, 4).T  # glTF stores column-major
@@ -96,7 +104,8 @@ def _matrix(node):
 
 def load(path):
     """{part: (pivot (3,), [(verts N x 11 f4 in model space, indices u4, material dict, image Surface or None)])}.
-    The subtree under a node named "head" is the head part, pivoting on that node's origin; all else is "body"."""
+    The subtree under a node named "head" (or "arms_N", "wheel_N") is that part, pivoting on the node's origin;
+    all else is "body"."""
     path = Path(path)
     data = path.read_bytes()
     magic, version, _ = struct.unpack_from("<III", data)
@@ -145,9 +154,10 @@ def load(path):
     def walk(n, parent, part):
         node = doc["nodes"][n]
         world = parent @ _matrix(node)
-        if node.get("name") == "head":
-            part = "head"
-            parts["head"] = [world[:3, 3].copy(), []]
+        name = node.get("name", "")
+        if name == "head" or name.startswith(MOVING):
+            part = name
+            parts[name] = [world[:3, 3].copy(), []]
         if "mesh" in node:
             normal_m = np.linalg.inv(world[:3, :3]).T
             for prim in doc["meshes"][node["mesh"]]["primitives"]:

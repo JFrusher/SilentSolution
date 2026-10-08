@@ -67,6 +67,11 @@ assert con.crew.course is None and "COURSE ORDER CANCELLED" in con.log[-1]
 con.crew.order("ENGINES", 3)
 con.crew.order("DEPTH", 150)
 run(con, con.diff["crew_delay"] + 0.1)
+assert {"HELM", "PLANES"} <= set(con.crew.worked), "the men who carried them out put their hands to their controls"
+from graphics.room3d import reach, wheel_pose  # noqa: E402
+
+assert [reach(a) for a in (None, 0.1, 0.45, 0.8, 1.0)] == [0, 1, 2, 1, 0], "out to his switches and back"
+assert wheel_pose(44.0) == (12, 45.0) and wheel_pose(0.0)[1] == 0.0, "the wheels snap to the posed turns"
 assert abs(p.ordered_speed - sim.TELEGRAPH[3][1] * KNOT) < 1e-9 and p.ordered_depth == 150
 
 # every order the wheel can give runs

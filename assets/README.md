@@ -23,5 +23,10 @@ It refuses with a clear error: other primitive modes, sparse accessors, and exte
 - **A crewman** (`crew/*.glb`):
   - His origin is the floor under his seat, and he faces +Z.
   - Name the node that carries his head `head`, with its origin at the neck. The game turns that node to make him look about and face you when he speaks.
+  - Optionally, put his arms (with the hands) in nodes `arms_0`, `arms_1`, ... holding them in different poses, and the game shows one at a time:
+    - a watchkeeper: rest, half reach and full reach (to work his switches)
+    - the helmsman and planesman: their grips at evenly spaced wheel angles from -45° to +45°
+  - Without them the arms stay part of the body and hold still.
+- **The helm station** can carry its two control wheels in nodes `wheel_0` (the helmsman's) and `wheel_1` (the planesman's), each with its origin at the hub. The game turns them about their +Z axis.
 
 If you add a third-party model, credit it in `THIRD-PARTY-NOTICES.txt`.

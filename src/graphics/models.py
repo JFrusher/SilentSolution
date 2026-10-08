@@ -19,6 +19,7 @@ from graphics import console_art as art
 from graphics import gltf
 
 ASSETS = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2])) / "assets"
+MODELS = "Silent Solution graphics/models.py v2"  # bump when the models change, so old copies are rebuilt
 TILT = math.radians(18.0)  # the console faces lean back this far (control_room._tilted)
 I3 = np.identity(3)
 
@@ -206,7 +207,7 @@ class Builder:
                                                mats.items()]) for part, mats in self.parts.items()}
 
     def save(self, path):
-        gltf.write(path, self.mesh(), self.materials)
+        gltf.write(path, self.mesh(), self.materials, MODELS)
 
 
 # ---------- colours (linear, as the shader lights them) ----------
@@ -588,20 +589,24 @@ def seat(b, p, facing):
     b.box(p + (0, 0.16, 0) + z * 0.3, (0.36, 0.02, 0.1), CHROME, "metal", fr, r=0.006)
 
 
-def yoke(b, p, facing):
-    """An aircraft-style control column: column from the deck, a spoked wheel with two grips."""
+def yoke(b, p, facing, part):
+    """An aircraft-style control column: column from the deck, and (as `part`, turning on its hub) a wheel with two
+    grips."""
     fr = frame(facing)
     x, z = fr[:, 0], fr[:, 2]
     b.box(p + (0, 0.05, 0), (0.16, 0.1, 0.16), BAKELITE, "bakelite", fr, r=0.02)
     hub = p + (0, 0.93, 0) + z * 0.08
     b.cylinder(p + (0, 0.1, 0), p + (0, 0.88, 0), 0.035, HAMMERTONE, seg=12)
     b.cylinder(p + (0, 0.88, 0), hub, 0.03, CHROME, "metal", seg=10)
+    b.part = part
+    b.pivots[part] = hub
     arc = [hub + z * 0.02 + x * 0.17 * math.cos(t) + np.array((0, 0.09 * math.sin(t), 0))
            for t in np.linspace(-0.3, math.pi + 0.3, 16)]
     b.tube(arc, 0.014, BAKELITE, "bakelite", seg=8)
     for side in (-1, 1):
         g = hub + z * 0.02 + x * side * 0.17
         b.cylinder(g - (0, 0.06, 0), g + (0, 0.03, 0), 0.02, BAKELITE, "rubber", seg=10)
+    b.part = "body"
 
 
 RAIL = {  # each station's switch rail, left to right
@@ -663,9 +668,9 @@ def station(s):
         b.box(st.at_panel(w / 2 + 0.12, 0.25, -0.12), (0.12, 0.04, 0.03), HAMMERTONE, axes=st.tilted, r=0.008)
         dial(b, st.at_panel(w / 2 + 0.2, 0.25, -0.06), st.N, 0.075, "clock", clock_art())
     elif s.name == "HELM AND PLANES":
-        for x, out in HELM_SEATS:  # the helmsman's and planesman's seats and their columns
+        for k, (x, out) in enumerate(HELM_SEATS):  # the helmsman's and planesman's seats and their columns
             seat(b, np.array((x, 0.0, out)), (0, 0, -1))
-            yoke(b, np.array((x, 0.0, out - 0.33)), (0, 0, 1))
+            yoke(b, np.array((x, 0.0, out - 0.33)), (0, 0, 1), f"wheel_{k}")
         for side, title in ((-1, "FWD PLANES"), (1, "AFT PLANES")):
             c = st.at_panel(side * (w / 2 + 0.2), 0.2, -0.04)
             b.box(st.at_panel(side * (w / 2 + 0.1), 0.2, -0.09), (0.16, 0.05, 0.03), HAMMERTONE, axes=st.tilted,
@@ -807,9 +812,9 @@ def hand(b, wrist, forward, side, skin, grip=False):
            seg=6)
 
 
-def crewman(key, pose, hands=None):
-    """A rating, seated with his hands at `hands` (two points, model space) or standing; the head a separate part
-    turning on his neck. Model space: the floor under his seat, facing +z."""
+def crewman(key, pose, poses=None):
+    """A rating, seated or standing; his head a part turning on his neck, his arms a part per pose in `poses` (each a
+    pair of hand points, model space; none: hanging at his sides). Model space: the floor under his seat, facing +z."""
     outfit, skin_i, hair_i, beard, phones = CREW[key]
     o, skin, hair = OUTFITS[outfit], SKINS[skin_i], HAIRS[hair_i]
     b = Builder()
@@ -834,31 +839,8 @@ def crewman(key, pose, hands=None):
                seg=12)
     else:  # an open neck: a vee of shirt, skin showing
         b.blob(neck0 + (0, -0.04, 0.085 + lean * 0.2), I3, (0.05, 0.06, 0.02), skin, "skin", nu=10, nv=6)
-    for side in (-1, 1):  # arms
-        shoulder = spine[-2] + np.array((side * 0.18, -0.035, 0.0))
-        if hands is not None:
-            target = np.asarray(hands[(side + 1) // 2], float)
-            elbow, wrist = ik(shoulder, target - np.array((0, 0.012, 0.0)), UPPER_ARM, FOREARM,
-                              (side * 0.8, -1.0, -0.3))
-            forward = target - elbow
-            forward[1] = 0.0
-        else:
-            elbow, wrist = shoulder + (side * 0.04, -0.29, 0.02), shoulder + (side * 0.06, -0.55, 0.06)
-            forward = np.array((side * 0.15, -1.0, 0.2))
-        sleeve = o["sleeve"] or o["top"]
-        b.tube(bezier([shoulder - (side * 0.03, -0.01, 0), shoulder, (shoulder + elbow) / 2, elbow], 6),
-               np.interp(np.linspace(0, 1, 6), (0, 0.2, 1), (0.05, 0.058, 0.046)), sleeve, "cloth", seg=12)
-        fore = bezier([elbow, (elbow + wrist) / 2, wrist], 5)
-        if o["sleeve"]:
-            b.tube(fore, np.linspace(0.046, 0.036, 5), sleeve, "cloth", seg=12)
-        else:  # sleeves rolled to the elbow
-            b.tube(fore[:2], 0.052, o["top"], "cloth", seg=12)
-            b.tube(fore[1:], np.linspace(0.04, 0.032, 4), skin, "skin", seg=10)
-        if hands is not None:
-            hand(b, wrist, forward, side, skin, grip=key in ("HELM", "PLANES"))
-        else:
-            b.blob(wrist + (0, -0.05, 0.01), I3, (0.03, 0.055, 0.04), skin, "skin", nu=10, nv=8)
-        hip = spine[0] + np.array((side * 0.095, 0.0, 0.0))  # legs
+    for side in (-1, 1):  # legs
+        hip = spine[0] + np.array((side * 0.095, 0.0, 0.0))
         if seated:
             knee = np.array((side * 0.11, hip_y - 0.02, THIGH - 0.04))
             ankle = np.array((side * 0.12, 0.09, THIGH + 0.02))
@@ -868,6 +850,33 @@ def crewman(key, pose, hands=None):
         b.tube(bezier([knee, (knee + ankle) / 2, ankle], 5), np.linspace(0.062, 0.045, 5), o["legs"], "cloth", seg=12)
         b.blob(knee, I3, (0.062, 0.062, 0.062), o["legs"], "cloth", nu=10, nv=8)
         b.box(ankle + (0, -0.055, 0.05), (0.1, 0.07, 0.27), (0.02, 0.02, 0.02), "bakelite", r=0.03)  # boots
+    for k, hands in enumerate(poses or [None]):  # the arms, a part per pose: the renderer shows one at a time
+        b.part = f"arms_{k}"
+        for side in (-1, 1):
+            shoulder = spine[-2] + np.array((side * 0.18, -0.035, 0.0))
+            if hands is not None:
+                target = np.asarray(hands[(side + 1) // 2], float)
+                elbow, wrist = ik(shoulder, target - np.array((0, 0.012, 0.0)), UPPER_ARM, FOREARM,
+                                  (side * 0.8, -1.0, -0.3))
+                forward = target - elbow
+                forward[1] = 0.0
+            else:
+                elbow, wrist = shoulder + (side * 0.04, -0.29, 0.02), shoulder + (side * 0.06, -0.55, 0.06)
+                forward = np.array((side * 0.15, -1.0, 0.2))
+            sleeve = o["sleeve"] or o["top"]
+            b.tube(bezier([shoulder - (side * 0.03, -0.01, 0), shoulder, (shoulder + elbow) / 2, elbow], 6),
+                   np.interp(np.linspace(0, 1, 6), (0, 0.2, 1), (0.05, 0.058, 0.046)), sleeve, "cloth", seg=12)
+            fore = bezier([elbow, (elbow + wrist) / 2, wrist], 5)
+            if o["sleeve"]:
+                b.tube(fore, np.linspace(0.046, 0.036, 5), sleeve, "cloth", seg=12)
+            else:  # sleeves rolled to the elbow
+                b.tube(fore[:2], 0.052, o["top"], "cloth", seg=12)
+                b.tube(fore[1:], np.linspace(0.04, 0.032, 4), skin, "skin", seg=10)
+            if hands is not None:
+                hand(b, wrist, forward, side, skin, grip=key in ("HELM", "PLANES"))
+            else:
+                b.blob(wrist + (0, -0.05, 0.01), I3, (0.03, 0.055, 0.04), skin, "skin", nu=10, nv=8)
+    b.part = "body"
     if o["collar"] != "roll" and outfit == "overalls":
         b.tube([spine[1] + (np.cos(t) * 0.152, 0, np.sin(t) * 0.103) for t in np.linspace(0, 2 * math.pi, 24,
                                                                                          endpoint=False)],
@@ -896,10 +905,24 @@ def crewman(key, pose, hands=None):
 
 
 def crew_hands(s):
-    """Where the man on the stool at station s rests his hands, in his own model space."""
+    """The poses of the man on the stool at station s, in his own model space: hands resting on the desk, his right
+    hand halfway to the switch rail, and on it."""
     st = Station(Builder(), s)
     z = SEAT_OUT - (st.desk_z0 + st.desk_z1) / 2 - 0.06  # the desk's middle, seen from his seat
-    return [np.array((side * 0.17, st.desk_y + 0.02, z)) for side in (-1, 1)]
+    rest = [np.array((side * 0.17, st.desk_y + 0.02, z)) for side in (-1, 1)]
+    rail = np.array((-0.1, st.desk_y + 0.09, SEAT_OUT - st.desk_z0 - 0.07))  # +x is his left: his right is -x
+    half = (rest[0] + rail) / 2 + (0, 0.04, 0)
+    return [rest, [half, rest[1]], [rail, rest[1]]]
+
+
+WHEEL_ANGLES = np.linspace(-45, 45, 13)  # the helm wheels' turns his arms are posed at, deg (+: top to his right)
+HUB = np.array((0.0, 0.93, 0.25))        # the wheel's hub, in the seated man's space (the column 0.33 ahead of him)
+
+
+def grips(angle):
+    """The helmsman's or planesman's hands on the wheel's grips with it turned `angle` deg."""
+    a = math.radians(angle)
+    return [HUB + (side * 0.17 * math.cos(a), side * 0.17 * math.sin(a), -0.02) for side in (-1, 1)]
 
 
 def crew_models():
@@ -908,11 +931,10 @@ def crew_models():
     for s in cr.STATIONS:
         if s.working and s.name != "HELM AND PLANES":
             key = s.name
-            out[CREW_FILES[key]] = lambda key=key, s=s: crewman(key, "seated", crew_hands(s))
+            out[CREW_FILES[key]] = lambda key=key, s=s: crewman(key, "seated", crew_hands(s))  # rest, half, reach
             out[CREW_FILES[key].replace("seated", "standing")] = lambda key=key: crewman(key, "standing")
-    for key in ("HELM", "PLANES"):  # hands on the yoke's grips: the column stands 0.33 in front of the seat
-        out[CREW_FILES[key]] = lambda key=key: crewman(key, "seated", [np.array((side * 0.17, 0.92, 0.23))
-                                                                       for side in (-1, 1)])
+    for key in ("HELM", "PLANES"):  # hands on the yoke's grips, at each of the wheel's turns
+        out[CREW_FILES[key]] = lambda key=key: crewman(key, "seated", [grips(a) for a in WHEEL_ANGLES])
     return out
 
 
@@ -924,11 +946,14 @@ STATION_FILES = {s.name: f"stations/{s.name.lower().replace(' ', '_')}.glb" for 
 
 
 def build_all(root=ASSETS, force=False):
-    """Write every model that's missing (all of them with force). A model dropped in by hand is kept."""
+    """Write every model that's missing or was built by an older version of this file (all of them with force).
+    A model dropped in by hand (made by anything else) is kept."""
     todo = {STATION_FILES[s.name]: (lambda s=s: station(s)) for s in cr.STATIONS} | crew_models()
     for path, build in todo.items():
-        if force or not (root / path).exists():
-            build().save(root / path)
+        f = root / path
+        stale = f.exists() and gltf.generator(f).startswith("Silent Solution") and gltf.generator(f) != MODELS
+        if force or stale or not f.exists():
+            build().save(f)
 
 
 if __name__ == "__main__":

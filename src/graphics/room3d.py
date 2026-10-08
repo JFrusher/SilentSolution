@@ -11,12 +11,14 @@ import pygame
 import control_room as cr
 from graphics import console_art as art
 from graphics import gltf
-from graphics.models import ASSETS, CREW_FILES, HELM_SEATS, SEAT_OUT, STATION_FILES, build_all
+from graphics.models import ASSETS, CREW_FILES, HELM_SEATS, SEAT_OUT, STATION_FILES, WHEEL_ANGLES, build_all
 from layout import H, W
 from sim import KNOT
 
 LAMPS = [(0.0, 2.28, z) for z in (-4.2, -1.9, 0.4, 2.7, 4.6)]
 LAMP_COLOUR = (1.15, 0.9, 0.62)
+REACH_TIME = 0.9  # s a crewman's hand takes out to his switches and back
+STEP_TIME = 0.8   # s a crewman takes to get up and stand aside (or sit back down)
 SCREEN_GLOW = (0.35, 0.95, 0.55)  # the sonar CRT lights its corner
 ALERT_COLOUR = (1.0, 0.42, 0.06)  # orange alarm lenses
 FOG = (0.02, 0.024, 0.026)
@@ -543,6 +545,27 @@ def rot_y(deg):
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
 
 
+def rot_z(deg):
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+
+
+def ease(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def reach(age):
+    """Which arm pose (rest, half, full) a man is in `age` s after he put his hand to his controls: out and back."""
+    return 0 if age is None or age >= REACH_TIME else round(2 * math.sin(math.pi * age / REACH_TIME))
+
+
+def wheel_pose(angle):
+    """The nearest of the posed wheel turns to `angle`: (its index, its angle)."""
+    k = int(np.argmin(np.abs(WHEEL_ANGLES - angle)))
+    return k, float(WHEEL_ANGLES[k])
+
+
 def rot_x(deg):
     c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
     return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
@@ -600,9 +623,11 @@ class Model:
             self.parts[name] = (pivot, draws)
         self.triangles = sum(d[0].vertices // 3 for _, ds in self.parts.values() for d in ds)
 
-    def render(self, prog, place, turns=None):
-        """place: model to room (4x4); turns: {part: 3x3 rotation about the part's pivot}."""
+    def render(self, prog, place, turns=None, arms=0):
+        """place: model to room (4x4); turns: {part: 3x3 rotation about the part's pivot}; arms: which arm pose."""
         for name, (pivot, draws) in self.parts.items():
+            if name.startswith("arms_") and name != f"arms_{arms}":
+                continue
             m = place
             if turns and name in turns:
                 t = np.identity(4)
@@ -640,6 +665,7 @@ class RoomRenderer:
         self.room = self.ctx.vertex_array(self.solid, [(vbo, "3f 3f 3f 1f", "in_pos", "in_norm", "in_col", "in_mat")])
         self.panels = []  # (vertex array, texture, normal, glow, name)
         self.crew = {}    # crewman -> (seated model, its place, standing model or None, its place)
+        self.stepping = {}  # crewman -> (stood aside?, when he last got up or sat down): his step aside, animated
         for key, (sat, stood) in crew_places().items():
             seated = Model(self.ctx, self.model, ASSETS / CREW_FILES[key])
             standing = Model(self.ctx, self.model, ASSETS / CREW_FILES[key].replace("seated", "standing")) \
@@ -682,11 +708,13 @@ class RoomRenderer:
     def texture(self, name):
         return next(p[1] for p in self.panels if p[4] == name)
 
-    def render(self, pose, screens=None, plot_surf=None, legend_surf=None, alert=0.0, aside=(), t=0.0, speaking=None):
+    def render(self, pose, screens=None, plot_surf=None, legend_surf=None, alert=0.0, aside=(), t=0.0, speaking=None,
+               working=None, wheels=(0.0, 0.0)):
         """Draw the room from `pose`. screens: fresh station canvases by name (the rest keep their last picture);
         plot_surf: the plot table, when it has changed; legend_surf: the alarm legend; alert: the orange lamps, 0..1;
         aside: stations whose crewman has stood aside for the captain; t: seconds, for the crew's idle life;
-        speaking: {crewman: seconds since his last call}, so he looks round at you."""
+        speaking: {crewman: seconds since his last call}, so he looks round at you; working: {crewman: seconds since
+        he put his hand to his controls}; wheels: how far the helmsman's and planesman's wheels are turned, deg."""
         for name, surf in (screens or {}).items():
             self.upload(self.texture(name), surf)
         if legend_surf is not None:
@@ -712,17 +740,35 @@ class RoomRenderer:
         self.msaa.use()
         self.ctx.clear(*FOG, depth=1.0)
         self.room.render()
+        turned = [wheel_pose(a) for a in wheels]  # the wheels and the men's arms both at the nearest posed turn
+        # the helm's model space faces the men, so a turn to their right is the other way about its +z
+        spin = {f"wheel_{k}": rot_z(-a) for k, (_, a) in enumerate(turned)}
         for model, place in self.consoles:
-            model.render(self.model, place)
+            model.render(self.model, place, spin)
         for k, (key, (seated, sat, standing, stood)) in enumerate(self.crew.items()):
-            model, place = (standing, stood) if key in aside and standing else (seated, sat)
+            now_aside = key in aside and standing is not None
+            was, since = self.stepping.get(key, (now_aside, -1e9))
+            if was != now_aside:
+                self.stepping[key] = (now_aside, t)
+                since = t
+            f = ease((t - since) / STEP_TIME)
+            if f < 1:  # getting up and stepping aside, or back to his seat: on his feet between the two
+                go = f if now_aside else 1 - f
+                model, place = standing, sat.copy()
+                place[:3, 3] = sat[:3, 3] + (stood[:3, 3] - sat[:3, 3]) * go
+            else:
+                model, place = (standing, stood) if now_aside else (seated, sat)
+            arms = 0
+            if model is seated:
+                arms = turned[["HELM", "PLANES"].index(key)][0] if key in ("HELM", "PLANES") else \
+                    reach((working or {}).get(key))
             phase = 1.7 * k
             sway = np.identity(4)  # breathing and shifting his weight: a degree or less, about his feet
             sway[:3, :3] = rot_x(0.5 * math.sin(t * 1.45 + phase)) @ rot_y(1.2 * math.sin(t * 0.13 + phase))
             place = place @ sway
             pivot = model.parts["head"][0]
             age = (speaking or {}).get(key)
-            model.render(self.model, place, {"head": head_turn(place, pivot, pose.pos, t, phase, age)})
+            model.render(self.model, place, {"head": head_turn(place, pivot, pose.pos, t, phase, age)}, arms)
         for vao, tex, n, glow, _ in self.panels:
             tex.use(0)
             self.flat["tex"].value = 0

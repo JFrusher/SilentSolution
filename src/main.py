@@ -429,8 +429,11 @@ class OnFoot:
         aside = (self.focus,) if self.focus else ()  # his crewman steps out of the way of the station you take
         now = pygame.time.get_ticks()
         speaking = {k: (now - at) / 1000 for k, at in (spoke or {}).items() if now - at < 4000}
+        working = {k: w.time - at for k, at in con.crew.worked.items() if w.time - at < 1.0}
+        p = w.player
+        wheels = (p.rudder * 1.5, max(-30.0, min(30.0, (p.ordered_depth - p.z) * 1.5)))  # helm; planes diving or rising
         screen.blit(app.room().render(self.room.pose, screens, plot, legend_art(lamps), alert, aside, now / 1000,
-                                      speaking), (0, 0))
+                                      speaking, working, wheels), (0, 0))
         if self.fade:
             dark = pygame.Surface((W, H))
             dark.set_alpha(int(255 * self.fade / 0.35))

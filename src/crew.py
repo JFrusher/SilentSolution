@@ -36,6 +36,10 @@ ORDERS = {
 }
 
 
+WORKS_AT = {"HELM": "HELM", "MANEUVERING": "HELM", "PLANES": "PLANES", "FIRE CONTROL": "FIRE CONTROL",
+            "SONAR": "SONAR", "CHIEF": "BALLAST CONTROL"}  # who answers an order -> the man whose hands carry it out
+
+
 class Crew:
     """Orders in flight, the helmsman's standing course, and the watch kept at stations the captain has left."""
 
@@ -46,6 +50,7 @@ class Crew:
         self.captain_at = "SONAR"  # the station the captain is working himself, or None on his feet
         self.reported = (None, -1e9)  # last contact sonar reported: (true bearing, time)
         self.marked = -1e9
+        self.worked = {}       # crewman -> when he last put his hand to his controls (sim time), for the room
 
     @property
     def delay(self):
@@ -86,6 +91,7 @@ class Crew:
         self.pending = [o for o in self.pending if o[0] > now]
         for _, name, arg in due:
             ORDERS[name][2](self, arg)
+            self.worked[WORKS_AT[ORDERS[name][0]]] = now
         if self.course is not None:
             self._helm()
         if self.captain_at != "SONAR":
@@ -119,6 +125,7 @@ class Crew:
         if now - self.marked > MARK_EVERY:
             self.marked = now
             con.mark()
+            self.worked["SONAR"] = self.worked["FIRE CONTROL"] = now  # the bearing passed and set on the TDC
 
     def pending_words(self):
         """What's been ordered and not yet done, for a station's screen."""
