@@ -33,7 +33,7 @@ MAST_MESSAGES = {  # own mast events: (sonar log line, teleprinter line or "")
     "HEAD_VALVE": ("HEAD VALVE SHUT - WAVE OVER SNORKEL", ""),
     "SNORKEL_FLOODED": ("SNORKEL FLOODED - DIESELS TRIPPED", "ENGINE ROOM: SNORKEL HEAD FLOODED AT SPEED. DIESELS "
                         "STOPPED FOR TEN SECONDS. KEEP UNDER EIGHT KNOTS WHILE SNORKELLING."),
-    "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST (F5)."),
+    "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST ({DAMAGE BOARD})."),
 }
 ECHO_FADE = 40.0          # s an echo blip glows on the scope
 SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
@@ -169,7 +169,7 @@ class Console:
         if self.looking:
             self.looking = False
         elif not self.world.player.scope_up:
-            self.say("SCOPE IS DOWN  (U TO RAISE)")
+            self.say(settings.keyed("SCOPE IS DOWN  ({RAISE SCOPE} TO RAISE)"))
         else:
             self.looking = True
             self.actions.add("LOOK")
@@ -249,9 +249,10 @@ class Console:
         self.actions.add("FIRE")
         if not self.wire_hint:
             self.wire_hint = True
-            self.teletype.print("WEAPONS: FISH ARE ON THE WIRE. CLICK ONE ON THE TACTICAL SCOPE, THEN CLICK WHERE TO "
-                                "SEND IT. [ ] NUDGE, BACKSLASH NEXT FISH, L CUTS THE WIRE. OVER 12 KNOTS THE WIRE "
-                                "PARTS.")
+            self.teletype.print(settings.keyed(
+                "WEAPONS: FISH ARE ON THE WIRE. CLICK ONE ON THE TACTICAL SCOPE, THEN CLICK WHERE TO SEND IT. "
+                "{WIRE LEFT} {WIRE RIGHT} NUDGE, {NEXT FISH} NEXT FISH, {CUT WIRE} CUTS THE WIRE. OVER 12 KNOTS THE "
+                "WIRE PARTS."))
 
     # --- wire guidance ---
     def wired_fish(self):
@@ -568,7 +569,8 @@ class Console:
             self.say(f"T{a.tube} WIRE PARTED - " + ("TOO FAST" if b == "SPEED" else "END OF SPOOL"))
             return
         if kind == "DAMAGE":
-            tt(f"DAMAGE CONTROL: {', '.join(b)} DAMAGED. ONE PARTY WORKS THE LIST TOP FIRST - F5 TO SET IT.")
+            tt(f"DAMAGE CONTROL: {', '.join(b)} DAMAGED. ONE PARTY WORKS THE LIST TOP FIRST - "
+               + settings.keyed("{DAMAGE BOARD} TO SET IT."))
             return
         if kind == "REPAIRED":
             self.say(f"{b} REPAIRED")
@@ -583,7 +585,7 @@ class Console:
             self.last_valve = world.time if kind == "HEAD_VALVE" else self.last_valve
             self.say(log)
             if teletype:
-                tt(teletype)
+                tt(settings.keyed(teletype))
             if kind in ("HEAD_VALVE", "SNORKEL_FLOODED"):
                 self.audio.play_thunk()
             if kind == "MASTS_LOWERED":

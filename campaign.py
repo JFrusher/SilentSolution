@@ -7,6 +7,7 @@ import random
 from pathlib import Path
 
 from console import Console
+from settings import keyed
 from tuning import DIFFICULTY
 
 PATH = Path.home() / ".silent_solution" / "career.json"
@@ -123,8 +124,8 @@ class PatrolRun:
         elif self.met(con):
             if not self.announced:
                 self.announced = True
-                con.teletype.print("FROM FLAG OFFICER SUBMARINES: OBJECTIVES MET. RETURN TO BASE WHEN READY "
-                                   "(ENTER), OR STAY AND HUNT.")
+                con.teletype.print(keyed("FROM FLAG OFFICER SUBMARINES: OBJECTIVES MET. RETURN TO BASE WHEN READY "
+                                         "({ACKNOWLEDGE}), OR STAY AND HUNT."))
             if "ENTER" in con.actions or con.world.director.done:
                 self.result = "SUCCESS"
         elif con.world.director.done:
