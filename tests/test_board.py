@@ -36,6 +36,7 @@ con.world.torpedoes.append(Torpedo(x, y, 270, 40 * KNOT, hostile=True, noise=1.4
 for _ in range(120):
     con.update(1 / 60, NoKeys())
 assert con.torpedo_warning and len(calls) == 1, (con.torpedo_warning, calls)
+assert [line for _, kind, line in con.heard if kind == "SOUND"] == ["[KLAXON]"], "deaf players see the klaxon"
 
 # the orange lamps follow the alarms (not status like DIESEL), and the conn's legend lights the cause
 lamps = alerts(con)

@@ -21,7 +21,7 @@ KEYS = {  # action -> pygame key name
 }
 RESERVED = ("escape", "f1", "p")  # quit / back, help card, pause
 DEFAULTS = dict(volume=dict(MASTER=0.8, SONAR=1.0, EFFECTS=1.0, AMBIENCE=1.0), mouse=1.0, large_text=False,
-                colorblind=False, true_bearings=True, keys=KEYS)
+                colorblind=False, sound_captions=True, true_bearings=True, keys=KEYS)
 SETTINGS = copy.deepcopy(DEFAULTS)
 
 
@@ -123,7 +123,8 @@ class SettingsMenu:
 
     def __init__(self):
         self.rows = [*(("VOLUME", c) for c in DEFAULTS["volume"]), ("MOUSE", None), ("LARGE TEXT", None),
-                     ("COLOUR-BLIND LAMPS", None), ("TRUE BEARINGS", None), *(("KEY", a) for a in KEYS),
+                     ("COLOUR-BLIND LAMPS", None), ("SOUND CAPTIONS", None), ("TRUE BEARINGS", None),
+                     *(("KEY", a) for a in KEYS),
                      ("RESET DEFAULTS", None),
                      ("BACK", None)]
         self.sel = self.top = 0
@@ -143,6 +144,8 @@ class SettingsMenu:
             return kind, None, "ON" if SETTINGS["large_text"] else "OFF"
         if kind == "COLOUR-BLIND LAMPS":
             return kind, None, "ON" if SETTINGS["colorblind"] else "OFF"
+        if kind == "SOUND CAPTIONS":
+            return kind, None, "ON" if SETTINGS["sound_captions"] else "OFF"
         if kind == "TRUE BEARINGS":
             return kind, None, "ON (NORTH-STABILISED)" if SETTINGS["true_bearings"] else "OFF (SHIP'S HEAD)"
         if kind == "KEY":
@@ -160,6 +163,8 @@ class SettingsMenu:
             SETTINGS["large_text"] = not SETTINGS["large_text"]
         elif kind == "COLOUR-BLIND LAMPS":
             SETTINGS["colorblind"] = not SETTINGS["colorblind"]
+        elif kind == "SOUND CAPTIONS":
+            SETTINGS["sound_captions"] = not SETTINGS["sound_captions"]
         elif kind == "TRUE BEARINGS":
             SETTINGS["true_bearings"] = not SETTINGS["true_bearings"]
 

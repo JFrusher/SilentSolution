@@ -4,6 +4,7 @@ import datetime
 import math
 import textwrap
 import traceback
+from collections import deque
 from pathlib import Path
 
 import pygame
@@ -19,7 +20,7 @@ from console import Console
 from graphics import console_art as art
 from graphics.room3d import RoomRenderer, legend_art, plot_art
 from graphics.tabletop import ReplayView
-from layout import CRT_RECT, HIGHLIGHTS, H, W
+from layout import CRT_RECT, HIGHLIGHTS, STRIP, H, W
 from orders_menu import OrderWheel
 from tuning import DIFFICULTY
 from tutorial import CHAPTERS, TRAINING, Tutorial
@@ -268,13 +269,31 @@ def notice(screen, lines):
         screen.blit(text, text.get_rect(center=(W // 2, box.y + 34 + i * 28)))
 
 
-def subtitle(screen, said):
-    text = art.mono(15, True).render(said, True, (150, 240, 160))
-    back = text.get_rect(center=(W // 2, H - 30)).inflate(16, 8)
-    shade = pygame.Surface(back.size, pygame.SRCALPHA)
-    shade.fill((0, 0, 0, 170))
-    screen.blit(shade, back)
-    screen.blit(text, text.get_rect(center=back.center))
+def speaker(line):
+    """("HELM, AYE", "RIGHT 20 RUDDER") for a line that names who's calling it, else ("", line)."""
+    who, sep, said = line.partition(": ")
+    return (who, said) if sep and len(who) <= 30 and not any(c.isdigit() for c in who) else ("", line)
+
+
+def captions(screen, lines, bottom):
+    """What's said, printed and heard aboard, newest at the bottom: the caller in amber, a sound in [brackets]."""
+    font = art.mono(18 if settings.SETTINGS["large_text"] else 15, True)
+    rows = []
+    for line in lines:
+        who, said = speaker(line)
+        wrapped = textwrap.wrap(said, 80 if settings.SETTINGS["large_text"] else 100) or [""]
+        rows += [(who if i == 0 else "", part, said.startswith("[")) for i, part in enumerate(wrapped)]
+    step = font.get_linesize() + 4
+    for i, (who, part, sound) in enumerate(reversed(rows)):
+        tag = font.render(f"{who}: " if who else "", True, (240, 190, 90))
+        text = font.render(part, True, (170, 200, 235) if sound else (150, 240, 160))
+        back = pygame.Rect(0, 0, tag.get_width() + text.get_width() + 16, step - 2)
+        back.midbottom = (W // 2, bottom - i * step)
+        shade = pygame.Surface(back.size, pygame.SRCALPHA)
+        shade.fill((0, 0, 0, 180))
+        screen.blit(shade, back)
+        screen.blit(tag, (back.x + 8, back.y + 2))
+        screen.blit(text, (back.x + 8 + tag.get_width(), back.y + 2))
 
 
 class OnFoot:
@@ -403,7 +422,7 @@ class Patrol(Scene):
     """At sea: an endless patrol, a training chapter (console.tutorial) or a campaign patrol (run).
     You start on your feet at the conn and take whichever station you like; training keeps the full console.
     Esc asks before leaving; once the boat is lost the page turns to OVER, on the full console."""
-    SUBTITLE_TIME = 5000  # ms a crew report stays up
+    CAPTION_TIME = 8000  # ms a caption stays up
 
     def __init__(self, app, console, run=None):
         super().__init__(app)
@@ -414,8 +433,8 @@ class Patrol(Scene):
         self.wheel = OrderWheel()  # the captain's orders, on the right mouse button
         self.from_room = False     # at the eyepiece by way of the room: stepping back puts you there again
         self.grip = None           # the station piece a drag started on
-        self.note = ("", 0)        # the line on the subtitle and when it went up
-        self.log_seen = console.log[-1] if console.log else ""
+        self.captions = deque(maxlen=4)  # (line, when it went up): the newest of what's been heard aboard
+        self.heard = console.heard[-1][0] if console.heard else 0  # the last of console.heard captioned
         self.at = None  # the station you're working (the full console, "ALL", once the boat is lost)
         self.on_foot = OnFoot(app, console, cr.by_periscope())  # you start on your feet at the conn
 
@@ -533,15 +552,24 @@ class Patrol(Scene):
                 con.scroll(stations.through(piece, pygame.mouse.get_pos()), e.y)
 
     def say(self, text):
-        self.note = (text, pygame.time.get_ticks())
+        self.captions.append((text, pygame.time.get_ticks()))
+
+    def hear(self):
+        """Caption every new line heard aboard, wherever you are. Sounds only with SOUND CAPTIONS on; the
+        teleprinter not in training, whose card already shows it."""
+        con = self.console
+        training = con.tutorial and not con.tutorial.finished
+        for n, kind, line in con.heard:
+            if n > self.heard and not (kind == "SOUND" and not settings.SETTINGS["sound_captions"]
+                                       or kind == "PRINT" and training):
+                self.say(line if kind != "PRINT" or speaker(line)[0] else f"RADIO: {line}")
+        self.heard = con.heard[-1][0] if con.heard else 0
 
     def update(self, dt):
         app, con = self.app, self.console
         running = not (self.paused or self.confirm or app.show_help)  # the key card covers the station
         self.lag = self.lag + dt if running else 0.0
-        if con.log and con.log[-1] != self.log_seen:  # the crew's reports reach you wherever you are
-            self.log_seen = con.log[-1]
-            self.say(self.log_seen[6:])
+        self.hear()
         if self.over and self.at != "ALL":  # the boat is lost: the reckoning comes on the full console
             if self.on_foot:
                 self.on_foot.leave()
@@ -629,16 +657,23 @@ class Patrol(Scene):
         else:
             if self.on_foot:
                 self.on_foot.draw(screen, dt)
+                if con.shake > 0:  # a hit or a near charge throws the whole boat about
+                    j, t = con.shake * 8, pygame.time.get_ticks()
+                    screen.scroll(int(j * math.sin(t * 0.09)), int(j * math.cos(t * 0.13)))
             else:
-                screen.blit(self.app.canvas(self.view, con, self.paused, dt), (0, 0))
+                screen.blit(self.app.canvas(self.view, con, self.paused, dt), (0, 0))  # its frame shakes already
+            if con.flash > 0:  # and the lights flare
+                v = int(110 * con.flash)
+                screen.fill((v, v, v), special_flags=pygame.BLEND_RGB_ADD)
             if con.tutorial and not con.tutorial.finished:
                 self.training(screen)
             notice(screen, st.confirm or (["PATROL PAUSED", "", "[P] RESUME"] if self.paused else []))
-            said, at = self.note
-            if said and pygame.time.get_ticks() - at < self.SUBTITLE_TIME:
-                subtitle(screen, said)
-            if self.app.show_help:
-                st.draw_help(screen)
+        if self.at != "ALL":  # the full console has its own log; the eyepiece's strip shows only the last line
+            now = pygame.time.get_ticks()
+            captions(screen, [t for t, at in self.captions if now - at < self.CAPTION_TIME],
+                     STRIP.top - 6 if full else H - 12)
+        if not full and self.app.show_help:
+            st.draw_help(screen)
         if self.wheel.open:
             self.wheel.draw(screen, (W // 2, H // 2))
 

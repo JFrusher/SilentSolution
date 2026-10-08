@@ -118,6 +118,25 @@ scene.event(pygame.event.Event(pygame.KEYDOWN, key=settings.code("FASTER"), mod=
 assert scene.console.crew.pending and scene.console.crew.pending[0][1] == "ENGINES"
 print("crew ok")
 
+# captions: everything heard aboard reaches you, two lines in one frame too, with the caller named
+con = scene.console
+con.say("T1 DETONATION 045.0R", "SONAR")
+con.say("BREAKUP NOISES. SUNK", "SONAR")
+con.teletype.print("DAMAGE CONTROL: FLOODING. 1 LEAK(S). PUMPS ON.")
+con.teletype.print("WAVE 2 DISPERSED.")
+con.hear("SOUND", "[ENEMY SONAR PING 045R]")
+scene.hear()
+said = [t for t, _ in scene.captions]
+assert said == ["SONAR: BREAKUP NOISES. SUNK", "DAMAGE CONTROL: FLOODING. 1 LEAK(S). PUMPS ON.",
+                "RADIO: WAVE 2 DISPERSED.", "[ENEMY SONAR PING 045R]"], said
+assert main.speaker(said[0]) == ("SONAR", "BREAKUP NOISES. SUNK") and main.speaker(said[3])[0] == ""
+settings.SETTINGS["sound_captions"] = False
+con.hear("SOUND", "[HULL CREAKS]")
+scene.hear()
+assert scene.captions[-1][0] == said[3], "SOUND CAPTIONS off: noises aren't captioned"
+settings.reset()
+print("captions ok")
+
 # quick travel from the order wheel: on foot or from another station, a dip to black and you're carried in
 scene.go("HELM AND PLANES")
 assert scene.on_foot.fade > 0 and scene.on_foot.room.moving

@@ -39,6 +39,10 @@ orders; when it matters you take a station yourself, and the boat keeps fighting
     sonar, a leak or hull stress
   - a small tile panel at the conn names which alarm it is
   - the klaxon sounds when a torpedo is first heard
+  - **captions** at the foot of the screen, everywhere but the full console: every crew call and teleprinter signal
+    with its caller named, and every sound that comes with nothing said, in brackets (`[ENEMY SONAR PING 120R]`,
+    `[EXPLOSION 045R]`, `[HULL CREAKS]`, `[KLAXON]`; SOUND CAPTIONS in settings). A hit or a near charge shakes
+    the room and flares its lights, so nothing in the boat is heard only.
 - **Each 2D close-up** is built for its own job: bigger, more detailed, and readable. Most use the existing `console_art` and `crt_renderer` pieces.
 - **The big screens** are the stations' own live textures. A screen you look at updates every frame; others update at 10 Hz.
 
