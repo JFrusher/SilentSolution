@@ -7,6 +7,7 @@ import numpy as np
 import pygame
 
 import settings
+import sim
 from ai import ThreatDirector
 from displays import CLASSES, SCALES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
@@ -84,7 +85,9 @@ SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
 
 
 # ---------- game state behind the workstation ----------
-def build_world(d):
+def build_world(d, seed=None):
+    if seed is not None:
+        sim.seed(seed)
     world = WorldSimulation(Submarine(0, 0, 0, 4 * KNOT, z=60, uses_battery=d["battery"], uses_oxygen=d["oxygen"],
                                       mast_damage=d["mast_damage"], lower_delay=d["lower_delay"]), [])
     world.ocean.layer_loss = d["layer_loss"]
@@ -101,9 +104,10 @@ def stamp(t):
 class Console:
     """Operator-side state and logic: input, sensors, events -> what the crew sees and hears."""
 
-    def __init__(self, level, audio, diff=None):
+    def __init__(self, level, audio, diff=None, seed=None):
         self.level, self.diff = level, diff or DIFFICULTY[level]
-        self.world = build_world(self.diff)
+        self.seed = sim.DICE.randrange(2 ** 31) if seed is None else seed  # kept with the replay: the patrol again
+        self.world = build_world(self.diff, self.seed)
         self.audio = audio
         self.passive = PassiveSonar(self.world, self.diff["beam_width"])
         self.active = ActiveSonar(self.world)
@@ -690,7 +694,7 @@ class Console:
         tt, world = self.teletype.print, self.world
         if kind == "WAVE":
             m, e, s, brg = b
-            fuzz = 0 if self.diff["ping_warning"] else random.uniform(-25, 25)
+            fuzz = 0 if self.diff["ping_warning"] else sim.DICE.uniform(-25, 25)
             tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR "
                f"{(brg + fuzz) % 360:03.0f} TRUE, "
                f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")

@@ -1,6 +1,5 @@
 """Periscope renderer checks. Run: uv run test_periscope.py"""
 import os
-import random
 import time
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -8,6 +7,8 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import numpy as np  # noqa: E402
 import pygame  # noqa: E402
+
+import sim  # noqa: E402
 
 pygame.init()
 pygame.display.set_mode((1280, 720))
@@ -35,7 +36,7 @@ def frame(renderer, w, brg, fov=8.0):
 
 
 if __name__ == "__main__":
-    random.seed(1)
+    sim.seed(1)
     r = PeriscopeRenderer()
     empty = frame(r, scene([]), 0.0)
     with_ship = frame(r, scene([Vessel(0, 2000, 90, 8 * KNOT)]), 0.0)

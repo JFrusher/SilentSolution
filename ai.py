@@ -1,9 +1,9 @@
 """Ship behaviour - civilian, escort and enemy submarine - plus convoys and the wave director.
 World side: reads ground truth; the console only hears the results."""
 import math
-import random
 
 from sim import (
+    DICE,
     KNOT,
     LAYER_DEPTH,
     YARD,
@@ -161,7 +161,7 @@ class ShipAI:
 
     def _mark(self, world, error):
         p = world.player
-        new = (p.x + random.gauss(0, error), p.y + random.gauss(0, error), p.z + random.gauss(0, 25))
+        new = (p.x + DICE.gauss(0, error), p.y + DICE.gauss(0, error), p.z + DICE.gauss(0, 25))
         gap = self.clock - self.mark_time
         if self.datum and 10 < gap < 120:
             self.datum_vel = ((new[0] - self.datum[0]) / gap, (new[1] - self.datum[1]) / gap)
@@ -179,7 +179,7 @@ class ShipAI:
             return False
         chance = spot_probability(exposed, p.speed / KNOT, self.ship.range_to(p), o.visibility, o.sea_state,
                                   self._alertness()) * world.spot_mult
-        if random.random() >= chance:
+        if DICE.random() >= chance:
             return False
         self.ship.signal_until = world.time + 25.0  # the bridge lamp starts flashing: visible through our scope
         self.pending.append(("SPOTTED", self.ship, exposed))
@@ -201,7 +201,7 @@ class ShipAI:
             return
         if torp is not None:
             err = 0.3 * torp.run
-            self.search_request = (torp.ox + random.gauss(0, err), torp.oy + random.gauss(0, err), 60.0)
+            self.search_request = (torp.ox + DICE.gauss(0, err), torp.oy + DICE.gauss(0, err), 60.0)
         else:
             self.search_request = (x, y, 60.0)
 
@@ -242,7 +242,7 @@ class ShipAI:
         s = self.ship
         if self.decoys:
             self.decoys -= 1
-            world.targets.append(Decoy(s.x, s.y, 0, 0, noise=s.noise * random.uniform(1.5, 3.0), z=s.z))
+            world.targets.append(Decoy(s.x, s.y, 0, 0, noise=s.noise * DICE.uniform(1.5, 3.0), z=s.z))
             events.append(("DECOY_DROP", s, None))
 
     def _patrol_course(self):
@@ -275,9 +275,9 @@ class MerchantAI(ShipAI):
         return LOOKOUT_MERCHANT * (1.5 if self.state != CRUISE else 1.0)
 
     def scatter_from(self, x, y, index, count):
-        fan = (index - (count - 1) / 2) * 35 + random.uniform(-20, 20)
+        fan = (index - (count - 1) / 2) * 35 + DICE.uniform(-20, 20)
         self.base_course = (bearing(x, y, self.ship.x, self.ship.y) + fan) % 360
-        self.timer = random.uniform(*SCATTER_TIME)
+        self.timer = DICE.uniform(*SCATTER_TIME)
         self.state = SCATTER
 
     def _raise(self, world, datum=None):
@@ -388,7 +388,7 @@ class EscortAI(ShipAI):
             self.threat = threat
             if self.datum is None or self.since_contact > 30:  # no fresh contact: back-plot the fish's track
                 err = 0.3 * threat.run
-                self.datum = (threat.ox + random.gauss(0, err), threat.oy + random.gauss(0, err), threat.z)
+                self.datum = (threat.ox + DICE.gauss(0, err), threat.oy + DICE.gauss(0, err), threat.z)
             self._set(EVADE, events)
             self._drop_decoy(world, events)
         if self.state == EVADE and self.threat not in world.torpedoes:
@@ -488,7 +488,7 @@ class EscortAI(ShipAI):
         for along, across in PATTERN:
             x, y = frame_point(s.x, s.y, s.heading, along, across)
             world.effects.append(("SPLASH", x, y, world.time))
-            depth = max(10.0, depth_guess + random.gauss(0, 15))
+            depth = max(10.0, depth_guess + DICE.gauss(0, 15))
             world.charges.append(DepthCharge(x, y, 0, 0, noise=0.0, set_depth=depth))
         self.charges -= len(PATTERN)
 
@@ -520,7 +520,7 @@ class SubmarineAI(ShipAI):
             self.threat = threat
             self._set(EVADE, events)
             self._drop_decoy(world, events)
-            if random.random() < self.layer_sensitivity:  # it knows the layer hides it
+            if DICE.random() < self.layer_sensitivity:  # it knows the layer hides it
                 self.depth_order = 60.0 if s.z >= LAYER_DEPTH else 160.0
         if self.state == EVADE and self.threat not in world.torpedoes:
             self._set(ALERT if self.datum else PATROL, events)
@@ -557,7 +557,7 @@ class SubmarineAI(ShipAI):
         return events
 
     def withdraw(self, events):
-        if self.state != WITHDRAW and random.random() < self.layer_sensitivity:  # leave on the far side of the layer
+        if self.state != WITHDRAW and DICE.random() < self.layer_sensitivity:  # leave on the far side of the layer
             self.depth_order = 60.0 if self.ship.z >= LAYER_DEPTH else 160.0
         super().withdraw(events)
 
@@ -626,46 +626,46 @@ class ThreatDirector:
         self.wave += 1
         self.wave_started, self.cleared = world.time, False
         n, d, p = self.wave + self.boost, self.diff, world.player
-        brg = random.uniform(0, 360)
-        dist = random.uniform(7000, 9500)
+        brg = DICE.uniform(0, 360)
+        dist = DICE.uniform(7000, 9500)
         cx, cy = p.x + dist * math.sin(math.radians(brg)), p.y + dist * math.cos(math.radians(brg))
-        course = (brg + 180 + random.choice((-1, 1)) * random.uniform(50, 100)) % 360  # crossing, not at us
-        speed = random.uniform(6, 10) * KNOT
+        course = (brg + 180 + DICE.choice((-1, 1)) * DICE.uniform(50, 100)) % 360  # crossing, not at us
+        speed = DICE.uniform(6, 10) * KNOT
         merchants, escorts, subs = min(2 + n // 3, 4), min(1 + (n - 1) // 2, 3), min(n // 2, 3)
         convoy = Convoy(course, speed)
         for i in range(merchants):  # column astern of the guide
             offset = (-500.0 * i, 0.0)
-            ship = Vessel(*frame_point(cx, cy, course, *offset), course, speed, noise=random.uniform(0.8, 1.2))
+            ship = Vessel(*frame_point(cx, cy, course, *offset), course, speed, noise=DICE.uniform(0.8, 1.2))
             world.targets.append(ship)
-            world.ais.append(MerchantAI(ship, convoy, offset, max_speed=random.uniform(11, 15) * KNOT))
+            world.ais.append(MerchantAI(ship, convoy, offset, max_speed=DICE.uniform(11, 15) * KNOT))
         for i in range(escorts):  # screen ahead, then the flanks
             station = (1200.0, 0.0) if i == 0 else (-200.0, (1 if i % 2 else -1) * 1500.0)
             ship = Vessel(*frame_point(cx, cy, course, *station), course, 0, decoys=3)
             world.targets.append(ship)
             world.ais.append(EscortAI(ship, course, convoy=convoy, station=station,
-                                      aggression=clamp(random.uniform(0.3, 0.7) + 0.05 * n, 0, 1),
-                                      detect_radius=random.uniform(2500, 3500), zigzag=d["zigzag"],
+                                      aggression=clamp(DICE.uniform(0.3, 0.7) + 0.05 * n, 0, 1),
+                                      detect_radius=DICE.uniform(2500, 3500), zigzag=d["zigzag"],
                                       cavitation_instant=d["cavitation_instant"]))
-        lone = random.random() < 0.35  # an unescorted independent, minding its own business
+        lone = DICE.random() < 0.35  # an unescorted independent, minding its own business
         if lone:
-            b = math.radians(random.uniform(0, 360))
-            ship = Vessel(p.x + 6000 * math.sin(b), p.y + 6000 * math.cos(b), random.uniform(0, 360),
-                          random.uniform(9, 12) * KNOT, noise=random.uniform(0.9, 1.3))
+            b = math.radians(DICE.uniform(0, 360))
+            ship = Vessel(p.x + 6000 * math.sin(b), p.y + 6000 * math.cos(b), DICE.uniform(0, 360),
+                          DICE.uniform(9, 12) * KNOT, noise=DICE.uniform(0.9, 1.3))
             world.targets.append(ship)
             world.ais.append(MerchantAI(ship, max_speed=15 * KNOT))
         for _ in range(subs):
-            b = math.radians(random.uniform(0, 360))
-            r = random.uniform(4000, 8000)
-            ship = Vessel(p.x + r * math.sin(b), p.y + r * math.cos(b), random.uniform(0, 360), 0,
-                          z=random.choice((60.0, 160.0)))
+            b = math.radians(DICE.uniform(0, 360))
+            r = DICE.uniform(4000, 8000)
+            ship = Vessel(p.x + r * math.sin(b), p.y + r * math.cos(b), DICE.uniform(0, 360), 0,
+                          z=DICE.choice((60.0, 160.0)))
             world.targets.append(ship)
             world.ais.append(SubmarineAI(
                 ship, ship.heading,
-                stealth=random.uniform(0.2, 0.6),                                        # stealth rating
-                top_speed=random.uniform(12, 22) * KNOT, turn_rate=random.uniform(2, 5),  # speed & manoeuvrability
-                aggression=clamp(random.uniform(0.3, 0.8) + 0.05 * n, 0, 1),
-                detect_radius=random.uniform(3000, 6000),
-                layer_sensitivity=random.uniform(0.3, 1.0),
+                stealth=DICE.uniform(0.2, 0.6),                                        # stealth rating
+                top_speed=DICE.uniform(12, 22) * KNOT, turn_rate=DICE.uniform(2, 5),  # speed & manoeuvrability
+                aggression=clamp(DICE.uniform(0.3, 0.8) + 0.05 * n, 0, 1),
+                detect_radius=DICE.uniform(3000, 6000),
+                layer_sensitivity=DICE.uniform(0.3, 1.0),
                 torpedo_speed=d["enemy_torp_kt"] * KNOT, seeker_range=d["enemy_seeker_yd"] * YARD,
                 zigzag=d["zigzag"], decoys=d["sub_decoys"], cavitation_instant=d["cavitation_instant"]))
         events.append(("WAVE", self.wave, (merchants + lone, escorts, subs, brg)))

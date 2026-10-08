@@ -1,7 +1,6 @@
 """Scripted trainee plays the whole training patrol through the real console. Run: uv run test_tutorial.py
 The trainee cheats only where a human would read the screen (where to point the dial, what to dial into the TDC)."""
 import os
-import random
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -10,6 +9,7 @@ import pygame  # noqa: E402
 
 import layout  # noqa: E402
 import settings  # noqa: E402
+import sim  # noqa: E402
 from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
 from settings import keyed  # noqa: E402
@@ -139,7 +139,7 @@ def act(tut, con, once):
 
 
 def play(seed, chapter=0):
-    random.seed(seed)
+    sim.seed(seed)
     con = Console("TRAINING", AudioSynthesizer(), TRAINING)
     tut = Tutorial(con, chapter)
     once, step, times = set(), tut.i, {}

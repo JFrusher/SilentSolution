@@ -5,6 +5,7 @@
 - **Primary Libraries:** Pygame-ce, NumPy
 - **Execution:** Always use `uv run main.py` for testing (on this machine `uv` lives at `.venv/Scripts/uv.exe`)
 - **Checks:** `uv run checks.py` runs every suite headless plus `ruff check` (lint only, line length 120; set `SDL_VIDEODRIVER=dummy` for ad-hoc scripts)
+- **Determinism:** the patrol tick rolls only `sim.DICE` / `sim.NP_DICE` (seeded per patrol); drawing and audio use their own generators. `test_golden.py` replays a seeded patrol against `golden/<platform>.json`; regenerate with `uv run test_golden.py --update` only when a change is meant to alter play
 - **Git:** git flow — `main` releases, `develop` integration, `feature/*` merged into `develop` with `--no-ff`
 
 ## Core Architecture

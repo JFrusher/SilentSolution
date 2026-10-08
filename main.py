@@ -18,6 +18,7 @@ from version import __version__
 from workstation import Workstation
 
 FPS = 60
+SIM_DT = 1 / 60  # s per sim step, fixed
 CRASH_LOG = Path.home() / ".silent_solution" / "crash.log"
 
 def main():
@@ -35,7 +36,7 @@ def main():
     def keep_replay(con, result, title):
         """Every patrol, however it ends, leaves an after-action replay."""
         path = replay.save(con.recorder, dict(mode=con.level, title=title, result=result, grt=con.score,
-                                              wave=con.wave, version=__version__))
+                                              wave=con.wave, seed=con.seed, version=__version__))
         station.last_replay = path
         return path
 
@@ -47,6 +48,7 @@ def main():
         return bool(r)
     confirm = False  # Esc during a patrol: "quit this patrol?" waiting for Y / N
     lost_at, leave_over = 0, False  # a lost campaign boat: when, and whether the player has moved on
+    lag = 0.0  # real time owed to the sim
 
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.1)
@@ -209,10 +211,12 @@ def main():
                     console.scroll(pygame.mouse.get_pos(), e.y)
         if state == "REPLAY":
             station.replay_view.update(dt)
-        elif console and not (paused or confirm or show_help):  # the key card covers the station
-            console.update(dt, pygame.key.get_pressed())
+        lag = lag + dt if console and not (paused or confirm or show_help) else 0.0  # the key card covers the station
+        while console and lag >= SIM_DT:  # fixed sim step: the same seed plays out the same at any frame rate
+            lag -= SIM_DT
+            console.update(SIM_DT, pygame.key.get_pressed())
             if console.tutorial:
-                console.tutorial.update(dt)
+                console.tutorial.update(SIM_DT)
                 if console.tutorial.finished:
                     keep_replay(console, "TRAINING", "TRAINING")
                     console, state = None, "TITLE"

@@ -65,6 +65,19 @@ R_EFF = 7.6e6            # m, effective earth radius with refraction (hull-down 
 # being seen: per-second chance at zero range for an alertness-1 observer, and how far it can reach in clear air
 
 UIDS = itertools.count(1)
+# World dice: everything inside the patrol tick (sim, AI, sensors, operator displays) rolls these and nothing else,
+# so a seed replays a patrol exactly. Presentation (audio, drawing) keeps its own generators.
+# ponytail: module-level, so one patrol per process at a time; make them per-world if two ever run side by side.
+DICE = random.Random()
+NP_DICE = np.random.RandomState()
+
+
+def seed(n):
+    """Start a patrol's dice and ship numbering from `n`."""
+    global UIDS
+    DICE.seed(n)
+    NP_DICE.seed(n)
+    UIDS = itertools.count(1)
 TELEGRAPH = (("STOP", 0.0), ("SLOW", 4.0), ("HALF", 8.0), ("FULL", 14.0), ("FLANK", 20.0))  # order, knots
 
 
@@ -410,15 +423,15 @@ class Ocean:
 
     def __post_init__(self):
         if not self.swells:
-            self.swells = [(a, 2 * math.pi / lam, off, random.uniform(0, 2 * math.pi))
+            self.swells = [(a, 2 * math.pi / lam, off, DICE.uniform(0, 2 * math.pi))
                            for a, lam, off in ((0.55, 90.0, 0.0), (0.3, 45.0, 25.0), (0.15, 22.0, -35.0),
                                                (0.1, 11.0, 60.0))]
 
     def step(self, dt):
         self.timer -= dt
         if self.timer <= 0:
-            self.timer = random.uniform(60, 180)
-            self.front = random.choice((0.0, 0.0, 0.3, 0.6, 1.0))
+            self.timer = DICE.uniform(60, 180)
+            self.front = DICE.choice((0.0, 0.0, 0.3, 0.6, 1.0))
         self.rain += (self.front - self.rain) * min(1.0, dt / 20)  # fronts roll in over ~20 s
         self.wind += (3.0 + 11.0 * self.rain - self.wind) * min(1.0, dt / 60)  # the sea builds slower than the rain
 
@@ -548,7 +561,7 @@ class WorldSimulation:
         p = self.player
         if self.systems_damage and dmg >= 8 and isinstance(p, Submarine):
             pool = [s for s in REPAIR_TIME if s not in p.damaged]
-            hit = random.sample(pool, min(len(pool), 1 + int(dmg // 30)))
+            hit = DICE.sample(pool, min(len(pool), 1 + int(dmg // 30)))
             p.break_systems(hit)
             if hit:
                 events.append(("DAMAGE", p, hit))

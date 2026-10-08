@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 
-SUITES = ("test_sim.py", "test_geometry.py", "test_tutorial.py", "test_periscope.py", "test_ui.py",  # and these
+SUITES = ("test_sim.py", "test_geometry.py", "test_tutorial.py", "test_periscope.py", "test_ui.py", "test_golden.py",
           "geometry.py", "settings.py", "audio.py", "campaign.py", "replay.py", "-m graphics.tabletop")  # self-check
 LINT = ("-m", "ruff", "check", ".")  # ruff is a dev dependency: uv run installs it
 
