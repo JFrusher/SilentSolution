@@ -8,12 +8,12 @@ from functools import lru_cache
 import numpy as np
 import pygame
 
+from layout import EYE
 from sim import R_EFF, SHIP_CLASSES, angle_diff, horizon_distance
 
 _FX = random.Random()  # presentation-only randomness, so drawing never moves the simulation's dice
 _NP = np.random.default_rng()
 
-EYE = 600                  # eyepiece diameter, px
 SEA_DIV = 3                # sky and sea are shaded at 1/SEA_DIV resolution, then smooth-scaled
 SUN_BRG, SUN_ELEV = 205.0, 28.0
 CLOUD_W, CLOUD_H = 1440, 160  # cloud strip: 0.25 deg per texel in azimuth and elevation (0-40 deg)

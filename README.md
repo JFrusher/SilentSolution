@@ -12,7 +12,7 @@ but while the mast is up, the sea can see you too.
 [![pygame-ce](https://img.shields.io/badge/pygame--ce-2.5-6aa84f)](https://pyga.me/)
 [![NumPy](https://img.shields.io/badge/NumPy-procedural-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![uv](https://img.shields.io/badge/run%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
-![Version](https://img.shields.io/badge/version-0.3.0-ffbe56)
+![Version](https://img.shields.io/badge/version-0.4.0-ffbe56)
 ![Asset files](https://img.shields.io/badge/asset%20files-0-84d670)
 ![Platform](https://img.shields.io/badge/build-Windows%20.exe-0078D6?logo=windows&logoColor=white)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
@@ -61,10 +61,11 @@ roll dice every second your periscope is up. **You only ever see that world thro
 ```bash
 git clone https://github.com/JFrusher/SilentSolution.git
 cd SilentSolution
-uv run main.py
+uv run src/main.py
 ```
 
 [uv](https://docs.astral.sh/uv/) installs Python 3.11+ and the two dependencies (`pygame-ce`, `numpy`) on first run.
+Without uv: `pip install -r requirements.txt`, then `python src/main.py`.
 
 > [!TIP]
 > New? Press <kbd>T</kbd> on the title screen. **Training** has four chapters that walk you through every station
@@ -466,11 +467,11 @@ uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 
 | Suite | Covers |
 |---|---|
-| `test_sim.py` | engagements, escort hunts and counter-fire, masts, spotting, optics, convoys and scatter, TMA auto-solve, damage control, spreads and wire guidance, campaign waves |
-| `test_geometry.py` | the positional backbone: sonar, echoes, periscope, eyepiece image, TDC position keeping and TMA all agree with the geometry core in 3D through a turn; LOCK and scope-to-sonar put the ship in the eyepiece; bearing stabilisation and the waterfall's true/relative frames |
-| `test_tutorial.py` | a scripted trainee plays the whole training patrol on three seeds, then each chapter on its own, then a run that skips every drill |
-| `test_periscope.py` | the eyepiece renderer: ships on the horizon, nothing astern, a wave over the lens, frame time |
-| `test_ui.py` | the real game loop, scripted: sail, quit, then open the replay from the list, the career log and the last patrol; an unreadable file is refused |
+| `tests/test_sim.py` | engagements, escort hunts and counter-fire, masts, spotting, optics, convoys and scatter, TMA auto-solve, damage control, spreads and wire guidance, campaign waves |
+| `tests/test_geometry.py` | the positional backbone: sonar, echoes, periscope, eyepiece image, TDC position keeping and TMA all agree with the geometry core in 3D through a turn; LOCK and scope-to-sonar put the ship in the eyepiece; bearing stabilisation and the waterfall's true/relative frames |
+| `tests/test_tutorial.py` | a scripted trainee plays the whole training patrol on three seeds, then each chapter on its own, then a run that skips every drill |
+| `tests/test_periscope.py` | the eyepiece renderer: ships on the horizon, nothing astern, a wave over the lens, frame time |
+| `tests/test_ui.py` | the real game loop, scripted: sail, quit, then open the replay from the list, the career log and the last patrol; an unreadable file is refused |
 | `settings.py` · `audio.py` · `campaign.py` · `replay.py` · `graphics/tabletop.py` | self-checks: save round trips, key rebinding, the pan law, reverb loops, objectives, refits and patrol outcomes, replay round trips and retention, recording never moves the world, projection conventions and close-up clipping |
 
 <details>
@@ -478,28 +479,31 @@ uv run --with pyinstaller build.py        # dist/SilentSolution.exe
 
 ```text
 SilentSolution/
-├── main.py              game loop, screen states, crash log
-├── geometry.py          the 3D positional backbone: bearings, ranges, angles, rates
-├── sim.py               WORLD: vessels, torpedoes, ocean and weather, masts, damage, world step
-├── ai.py                WORLD: merchants, escorts, submarines, convoys, wave director
-├── tuning.py            every balance knob and difficulty preset in one place
-├── sensors.py           passive and active sonar, periscope optics
-├── fire_control.py      Torpedo Data Computer
-├── tma.py               bearing history, fit and auto-solve
-├── displays.py          waterfall, acoustic profiler, teleprinter
-├── console.py           operator state, input, event reports
-├── workstation.py       draws the station, CRT pages and periscope eyepiece
-├── layout.py            1280×720 logical geometry, shared by input and drawing
-├── audio.py             procedural NumPy synthesis, pan, hull reverb
-├── settings.py          settings page and persistence
-├── campaign.py          patrols, debriefs, ranks, refits, career and high scores
-├── tutorial.py          the training patrol, in chapters
-├── replay.py            WORLD (read-only): the after-action recorder, saved replays
-├── graphics/
-│   ├── crt_renderer.py  vector CRT and post-processing
-│   ├── console_art.py   procedural 1970s/80s control-room art kit
-│   ├── periscope.py     the view through the eyepiece
-│   └── tabletop.py      the after-action plotting table
+├── src/                 the game; run src/main.py (modules import each other flat)
+│   ├── main.py          game loop, screen states, crash log
+│   ├── geometry.py      the 3D positional backbone: bearings, ranges, angles, rates
+│   ├── sim.py           WORLD: vessels, torpedoes, ocean and weather, masts, damage, world step
+│   ├── ai.py            WORLD: merchants, escorts, submarines, convoys, wave director
+│   ├── tuning.py        every balance knob and difficulty preset in one place
+│   ├── sensors.py       passive and active sonar, periscope optics
+│   ├── fire_control.py  Torpedo Data Computer
+│   ├── tma.py           bearing history, fit and auto-solve
+│   ├── displays.py      waterfall, acoustic profiler, teleprinter
+│   ├── console.py       operator state, input, event reports
+│   ├── workstation.py   draws the station, CRT pages and periscope eyepiece
+│   ├── layout.py        1280×720 logical geometry, shared by input and drawing
+│   ├── audio.py         procedural NumPy synthesis, pan, hull reverb
+│   ├── settings.py      settings page and persistence
+│   ├── campaign.py      patrols, debriefs, ranks, refits, career and high scores
+│   ├── tutorial.py      the training patrol, in chapters
+│   ├── replay.py        WORLD (read-only): the after-action recorder, saved replays
+│   └── graphics/
+│       ├── crt_renderer.py vector CRT and post-processing
+│       ├── console_art.py  procedural 1970s/80s control-room art kit
+│       ├── periscope.py    the view through the eyepiece
+│       └── tabletop.py     the after-action plotting table
+├── tests/               headless suites (checks.py puts src/ on the path)
+├── requirements.txt     pip dependencies (uv reads pyproject.toml)
 ├── docs/shots.py        README image generator
 ├── docs/gifs.py         README GIF filming
 ├── build.py             PyInstaller one-file build
@@ -516,7 +520,7 @@ SilentSolution/
 
 <div align="center">
 
-**Silent Solution** · v0.3.0 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/) ·
+**Silent Solution** · v0.4.0 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/) ·
 [MIT licence](LICENSE) ([third-party notices](THIRD-PARTY-NOTICES.txt))
 
 <sub>Run silent, run deep.</sub>

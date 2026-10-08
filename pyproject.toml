@@ -1,6 +1,6 @@
 [project]
 name = "silent-solution"
-version = "0.3.0"
+version = "0.4.0"
 description = "Submarine sonar and fire-control simulator: you never see the ocean, only the instruments."
 readme = "README.md"
 license = "MIT"
@@ -17,6 +17,7 @@ dependencies = [
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+src = ["src"]  # first-party modules for import sorting
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]

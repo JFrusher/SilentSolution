@@ -1,12 +1,13 @@
 """Operator sensors: the only path from world truth to the console (sonar, active sonar, periscope optics)."""
 import math
-import random
 from collections import namedtuple
 
 import numpy as np
 
 from geometry import fix, relate
 from sim import (
+    DICE,
+    NP_DICE,
     R_EFF,
     SCOPE_TOP,
     SHIP_CLASSES,
@@ -53,10 +54,10 @@ class PassiveSonar:
                          else self.beam_width, KIND_INDEX.get(s.kind, 0), getattr(s, "hostile", False))
                         for s in sources])
         true_brg, _, slant = relate(p, src[:, 0], src[:, 1], src[:, 2])
-        rel = true_brg - p.heading + np.random.normal(0, self.noise_deg, len(src))
+        rel = true_brg - p.heading + NP_DICE.normal(0, self.noise_deg, len(src))
         rel = (np.round(rel / self.resolution) * self.resolution) % 360
         rng = np.maximum(slant, 1.0)  # sound spreads along the slant path
-        level = 160 * src[:, 3] * np.minimum(1.0, 3000 / rng) * np.random.uniform(0.75, 1.0, len(src))
+        level = 160 * src[:, 3] * np.minimum(1.0, 3000 / rng) * NP_DICE.uniform(0.75, 1.0, len(src))
         if "HYDROPHONES" in getattr(p, "damaged", ()):
             level *= DAMAGED_HYDROPHONES
         return rel, level, src[:, 4], src[:, 5].astype(int), src[:, 6].astype(bool)
@@ -64,7 +65,7 @@ class PassiveSonar:
     def bearing_of(self, source):
         """Noisy relative bearing of a transient (detonation, splash, ping)."""
         p = self.world.player
-        return (bearing(p.x, p.y, source.x, source.y) - p.heading + random.gauss(0, self.noise_deg)) % 360
+        return (bearing(p.x, p.y, source.x, source.y) - p.heading + DICE.gauss(0, self.noise_deg)) % 360
 
     def loudness(self, source, ref=3000.0):
         """0..1 how loud a transient at source sounds here."""
@@ -88,9 +89,9 @@ class ActiveSonar:
             f = fix(p, t)
             r = f.slant  # the echo's delay measures the slant path
             if r <= MAX_ECHO_RANGE and not ocean.crosses_layer(p, t):
-                rel = (f.rel_brg + random.gauss(0, self.noise_deg)) % 360
+                rel = (f.rel_brg + DICE.gauss(0, self.noise_deg)) % 360
                 delay = ping_delay(r)
-                self.pending.append((self.clock + delay, rel, delay + random.gauss(0, self.timing_jitter)))
+                self.pending.append((self.clock + delay, rel, delay + DICE.gauss(0, self.timing_jitter)))
         layer = ping_delay(abs(ocean.layer_depth - p.z))
         self.pending.append((self.clock + layer, None, layer))
 
@@ -141,7 +142,7 @@ class PeriscopeOptics:
             if r > vis or drop >= height:
                 continue
             brg = bearing(p.x, p.y, t.x, t.y)
-            sightings.append(Sighting(id(t), cls, (brg + random.gauss(0, 0.1)) % 360, r,
+            sightings.append(Sighting(id(t), cls, (brg + DICE.gauss(0, 0.1)) % 360, r,
                                       angle_diff(t.heading, (brg + 180) % 360), t.speed, height, drop,
                                       w.time - t.sunk_at if t.sunk_at >= 0 else -1.0, t.signal_until > w.time))
         wakes = [Wake(bearing(p.x, p.y, t.x, t.y), p.range_to(t), t.heading) for t in w.torpedoes
@@ -153,4 +154,4 @@ class PeriscopeOptics:
     @staticmethod
     def rangefinder(sighting, high_power):
         """Known mast height over its angular height: good at high power, rough at low."""
-        return sighting.rng * (1 + random.gauss(0, 0.03 if high_power else 0.08))
+        return sighting.rng * (1 + DICE.gauss(0, 0.03 if high_power else 0.08))
