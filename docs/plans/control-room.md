@@ -130,6 +130,23 @@ Each milestone ships with its tests; the golden run is regenerated only where pl
    - Idle life (breathing, a slow shift of weight, glances about his work). When a caption names him ("CONN, SONAR",
      "HELM, AYE", "CHIEF, AYE") he looks round at you as he says it.
 
+9. **Stations rethought, instruments in 2.5D** (built)
+   - Each station is laid out for its own man and only his controls take a click:
+     - sonar: the waterfall CRT, the self-noise gauge, ENEMY SONAR and TORPEDO lamps, ACTIVE PING
+     - fire control: PPI, TDC, the TMA CRT, a firing panel (guarded tube switches, ready lamps, torpedoes and decoys
+       left, NOISEMAKER), the TORPEDO lamp
+     - helm and planes: the depth and self-noise gauges, the telegraph, a rudder angle indicator, the depth-order dial
+       with HOLD and P.D., the CAVITATION / BROACH / BELOW LAYER lamps
+     - ballast: battery (with O2) and depth gauges, the mast levers, EMERGENCY BLOW, DIESEL / MASTS UP / LEAK /
+       HULL STRESS lamps
+     - damage control: the state board with the boat's state beside it (no sonar picture), a white-faced hull gauge,
+       LEAK and HULL STRESS lamps
+   - Dials, switches, buttons and lamps are drawn natively at the station's size: switches, buttons, lamps and gauge
+     bezels are 3D models (the room's `Builder`) rendered into cached sprites with soft shadows; faces are black with
+     cream figures, or white enamel for the hull gauge; needles throw a shadow; glass catches the light.
+   - The green screens are unchanged, each under a plate naming its job. The panels carry no key hints: hover over a
+     control to see its keys, or press F1.
+
 ## 6. Risks
 
 - **Drawing cost.** Several live screens plus the 3D frame. Plan: screens out of view update at 10 Hz and are drawn smaller; measure before optimising.

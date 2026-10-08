@@ -53,7 +53,7 @@ class App:
 
     def canvas(self, view, con, paused, dt):
         """One station as its crewman sees it."""
-        return stations.compose(view, self.console_frame(con, view.page, paused, dt), self.backdrop)
+        return stations.compose(view, self.console_frame(con, view.page, paused, dt), self.backdrop, con, self.station)
 
     def room(self):
         if self.room3d is None:
@@ -396,7 +396,7 @@ class OnFoot:
             page = self.PAGES[self.turn]
             names = [n for n in self.WORKING if stations.VIEWS[n].page == page]
         frame = app.console_frame(con, page, False, dt)  # the full console is drawn once a frame, at most
-        screens = {n: stations.compose(stations.VIEWS[n], frame, app.backdrop) for n in names}
+        screens = {n: stations.compose(stations.VIEWS[n], frame, app.backdrop, con, app.station) for n in names}
         plot = None
         if w.time - self.plot_at >= self.PLOT_EVERY:  # from our own navigation and the TMA log: what we know
             tdc, p = con.tdc, w.player
@@ -679,6 +679,7 @@ class Patrol(Scene):
                     screen.scroll(int(j * math.sin(t * 0.09)), int(j * math.cos(t * 0.13)))
             else:
                 screen.blit(self.app.canvas(self.view, con, self.paused, dt), (0, 0))  # its frame shakes already
+                stations.hover(screen, self.view, pygame.mouse.get_pos())
             if con.flash > 0:  # and the lights flare
                 v = int(110 * con.flash)
                 screen.fill((v, v, v), special_flags=pygame.BLEND_RGB_ADD)

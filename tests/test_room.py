@@ -96,6 +96,29 @@ assert float(idle @ want) < 0.8, "and not otherwise"
 assert scene.on_foot and scene.at is None and con.crew.captain_at is None
 assert np.linalg.norm(scene.on_foot.room.pose.pos - cr.by_periscope().pos) < 0.05
 
+# each station is laid out for its own man: only his controls take a click, his own lamps, 2.5D instruments
+from graphics import instruments as ins  # noqa: E402
+from layout import BLOW_BTN, GAUGE_SPECS, LAMPS, LOOK_BTN, H, W  # noqa: E402
+
+jobs = [v for v in stations.VIEWS.values() if v.name not in ("ALL", "PERISCOPE")]
+assert not any(p.src.colliderect(BLOW_BTN) for p in stations.VIEWS["HELM AND PLANES"].pieces), "no BLOW at the helm"
+assert not any(p.src.colliderect(LOOK_BTN) for v in jobs for p in v.pieces), "LOOK is the periscope's"
+assert all(set(names) <= set(LAMPS) for v in jobs for _, names in v.lamps), "a station's lamps are real alarms"
+dials = []
+for v in (0.0, 250.0):
+    surf = pygame.Surface((300, 300))
+    ins.gauge(surf, (150, 150), 120, GAUGE_SPECS["DEPTH"], [(v, (255, 255, 255), 3, 1.0)])
+    dials.append(pygame.surfarray.array3d(surf).astype(int))
+assert np.abs(dials[0] - dials[1]).sum() > 0, "the needle moves"
+ws = app.station
+assert ws.overlay("DAMAGE") is not ws.overlay("SONAR"), "the monitor's plate names the job on its screen"
+plain = pygame.Surface((W, H))
+hovered = plain.copy()
+ping = next(p for p in stations.VIEWS["SONAR"].pieces if p.keys == ("PING",))
+stations.hover(hovered, stations.VIEWS["SONAR"], ping.dst.center)
+assert np.abs(pygame.surfarray.array3d(hovered).astype(int) - pygame.surfarray.array3d(plain)).sum() > 0, \
+    "hovering a control shows its key"
+
 # sit at sonar: the last 3D frame and the first 2D frame are the same picture
 sonar = cr.STATIONS[0]
 before = take(sonar)
