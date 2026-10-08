@@ -89,11 +89,11 @@ class Career:
         spare = [u for u in UPGRADES if u not in self.upgrades]
         return random.sample(spare, min(2, len(spare)))
 
-    def record(self, run, con):
+    def record(self, run, con, replay=None):
         """File the patrol: log, high score, and promotion on success. Returns the debrief."""
         p = run.patrol
         grt, sunk = con.score, [s.kind for s in con.world.sunk]
-        self.log.append(dict(patrol=p["name"], result=run.result, grt=grt, date=today()))
+        self.log.append(dict(patrol=p["name"], result=run.result, grt=grt, date=today(), replay=replay))
         self.log = self.log[-20:]
         promoted = run.result == "SUCCESS"
         if promoted:

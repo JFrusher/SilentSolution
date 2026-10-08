@@ -43,6 +43,7 @@ from layout import (
     WHEEL_C,
     WHEEL_R,
 )
+from replay import Recorder
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
 from sim import (
     CRUSH_DEPTH,
@@ -138,6 +139,7 @@ class Console:
         self.last_valve = -99.0
         self.debug = False       # F3: truth overlay for playtesting and tuning
         self.tma = TMALog()      # bearing history for the TMA plot
+        self.recorder = Recorder()  # world truth for the after-action replay (read-only)
         self.wire_sel = None     # the wired fish the scope clicks steer
         self.wire_hint = False
         self.long_shot = -99.0  # when F was last refused on a beyond-range solution
@@ -609,6 +611,7 @@ class Console:
             self.scope_true = (self.scope_true + turned) % 360
         for kind, a, b in self.frame_events:
             self.report(kind, a, b)
+        self.recorder.sample(world, self.frame_events)
         self.tdc.update(dt)
         self.view = self.optics.look() if p.scope_up else None
         if self.wire_sel is not None and self.wire_sel not in world.torpedoes:

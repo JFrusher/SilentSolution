@@ -6,6 +6,7 @@ import textwrap
 import numpy as np
 import pygame
 
+import replay
 from campaign import PATROLS, UPGRADES, objective
 from console import ECHO_FADE
 from displays import CLASS_TAGS, CLASSES, SPEC_BINS, TEMPLATES
@@ -116,6 +117,9 @@ class Workstation:
         self.debrief = None  # the last patrol's debrief
         self.confirm = None  # lines of a yes/no question over the patrol, or None
         self.over_hint = None  # game-over key line, when it isn't the endless one
+        self.last_replay = None  # path of the replay the last patrol left
+        self.replays, self.replay_pick, self.replay_note = [], 0, ""  # the REPLAYS page: listing, cursor, error
+        self.replay_view = None  # the tabletop on the REPLAY page
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
         self.scope_surround = self.scope_bg.convert_alpha()  # same art with a round hole: hides the square corners
@@ -303,6 +307,9 @@ class Workstation:
 
     # --- frame ---
     def draw(self, screen, con, state, paused, show_help, dt):
+        if state == "REPLAY":  # the tabletop has the whole screen
+            self.replay_view.draw(screen)
+            return
         f = self.frame
         art.SAFE_LAMPS = SETTINGS["colorblind"]
         if con and con.looking and state == "PLAY":
@@ -342,6 +349,8 @@ class Workstation:
             self._crt_debrief(s, crt, self.debrief)
         elif state == "CHAPTERS":
             self._crt_chapters(s, crt)
+        elif state == "REPLAYS":
+            self._crt_replays(s, crt)
         elif state == "TITLE" or con is None:
             self._crt_title(s, crt)
         else:
@@ -349,7 +358,8 @@ class Workstation:
             if state == "OVER":
                 self._crt_box(s, crt, ["LOST WITH ALL HANDS" if con.cause == "HULL BREACHED" else "CREW UNCONSCIOUS",
                                        con.cause, f"WAVE {con.wave}   {con.score:,} GRT SUNK", "",
-                                       self.over_hint or "[R] NEW PATROL   [T] TITLE   [ESC] QUIT"])
+                                       self.over_hint or "[R] NEW PATROL   [T] TITLE   [ESC] QUIT"]
+                              + (["[A] AFTER-ACTION PLOT"] if self.last_replay and not self.over_hint else []))
             elif self.confirm:
                 self._crt_box(s, crt, self.confirm)
             elif paused:
@@ -384,10 +394,11 @@ class Workstation:
                 crt.text(s, "ENDLESS", (box.right - 70, box.y + 8), DIM, small=True)
             crt.text(s, blurb, (box.x + 16, box.y + 26), DIM, small=True)
             self.buttons.append((box.move(CRT_RECT.topleft), name))
-        box = pygame.Rect(70, 342, 440, 24)
-        crt.frame(s, box, color=DIM)
-        crt.text(s, "[S]  SETTINGS - SOUND, KEYS, MOUSE, TEXT, LAMPS", (box.x + 16, box.y + 5), PHOSPHOR, small=True)
-        self.buttons.append((box.move(CRT_RECT.topleft), "SETTINGS"))
+        for box, text, name in ((pygame.Rect(70, 342, 290, 24), "[S]  SETTINGS - SOUND, KEYS, LAMPS", "SETTINGS"),
+                                (pygame.Rect(370, 342, 140, 24), "[R]  REPLAYS", "REPLAYS")):
+            crt.frame(s, box, color=DIM)
+            crt.text(s, text, (box.x + 16, box.y + 5), PHOSPHOR, small=True)
+            self.buttons.append((box.move(CRT_RECT.topleft), name))
         crt.text(s, f"V{__version__} - BY JACOB FRUSHER - PYGAME-CE + NUMPY - F1 KEYS - ESC QUIT",
                  (cx, 380), DIM, small=True, center=True)
 
@@ -403,6 +414,27 @@ class Workstation:
             crt.text(s, blurb, (box.x + 16, box.y + 30), DIM, small=True)
             self.buttons.append((box.move(CRT_RECT.topleft), i))
         self._crt_button(s, crt, (220, 336, 140, 26), "[ESC] TITLE", "BACK", DIM)
+
+    def _crt_replays(self, s, crt):
+        cx = s.get_width() // 2
+        crt.text(s, "AFTER-ACTION REPLAYS", (cx, 34), PHOSPHOR, huge=True, center=True)
+        crt.text(s, f"THE LAST {replay.KEEP} PATROLS, NEWEST FIRST. UP/DOWN AND ENTER, OR CLICK.", (cx, 70), DIM,
+                 small=True, center=True)
+        if not self.replays:
+            crt.text(s, "NO REPLAYS YET - EVERY PATROL LEAVES ONE", (cx, 180), DIM, center=True)
+        for i, (path, meta) in enumerate(self.replays):
+            box, n = pygame.Rect(60, 92 + i * 24, 460, 22), path.name
+            when = f"{n[:4]}-{n[4:6]}-{n[6:8]} {n[9:11]}:{n[11:13]}"
+            row = (f"{when}  {str(meta.get('title', meta.get('mode', '')))[:16]:<16} {meta.get('result', ''):<9} "
+                   f"{meta.get('grt') or 0:>7,} GRT" if meta else f"{when}  UNREADABLE")
+            if i == self.replay_pick:
+                crt.frame(s, box, color=PHOSPHOR)
+            crt.text(s, row, (box.x + 10, box.y + 4), PHOSPHOR if i == self.replay_pick else DIM if meta else RED,
+                     small=True)
+            self.buttons.append((box.move(CRT_RECT.topleft), i))
+        if self.replay_note:
+            crt.text(s, self.replay_note, (cx, 336), RED, small=True, center=True)
+        self._crt_button(s, crt, (220, 350, 140, 26), "[ESC] TITLE", "BACK", DIM)
 
     def _crt_button(self, s, crt, rect, label, name, color=PHOSPHOR):
         rect = pygame.Rect(rect)
@@ -428,11 +460,15 @@ class Workstation:
                      small=True)
             y += 20
         crt.text(s, "REFITS: " + (", ".join(career.upgrades) or "NONE YET"), (40, y), DIM, small=True)
-        crt.text(s, "PATROL LOG", (40, y + 26), PHOSPHOR, small=True)
+        crt.text(s, "PATROL LOG  (> REPLAY)", (40, y + 26), PHOSPHOR, small=True)
         crt.text(s, "HIGH SCORES (ENDLESS TOO)", (300, y + 26), PHOSPHOR, small=True)
         for i, e in enumerate(career.log[-6:][::-1]):
-            crt.text(s, f"{e['patrol'][:14]:<14} {e['result']:<7} {e['grt']:>6,}", (40, y + 44 + i * 15),
-                     RED if e["result"] == "LOST" else DIM, small=True)
+            saved = e.get("replay") and (replay.DIR / e["replay"]).exists()  # only the newest few are kept
+            crt.text(s, f"{e['patrol'][:14]:<14} {e['result']:<7} {e['grt']:>6,}" + (" >" if saved else ""),
+                     (40, y + 44 + i * 15), RED if e["result"] == "LOST" else DIM, small=True)
+            if saved:
+                row = pygame.Rect(36, y + 42 + i * 15, 240, 15)
+                self.buttons.append((row.move(CRT_RECT.topleft), ("REPLAY", e["replay"])))
         for i, e in enumerate(career.scores[:6]):
             crt.text(s, f"{e['grt']:>7,}  {e['mode'][:19]}", (300, y + 44 + i * 15), DIM, small=True)
         if not career.finished:
@@ -464,7 +500,10 @@ class Workstation:
             for i, name in enumerate(d["offer"]):
                 self._crt_button(s, crt, (60, 216 + i * 44, 460, 36), f"[{i + 1}]  {name} - {UPGRADES[name]}", name)
         else:
-            self._crt_button(s, crt, (190, 330, 200, 30), "[ENTER] CONTINUE", "CONTINUE")
+            self._crt_button(s, crt, (80 if self.last_replay else 190, 330, 200, 30), "[ENTER] CONTINUE", "CONTINUE")
+        if self.last_replay:
+            self._crt_button(s, crt, (190, 306, 200, 26) if d["offer"] else (300, 330, 200, 30),
+                             "[A] AFTER-ACTION PLOT", "REPLAY")
 
     def _crt_settings(self, s, crt, menu):
         cx = s.get_width() // 2
