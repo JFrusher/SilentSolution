@@ -634,6 +634,7 @@ class Console:
                    ("ESCORT", "AI_ATTACK"): "FAST SCREWS CLOSING",
                    ("ESCORT", "AI_SEARCH"): "SEARCHING, ACTIVE SONAR",
                    ("ESCORT", "AI_PATROL"): "REVS DOWN",
+                   ("ESCORT", "AI_WITHDRAW"): "REVS UP, OPENING",
                    ("MERCHANT", "AI_ALARMED"): "REVS UP, ZIG-ZAGGING",
                    ("MERCHANT", "AI_SCATTER"): "FULL REVS, TURNING AWAY",
                    ("MERCHANT", "AI_CRUISE"): "REVS DOWN, STEADY"}.get((a.kind, kind))
