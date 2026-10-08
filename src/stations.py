@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 import pygame
 
+from fire_control import FIELDS
 from graphics import console_art as art
 from graphics import instruments as ins
 from layout import (
@@ -25,10 +26,14 @@ from layout import (
     PD_BTN,
     PING_BTN,
     RUDDER_BAR,
+    SCOPE_C,
     SCOPE_LEVER,
     SCOPE_PANEL,
+    SCOPE_R,
     SNORT_LEVER,
     TDC_PANEL,
+    TDC_ROW_H,
+    TDC_ROW_Y0,
     TELEGRAPH_BTNS,
     TELEGRAPH_RECT,
     TELETYPE,
@@ -38,8 +43,9 @@ from layout import (
     H,
     W,
 )
+from settings import SETTINGS
 from settings import label as keys_for
-from sim import CRUSH_DEPTH, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, TELEGRAPH
+from sim import CRUSH_DEPTH, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, TELEGRAPH, TORP_MAX_RUN, YARD
 from workstation import alarm_states
 
 R = pygame.Rect
@@ -150,6 +156,81 @@ def helm(s, pc, con, ws):
         art.counter(s, (x + 32 * pc.scale, y), text, round(11 * pc.scale))
 
 
+def tdc(s, pc, con, ws):
+    """The torpedo data computer: a drum counter and a setting crank per value (drag the crank, or scroll on the
+    row, to wind it), the row in hand marked by a lamp; the solution's gyro angle and run below."""
+    sc = pc.scale
+    title = art.sans(round(13 * sc), True).render("TORPEDO DATA COMPUTER", True, art.LEGEND)
+    s.blit(title, title.get_rect(center=pc.map((TDC_PANEL.centerx, TDC_PANEL.y + 12))))
+    for i, (name, (label, units, fmt, step, *_)) in enumerate(FIELDS.items()):
+        y = TDC_ROW_Y0 + i * TDC_ROW_H
+        ins.lamp(s, pc.map((19, y + 9)), i == con.tdc.selected, art.AMBER, round(13 * sc))
+        art.engrave(s, label, pc.map((30, y + 2)), round(12 * sc))
+        art.counter(s, pc.map((112, y + 1)), fmt.format(con.tdc.get(name)), round(12 * sc))
+        art.engrave(s, units, pc.map((196, y + 3)), round(10 * sc), art.WARN)
+        turn = int(round(con.tdc.get(name) / step)) % 16
+        ins.blit_centred(s, ins.crank_sprite(turn, round(22 * sc)), pc.map((251, y + 9)))
+    sol = con.tdc.solve()
+    far = sol is not None and sol.run > TORP_MAX_RUN
+    art.engrave(s, "GYRO", pc.map((22, 440)), round(11 * sc))
+    art.counter(s, pc.map((56, 438)), f"{sol.gyro:05.1f}" if sol else "---.-", round(11 * sc))
+    art.engrave(s, "RUN YD", pc.map((124, 440)), round(11 * sc))
+    art.counter(s, pc.map((172, 438)), f"{sol.run / YARD:6,.0f}" if sol else "------", round(11 * sc),
+                art.RED if far else art.AMBER)
+    ins.lamp(s, pc.map((252, 446)), sol is not None, art.RED if far else art.GREEN, round(14 * sc))
+
+
+def ppi(s, pc, con, ws):
+    """The tactical plot: the PPI's green phosphor, round, behind glass in its bezel."""
+    ins.round_screen(s, pc.map(SCOPE_C), round(SCOPE_R * pc.scale * 0.92), ws.scope_surf)
+
+
+_PAPER = {}
+
+
+def teleprinter(s, pc, con, ws):
+    """The radio's teleprinter: enamel housing, the signal printing in big type above the platen, the paper fed up
+    and out over the top; WAVE and GRT on drum counters."""
+    d = pc.dst
+    key = d.size
+    if key not in _PAPER:  # the housing and the paper, painted once
+        body = art.texture(d.size, (150, 144, 128), grain=2.5, light=(1.1, 0.86))
+        art.wear(body, body.get_rect(), 1.0, (150, 144, 128))
+        art.bevel(body, body.get_rect(), (196, 190, 172), (70, 66, 58), 3)
+        window = R(40, 90, d.w - 80, d.h - 170)
+        paper = ws._greenbar(window.size)
+        art.label_plate(body, (150, 44), "TELEPRINTER", 18)
+        _PAPER[key] = (body, window, paper)
+    body, window, paper = _PAPER[key]
+    s.blit(body, d)
+    w = window.move(d.topleft)
+    s.blit(paper, w)
+    tt = con.teletype
+    big = SETTINGS["large_text"]
+    font = art.mono(26 if big else 21, True)
+    lh = font.get_linesize() + 4
+    platen = w.bottom - 26
+    rows = (platen - w.y - 10) // lh
+    lines = [*list(tt.lines)[-(rows - 1):], tt.typing]
+    for i, line in enumerate(lines):
+        s.blit(font.render(line, True, art.INK), (w.x + 34, platen - 6 - (len(lines) - i) * lh))
+    for k in range(0, w.h + 30, 30):  # tractor holes creep up as the paper feeds
+        y = w.bottom - ((k + tt.fed * 15) % (w.h + 30))
+        for x in (w.x + 14, w.right - 14):
+            pygame.draw.circle(s, (176, 180, 170), (x, int(y)), 5)
+    for k in range(26):  # the platen: a black rubber roller across the paper, lit from above
+        v = int(10 + 50 * math.sin(math.pi * k / 26) ** 2)
+        pygame.draw.line(s, (v, v, v), (w.x - 8, platen + k), (w.right + 8, platen + k))
+    head = w.x + 34 + font.size(tt.typing)[0]  # the type head rides along the line it's printing
+    pygame.draw.rect(s, (40, 38, 34), (head - 10, platen - 8, 24, 40), border_radius=4)
+    pygame.draw.rect(s, (150, 146, 136), (head - 10, platen - 8, 24, 40), 2, border_radius=4)
+    pygame.draw.rect(s, (60, 58, 52), w, 3)
+    for k, (label, text) in enumerate((("WAVE", f"{con.wave:02d}"), ("GRT", f"{con.score:6d}"))):
+        x = d.right - 330 + k * 120
+        art.engrave(s, label, (x, d.y + 22), 16, art.INK)
+        art.counter(s, (x, d.y + 46), text, 20)
+
+
 def button(rect, legend, lit, colour):
     def draw(s, pc, con, ws):
         ins.button(s, pc.dst, legend, lit(con), colour)
@@ -222,14 +303,15 @@ VIEWS = {v.name: v for v in (
     View("FIRE CONTROL", "TMA", frozenset(("TDC ROW UP", "TDC ROW DOWN", "TDC VALUE UP", "TDC VALUE DOWN",
                                             "AUTO-SOLVE", "FIRE", "FIRE TUBE 1", "FIRE TUBE 2", "WIRE LEFT",
                                             "WIRE RIGHT", "NEXT FISH", "CUT WIRE", "SCOPE RANGE", "NOISEMAKER")),
-         (P(SCOPE_PANEL, (16, 16), 1.38, keys=("SCOPE RANGE",)),
-          P(TDC_PANEL, (16, 376), 1.38, keys=("TDC ROW UP", "TDC ROW DOWN", "AUTO-SOLVE")),
+         (P(SCOPE_PANEL, (16, 16), 1.38, ppi, ("SCOPE RANGE",)),
+          P(TDC_PANEL, (16, 376), 1.38, tdc, ("TDC ROW UP", "TDC ROW DOWN", "AUTO-SOLVE")),
           P(MONITOR, (382, 16), 1.0), P(WEAPONS_PANEL, (400, 500), 1.25, weapons, ("FIRE TUBE 1", "FIRE TUBE 2")),
           P(NMKR_BTN, (700, 600), 1.6, button(NMKR_BTN, "NOISEMAKER", lambda con: False, art.AMBER), ("NOISEMAKER",))),
-         plates=((R(382, 486, 560, 222), "FIRING PANEL"), (R(956, 486, 308, 222), "WARNING")),
+         plates=((R(16, 16, 352, 346), "TACTICAL PPI"), (R(16, 376, 352, 278), None),
+                 (R(382, 486, 560, 222), "FIRING PANEL"), (R(956, 486, 308, 222), "WARNING")),
          lamps=((R(978, 540, 270, 70), ("TORPEDO",)),)),
     View("RADIO", "SONAR", frozenset(),
-         (P(TELETYPE, (290, 12), 2.12),)),
+         (P(TELETYPE, (290, 12), 2.12, teleprinter),)),
     View("HELM AND PLANES", "SONAR", frozenset(("SLOWER", "FASTER", "RUDDER LEFT", "RUDDER RIGHT",
                                                "RUDDER AMIDSHIPS", "SHALLOWER", "DEEPER", "HOLD DEPTH",
                                                "PERISCOPE DEPTH")),
@@ -355,7 +437,8 @@ def _base(name, backdrop):
         base = backdrop.copy()
         for rect, legend in VIEWS[name].plates:
             art.faceplate(base, rect)
-            art.label_plate(base, (rect.centerx, rect.bottom - 16), legend, 13)
+            if legend:
+                art.label_plate(base, (rect.centerx, rect.bottom - 16), legend, 13)
         _BASES[name] = base
     return _BASES[name]
 

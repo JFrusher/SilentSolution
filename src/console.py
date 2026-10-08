@@ -33,6 +33,7 @@ from layout import (
     SCOPE_LEVER,
     SCOPE_R,
     SNORT_LEVER,
+    TDC_CRANK_X,
     TDC_PANEL,
     TDC_ROW_H,
     TDC_ROW_Y0,
@@ -82,6 +83,7 @@ MAST_MESSAGES = {  # own mast events: (sonar log line, teleprinter line or "")
     "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST ({DAMAGE BOARD})."),
 }
 ECHO_FADE = 40.0          # s an echo blip glows on the scope
+TDC_CRANK_NOTCH = 6       # px of crank drag per notch of a TDC value
 SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
 
 
@@ -559,6 +561,8 @@ class Console:
             self.order_depth(round(angle_value(a, 0, 300) / 5) * 5)
         elif TDC_PANEL.collidepoint(pos) and 0 <= (y - TDC_ROW_Y0) // TDC_ROW_H < len(FIELDS):
             self.tdc.selected = int((y - TDC_ROW_Y0) // TDC_ROW_H)
+            if x >= TDC_CRANK_X:  # took hold of the row's crank
+                self.dragging = ("tdc", y)
         else:
             for i, (sx, sy) in enumerate(TUBE_SW):
                 if math.hypot(x - sx, y - sy) <= 26:
@@ -568,7 +572,12 @@ class Console:
                     return action()
 
     def drag(self, pos):
-        if isinstance(self.dragging, tuple):  # training the scope: the scene follows the hand
+        if isinstance(self.dragging, tuple) and self.dragging[0] == "tdc":  # winding a crank: a notch per few pixels
+            notches = int((self.dragging[1] - pos[1]) / TDC_CRANK_NOTCH)
+            if notches:
+                self.tdc.nudge(notches)
+                self.dragging = ("tdc", self.dragging[1] - notches * TDC_CRANK_NOTCH)
+        elif isinstance(self.dragging, tuple):  # training the scope: the scene follows the hand
             dx = pos[0] - self.dragging[1]
             self.scope_brg = (self.scope_brg - dx * settings.SETTINGS["mouse"] * SCOPE_FOV[self.high_power] / EYE) % 360
             self.dragging = ("scope", pos[0])
@@ -583,6 +592,8 @@ class Console:
             if (dy > 0) != self.high_power:
                 self.toggle_power()
         elif TDC_PANEL.collidepoint(pos):
+            if 0 <= (y - TDC_ROW_Y0) // TDC_ROW_H < len(FIELDS):  # wind the row under the pointer
+                self.tdc.selected = int((y - TDC_ROW_Y0) // TDC_ROW_H)
             self.tdc.nudge(dy)
         elif math.hypot(x - DEPTH_C[0], y - DEPTH_C[1]) <= DEPTH_R:
             self.order_depth(p.ordered_depth - 10 * dy)

@@ -37,6 +37,7 @@ NMKR_BTN, PING_BTN = pygame.Rect(642, 640, 140, 24), pygame.Rect(642, 674, 140, 
 LAMPS = ("ENEMY SONAR", "TORPEDO", "CAVITATION", "DIESEL", "MASTS UP", "BROACH", "LEAK", "HULL STRESS", "BELOW LAYER")
 ANNUNCIATORS = tuple(pygame.Rect(802, 498 + i * 22, 102, 18) for i in range(len(LAMPS)))  # warning panel tiles
 TDC_ROW_Y0, TDC_ROW_H = 290, 20
+TDC_CRANK_X = 236  # right of this a TDC row's crank: drag it to wind the value
 
 # inside the CRT (local coordinates)
 WF_POS = (20, 30)

@@ -52,4 +52,20 @@ marked = pygame.surfarray.array3d(plot_art(track, 0.0, [(100, 45.0, "MARK", None
 assert np.abs(marked - plain).sum() > 0, "marks and the solution show on the plot"
 noted = pygame.surfarray.array3d(plot_art(track, 0.0, notes=[(50, 0.0, 200.0, 90.0, 3000.0, "CONVOY 2M 1E")]))
 assert np.abs(noted - plain).sum() > 0, "a report goes on the plot"
+# the TDC's cranks: take hold of a row's crank and wind it up a notch per few pixels; scroll on a row winds that row
+from console import TDC_CRANK_NOTCH  # noqa: E402
+from fire_control import FIELDS  # noqa: E402
+from layout import TDC_CRANK_X, TDC_ROW_H, TDC_ROW_Y0  # noqa: E402
+
+con = Console("COMMANDER", AudioSynthesizer(), seed=3)
+y = TDC_ROW_Y0 + 2 * TDC_ROW_H + 9  # TGT SPD
+before = con.tdc.get("SPD")
+con.click((TDC_CRANK_X + 12, y))
+assert con.tdc.selected == 2 and con.dragging == ("tdc", y), con.dragging
+con.drag((TDC_CRANK_X + 12, y - 3 * TDC_CRANK_NOTCH))
+assert abs(con.tdc.get("SPD") - (before + 3 * FIELDS["SPD"][3])) < 1e-9, con.tdc.get("SPD")
+con.dragging = None
+crs = con.tdc.get("CRS")
+con.scroll((60, TDC_ROW_Y0 + 3 * TDC_ROW_H + 9), 1)
+assert con.tdc.selected == 3 and con.tdc.get("CRS") != crs, "scrolling on a row winds that row"
 print("board ok")

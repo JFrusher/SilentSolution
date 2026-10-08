@@ -156,6 +156,21 @@ def toggle_sprite(up, guard, px):
 
 
 @functools.cache
+def crank_sprite(step, px):
+    """A TDC setting crank: a black handwheel with a chrome arm and a turned red knob, at one of 16 turns."""
+    b = Builder()
+    b.lathe((0, 0, 0), (0, 0, 1), [(0, 0), (0.016, 0), (0.016, 0.004), (0.013, 0.006), (0, 0.006)], BAKELITE,
+            "bakelite", seg=24)
+    a = step / 16 * 2 * math.pi
+    tip = np.array((math.sin(a), math.cos(a), 0.0)) * 0.012
+    b.box(tip / 2 + (0, 0, 0.007), (0.004, 0.014, 0.002), CHROME, "metal", frame((0, 0, 1), (tip[0], tip[1], 0)),
+          r=0.0008)
+    b.lathe(tip + (0, 0, 0.007), (0, 0, 1), [(0, 0), (0.0035, 0), (0.004, 0.006), (0.003, 0.012), (0, 0.013)], RED,
+            "bakelite", seg=12, crisp=False)
+    return _with_shadow(render(b, (px, px), (0.019, 0.019), tilt=12.0), 0.05)
+
+
+@functools.cache
 def button_sprite(w, h, colour, lit):
     """A square backlit push-button: a chrome bezel round a translucent cap, the bulb behind it on or off."""
     b = Builder()
@@ -329,6 +344,26 @@ def needle(surf, c, deg, length, colour, width, tail=0.18):
     pts = shape(0, 0)
     pygame.gfxdraw.filled_polygon(surf, pts, colour)
     pygame.gfxdraw.aapolygon(surf, pts, colour)
+
+
+@functools.cache
+def _disc(d):
+    """A white disc on transparent: multiplied into a square picture, it leaves only the round part."""
+    m = pygame.Surface((d, d), pygame.SRCALPHA)
+    pygame.draw.circle(m, (255, 255, 255, 255), (d / 2, d / 2), d / 2)
+    return m
+
+
+def round_screen(surf, centre, radius, picture):
+    """A round CRT behind a gauge's glass and bezel: the picture cut to a circle, in its case."""
+    case, bezel, _ = case_sprites(radius)
+    blit_centred(surf, case, centre)
+    d = 2 * radius
+    tube = pygame.transform.smoothscale(picture, (d, d)).convert_alpha()
+    tube.blit(_disc(d), (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    blit_centred(surf, tube, centre)
+    blit_centred(surf, glass_art(radius), centre)
+    blit_centred(surf, bezel, centre)
 
 
 def gauge(surf, centre, radius, spec, needles, white=False):
