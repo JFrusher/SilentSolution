@@ -9,6 +9,7 @@ import pygame
 import settings
 import sim
 from ai import ThreatDirector
+from crew import Crew
 from displays import CLASSES, SCALES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from geometry import bearing, offset
@@ -149,6 +150,7 @@ class Console:
         self.wire_hint = False
         self.long_shot = -99.0  # when F was last refused on a beyond-range solution
         self.crt_page = "SONAR"  # left of the monitor: waterfall, F2 TMA plot, F5 damage board
+        self.crew = Crew(self)
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
@@ -223,6 +225,11 @@ class Console:
         index = int(clamp(index, 0, len(TELEGRAPH) - 1))
         self.world.player.ordered_speed = TELEGRAPH[index][1] * KNOT
         self.say(f"ENGINES {TELEGRAPH[index][0]}")
+
+    def rudder_by_hand(self, angle):
+        """The wheel, turned by the captain's own hand: it overrides any course the helmsman was steering."""
+        self.crew.hand_on_wheel()
+        self.world.player.rudder = float(angle)
 
     def order_depth(self, depth):
         p = self.world.player
@@ -445,7 +452,7 @@ class Console:
             "BLOW": self.blow,
             "SLOWER": lambda: self.telegraph(self.telegraph_index() - 1),
             "FASTER": lambda: self.telegraph(self.telegraph_index() + 1),
-            "RUDDER AMIDSHIPS": lambda: setattr(p, "rudder", 0.0),
+            "RUDDER AMIDSHIPS": lambda: self.rudder_by_hand(0.0),
             "NOISEMAKER": self.noisemaker,
             "SCOPE RANGE": self.cycle_scope,
             "WIRE LEFT": lambda: self.nudge_fish(-1),
@@ -559,7 +566,7 @@ class Console:
             self.dragging = ("scope", pos[0])
         elif self.dragging == "wheel":
             ordered = (pos[0] - WHEEL_C[0]) / (WHEEL_R + 16) * MAX_RUDDER
-            self.world.player.rudder = round(clamp(ordered, -MAX_RUDDER, MAX_RUDDER))
+            self.rudder_by_hand(round(clamp(ordered, -MAX_RUDDER, MAX_RUDDER)))
 
     def scroll(self, pos, dy):
         x, y = pos
@@ -572,7 +579,7 @@ class Console:
         elif math.hypot(x - DEPTH_C[0], y - DEPTH_C[1]) <= DEPTH_R:
             self.order_depth(p.ordered_depth - 10 * dy)
         elif math.hypot(x - WHEEL_C[0], y - WHEEL_C[1]) <= WHEEL_R + 18:
-            p.rudder = clamp(p.rudder + 5 * dy, -MAX_RUDDER, MAX_RUDDER)
+            self.rudder_by_hand(clamp(p.rudder + 5 * dy, -MAX_RUDDER, MAX_RUDDER))
         elif TELEGRAPH_RECT.collidepoint(pos):
             self.telegraph(self.telegraph_index() + dy)
         elif CRT_RECT.collidepoint(pos) and self.crt_page == "SONAR":
@@ -594,7 +601,7 @@ class Console:
             self.tracking = self.tracking and not train  # a hand on the wheel takes the dial back
         rudder = held("RUDDER RIGHT") - held("RUDDER LEFT")
         if rudder:
-            p.rudder = clamp(p.rudder + rudder * RUDDER_RATE * dt, -MAX_RUDDER, MAX_RUDDER)
+            self.rudder_by_hand(clamp(p.rudder + rudder * RUDDER_RATE * dt, -MAX_RUDDER, MAX_RUDDER))
         adj = held("TDC VALUE UP") - held("TDC VALUE DOWN")
         self.held = self.held + dt if adj else 0.0
         if self.held > HOLD_DELAY:
@@ -655,6 +662,7 @@ class Console:
         heard = gains * levels / 160
         self.signal = float(heard.max(initial=0.0)) / (1 + 2 * rain)
         self._track(dt, bearings, heard)
+        self.crew.update(dt, bearings, heard)
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
         self.audio.set_hydrophone(self.signal, self.dial)
         self.tma.update(world.time, p, self.locked, self.dial_true)

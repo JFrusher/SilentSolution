@@ -8,6 +8,7 @@ import pygame
 
 import campaign
 import control_room as cr
+import crew
 import replay
 import settings
 from audio import AudioSynthesizer
@@ -16,6 +17,7 @@ from graphics import console_art as art
 from graphics.room3d import RoomRenderer, plot_art
 from graphics.tabletop import ReplayView
 from layout import CRT_RECT, H, W
+from orders_menu import OrderWheel
 from tuning import DIFFICULTY
 from tutorial import CHAPTERS, TRAINING, Tutorial
 from version import __version__
@@ -251,18 +253,24 @@ class OnFoot:
         self.plot, self.plot_at = None, -1e9
         self.note = ("", 0.0)  # a line for the player and when it was said
         self.log_seen = con.log[-1] if con.log else ""
+        con.crew.captain_at = None  # the crew has the watch
         pygame.mouse.set_relative_mode(True)
 
     def leave(self):
         pygame.mouse.set_relative_mode(False)
 
     def event(self, e):
-        if self.room.moving:
-            return
+        use = (e.type == pygame.KEYDOWN and e.key == pygame.K_e) or (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1)
+        if self.room.moving and (use or e.type == pygame.MOUSEMOTION):
+            return  # the camera is carrying you; orders still go through
         if e.type == pygame.MOUSEMOTION:
             self.room.look(*e.rel, sensitivity=0.12 * settings.SETTINGS["mouse"])
-        elif (e.type == pygame.KEYDOWN and e.key == pygame.K_e) or (e.type == pygame.MOUSEBUTTONDOWN and e.button == 1):
+        elif use:
             self.use()
+        elif e.type == pygame.KEYDOWN:  # a station's key, pressed away from it: an order to the crew
+            order = crew.order_for(settings.action_for(e.key), self.con)
+            if order:
+                self.con.crew.order(*order)
 
     def use(self):
         con, thing = self.con, self.room.target()
@@ -307,7 +315,8 @@ class OnFoot:
                 f"E  SIT AT {thing.name}" if thing.working else thing.name)
             text = font.render(label, True, (240, 226, 190))
             screen.blit(text, text.get_rect(center=(W // 2, H // 2 + 40)))
-        hint = art.mono(12).render("WASD WALK   SHIFT RUN   MOUSE LOOK   E USE", True, (150, 146, 130))
+        hint = art.mono(12).render("WASD WALK   SHIFT RUN   MOUSE LOOK   E USE   HOLD RIGHT MOUSE: ORDERS", True,
+                                   (150, 146, 130))
         screen.blit(hint, (16, 12))
         said, at = self.note
         if said and pygame.time.get_ticks() - at < 5000:
@@ -330,6 +339,7 @@ class Patrol(Scene):
         self.lost_at, self.leave_over = 0, False  # a lost campaign boat: when, and whether the player has moved on
         self.on_foot = None      # OnFoot while you're up and about in the control room
         self.from_room = False   # at the eyepiece by way of the room: stepping back puts you there again
+        self.wheel = OrderWheel()  # the captain's orders, on the right mouse button
 
     @property
     def name(self):
@@ -380,13 +390,22 @@ class Patrol(Scene):
                 return app.open_replay(app.station.last_replay, self)
         elif e.type == pygame.KEYDOWN and e.key == pygame.K_p:
             self.paused = not self.paused
-        elif self.on_foot and not self.paused:
+        elif self.paused:
+            pass
+        elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 3:
+            self.wheel.press()
+        elif self.wheel.open and e.type == pygame.MOUSEMOTION:
+            self.wheel.motion(*e.rel)
+        elif self.wheel.open and e.type == pygame.MOUSEBUTTONUP and e.button == 3:
+            order = self.wheel.release()
+            if order:
+                con.crew.order(*order)
+        elif self.on_foot:
             self.on_foot.event(e)
-        elif (e.type == pygame.KEYDOWN and settings.action_for(e.key) == "STAND UP" and not self.paused
-              and not con.looking):
+        elif e.type == pygame.KEYDOWN and settings.action_for(e.key) == "STAND UP" and not con.looking:
             sonar = next(s for s in cr.STATIONS if s.working)
             self.on_foot = OnFoot(app, con, cr.seated(sonar), cr.standing(sonar))
-        elif not self.paused:
+        else:
             if e.type == pygame.KEYDOWN:
                 con.key(e.key)
             elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
@@ -404,13 +423,13 @@ class Patrol(Scene):
         running = not (self.paused or self.confirm or app.show_help)  # the key card covers the station
         self.lag = self.lag + dt if running else 0.0
         if self.on_foot and (self.over or con.dead):  # the boat is lost: back to the station for the reckoning
-            self.sit()
+            self.sit("SONAR")
         elif self.on_foot and running:
             then = self.on_foot.update(dt)
             if then == "SEATED":
-                self.sit()
+                self.sit("SONAR")
             elif then == "EYEPIECE":
-                self.sit()
+                self.sit("PERISCOPE")
                 con.look()
                 self.from_room = con.looking
         elif self.from_room and not con.looking:  # stepped back from the eyepiece: into the room again
@@ -438,9 +457,10 @@ class Patrol(Scene):
                 app.career.add_score(con.level, con.score, con.wave)
         return None
 
-    def sit(self):
+    def sit(self, station):
         self.on_foot.leave()
         self.on_foot = None
+        self.console.crew.captain_at = station
 
     def draw(self, screen, dt):
         st, con = self.app.station, self.console
@@ -455,8 +475,10 @@ class Patrol(Scene):
             self.on_foot.draw(screen, self.paused, st.confirm, dt)
             if self.app.show_help:
                 st.draw_help(screen)
-            return
-        st.draw(screen, con, self.name, self.paused, self.app.show_help, dt)
+        else:
+            st.draw(screen, con, self.name, self.paused, self.app.show_help, dt)
+        if self.wheel.open:
+            self.wheel.draw(screen, (W // 2, H // 2))
 
 
 def main():
