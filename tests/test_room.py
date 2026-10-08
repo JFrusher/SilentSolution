@@ -48,13 +48,14 @@ con = scene.console
 shot = [0]
 
 
-def frames(n, *events, draw_all=False):
+def frames(n, *events, draw_all=False, last=True):
+    """Run n frames; draw the last (unless last=False), every one with draw_all, and a sample."""
     global scene
     for e in events:
         scene = scene.event(e) or scene
     for k in range(n):
         scene = scene.update(1 / 60) or scene
-        if draw_all or k == n - 1 or shot[0] % 10 == 0:  # software GL is slow: draw what's checked, and a sample
+        if draw_all or (last and k == n - 1) or shot[0] % 10 == 0:  # software GL is slow: draw what's checked
             scene.draw(screen, 1 / 60)
             if SHOTS:
                 pygame.image.save(screen, f"{SHOTS}/room{shot[0]:04d}.png")
@@ -74,7 +75,7 @@ def take(station):
     while scene.on_foot:
         near = scene.on_foot.room.move[2] > 1 - 2.5 / (60 * cr.MOVE_TIME)  # the last frames before the cut
         last = pixels()
-        frames(1, draw_all=near)
+        frames(1, draw_all=near, last=False)
     return last
 
 
