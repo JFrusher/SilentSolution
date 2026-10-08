@@ -429,7 +429,6 @@ SMUDGES = [(_SMUDGE_RNG.uniform(0.1, 0.9), _SMUDGE_RNG.uniform(0.1, 0.9)) for _ 
 
 # ---------- the chart under the plot: the Iceland-Faroes gap ----------
 DATUM = (63.5, -10.0)       # where the patrol's origin lies: 63°30'N 10°00'W, on the Iceland-Faroe Ridge
-RIDGE = ((64.6, -13.5), (62.2, -7.0))  # the ridge's crest, south-east Iceland to the Faroes
 VARIATION = -18.0           # magnetic variation there in 1965, deg (west)
 MILE = 1852.0
 
@@ -440,17 +439,38 @@ def latlon(x, y):
     return lat, DATUM[1] + x / (111320.0 * math.cos(math.radians(lat)))
 
 
+DEPTHS_LAT = np.arange(61.0, 66.01, 0.5)   # the depth grid's rows, deg N
+DEPTHS_LON = np.arange(-16.0, -3.99, 1.0)  # and its columns, deg E (west negative)
+DEPTHS = np.array([  # metres, hand-entered from Admiralty chart and GEBCO figures for the gap; 0 is land
+    # -16   -15   -14   -13   -12   -11   -10    -9    -8    -7    -6    -5    -4
+    [2400, 2400, 2300, 2300, 2200, 2000, 1600, 600, 150, 700, 500, 900, 1000],   # 61.0: Faroe Bank, its channel
+    [2200, 2200, 2200, 2100, 2000, 1800, 1500, 1100, 800, 50, 150, 600, 1100],   # 61.5: the Faroe Bank Channel
+    [1900, 2000, 2000, 2000, 1900, 1700, 1400, 1000, 400, 0, 120, 700, 1200],    # 62.0: the Faroes
+    [1500, 1700, 1800, 1800, 1700, 1500, 1300, 1000, 400, 150, 200, 900, 1400],  # 62.5: the ridge meets the plateau
+    [500, 1000, 1300, 1500, 1500, 1300, 1000, 460, 500, 900, 1300, 1600, 1700],  # 63.0
+    [150, 400, 900, 1200, 1100, 800, 470, 600, 1000, 1300, 1700, 2000, 2100],    # 63.5: the patrol's datum, the crest
+    [0, 150, 250, 500, 450, 430, 900, 1400, 1800, 2100, 2300, 2500, 2600],       # 64.0
+    [0, 0, 120, 250, 420, 800, 1300, 1700, 2000, 2300, 2500, 2700, 2800],        # 64.5: the ridge leaves Iceland
+    [0, 0, 0, 180, 500, 1100, 1600, 1900, 2200, 2500, 2700, 2800, 2900],         # 65.0: east Iceland
+    [0, 0, 0, 250, 800, 1400, 1800, 2000, 2300, 2600, 2800, 2900, 3000],         # 65.5
+    [0, 50, 200, 700, 1300, 1700, 1900, 2100, 2400, 2700, 2900, 3000, 3100],     # 66.0: the Norway Basin
+], float)
+FATHOM = 1.8288
+
+
 def sounding(x, y):
-    """The charted depth there, in fathoms: about 240 on the ridge's crest, falling away to the Norwegian Sea in the
-    north and the Iceland Basin in the south, with the seabed's small rises and hollows."""
+    """The charted depth there, in fathoms, from the grid, with the seabed's small rises and hollows; 0 on land."""
     lat, lon = latlon(x, y)
-    (a_lat, a_lon), (b_lat, b_lon) = RIDGE
-    kx = 111.32 * math.cos(math.radians(lat))  # km per degree of longitude here
-    ax, ay, bx, by = a_lon * kx, a_lat * 111.32, b_lon * kx, b_lat * 111.32
-    px, py = lon * kx, lat * 111.32
-    side = ((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / math.hypot(bx - ax, by - ay)  # km, + north-east
+    i = float(np.interp(lat, DEPTHS_LAT, np.arange(len(DEPTHS_LAT))))
+    j = float(np.interp(lon, DEPTHS_LON, np.arange(len(DEPTHS_LON))))
+    i0, j0 = min(int(i), len(DEPTHS_LAT) - 2), min(int(j), len(DEPTHS_LON) - 2)
+    fi, fj = i - i0, j - j0
+    d = DEPTHS[i0:i0 + 2, j0:j0 + 2]
+    m = (d[0, 0] * (1 - fj) + d[0, 1] * fj) * (1 - fi) + (d[1, 0] * (1 - fj) + d[1, 1] * fj) * fi
+    if m <= 5:
+        return 0.0
     lumps = 14 * math.sin(x / 2300.0 + 1.3) * math.cos(y / 3100.0) + 6 * math.sin((x + y) / 900.0)
-    return 240.0 + (6.5 if side > 0 else 5.0) * abs(side) + lumps
+    return max(1.0, m / FATHOM + lumps * 0.3)
 
 
 def dms(deg, pos, neg):
@@ -487,7 +507,9 @@ def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 7
         chart.blit(small.render(dms(m2 / 30, "E", "W"), True, PRINT), (px + 3, h - 18))
     for sx in range(int((x0 - span / 2) // 700) * 700, int(x0 + span / 2) + 700, 700):  # soundings, fixed to the sea
         for sy in range(int((y0 - span / 2) // 700) * 700, int(y0 + span / 2) + 700, 700):
-            chart.blit(tiny.render(f"{sounding(sx, sy):.0f}", True, PRINT), at(sx + 120 * math.sin(sy), sy))
+            depth = sounding(sx, sy)
+            if depth:
+                chart.blit(tiny.render(f"{depth:.0f}", True, PRINT), at(sx + 120 * math.sin(sy), sy))
     rose, r = (w - 120, h - 130), 92  # the printed compass rose
     for rr in (r, r - 14):
         pygame.draw.circle(chart, MAGENTA, rose, rr, 1)

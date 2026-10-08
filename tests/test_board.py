@@ -5,6 +5,8 @@ import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+import math  # noqa: E402
+
 import numpy as np  # noqa: E402
 import pygame  # noqa: E402
 
@@ -58,7 +60,14 @@ from graphics.room3d import DATUM, dms, latlon, sounding  # noqa: E402
 assert np.allclose(latlon(0.0, 0.0), DATUM) and dms(DATUM[0], "N", "S") == "63°30'N" and dms(DATUM[1], "E", "W") == \
     "10°00'W"
 assert abs(latlon(0.0, 1852.0)[0] - DATUM[0] - 1 / 60) < 1e-4, "a nautical mile north is a minute of latitude"
-assert 200 < sounding(0.0, 0.0) < 500 < sounding(0.0, 60000.0), "on the ridge, and deeper toward the Norwegian Sea"
+def at_deg(lat, lon):  # patrol metres for a latitude and longitude
+    return (lon - DATUM[1]) * 111320.0 * math.cos(math.radians(lat)), (lat - DATUM[0]) * 111320.0
+
+
+assert 230 < sounding(0.0, 0.0) < 280, "the datum is on the ridge's crest, about 470 m"
+assert sounding(*at_deg(66.0, -4.0)) > 1500, "the Norway Basin is deep"
+assert sounding(*at_deg(61.0, -8.0)) < 120, "the Faroe Bank is shallow"
+assert sounding(*at_deg(62.0, -7.0)) == 0, "the Faroes are land"
 
 # the TDC's cranks: take hold of a row's crank and wind it up a notch per few pixels; scroll on a row winds that row
 from console import TDC_CRANK_NOTCH  # noqa: E402
