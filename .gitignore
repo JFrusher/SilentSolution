@@ -15,3 +15,6 @@ wheels/
 # OS clutter
 .DS_Store
 Thumbs.db
+
+# generated control-room models (graphics/models.py builds them)
+assets/**/*.glb

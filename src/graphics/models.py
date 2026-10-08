@@ -1,7 +1,8 @@
 """The control room's detailed models, built in code and saved as .glb under assets/ (graphics/gltf.py reads them back).
 Oberon-class, 1960s Royal Navy: grey hammertone consoles round worn black faceplates, bakelite tumbler switches,
 traffolyte labels, chrome and brass, sound-powered telephones, and the watch's own clutter.
-Regenerate: PYTHONPATH=src uv run src/graphics/models.py
+They aren't kept in git: the game builds any that are missing when the room first opens (and build.py before
+packaging). Regenerate them all: PYTHONPATH=src uv run src/graphics/models.py
 
 Model space for a station: the floor under its panel's centre is the origin, y up, z out of the panel into the room,
 x to the right as you face it. A crewman: the floor under his seat, y up, facing +z, his neck the "head" pivot."""
@@ -902,15 +903,16 @@ def crew_hands(s):
 
 
 def crew_models():
-    """{file: Builder} for every crewman: seated at his station, and stood aside (helm crew stay seated)."""
+    """{file: build()} for every crewman: seated at his station, and stood aside (helm crew stay seated)."""
     out = {}
     for s in cr.STATIONS:
         if s.working and s.name != "HELM AND PLANES":
             key = s.name
-            out[CREW_FILES[key]] = crewman(key, "seated", crew_hands(s))
-            out[CREW_FILES[key].replace("seated", "standing")] = crewman(key, "standing")
+            out[CREW_FILES[key]] = lambda key=key, s=s: crewman(key, "seated", crew_hands(s))
+            out[CREW_FILES[key].replace("seated", "standing")] = lambda key=key: crewman(key, "standing")
     for key in ("HELM", "PLANES"):  # hands on the yoke's grips: the column stands 0.33 in front of the seat
-        out[CREW_FILES[key]] = crewman(key, "seated", [np.array((side * 0.17, 0.92, 0.23)) for side in (-1, 1)])
+        out[CREW_FILES[key]] = lambda key=key: crewman(key, "seated", [np.array((side * 0.17, 0.92, 0.23))
+                                                                       for side in (-1, 1)])
     return out
 
 
@@ -921,17 +923,18 @@ CREW_FILES = {key: f"crew/{key.lower().replace(' ', '_')}_seated.glb" for key in
 STATION_FILES = {s.name: f"stations/{s.name.lower().replace(' ', '_')}.glb" for s in cr.STATIONS}
 
 
-def build_all(root=ASSETS):
-    for s in cr.STATIONS:
-        station(s).save(root / STATION_FILES[s.name])
-    for path, b in crew_models().items():
-        b.save(root / path)
+def build_all(root=ASSETS, force=False):
+    """Write every model that's missing (all of them with force). A model dropped in by hand is kept."""
+    todo = {STATION_FILES[s.name]: (lambda s=s: station(s)) for s in cr.STATIONS} | crew_models()
+    for path, build in todo.items():
+        if force or not (root / path).exists():
+            build().save(root / path)
 
 
 if __name__ == "__main__":
     import os
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     pygame.init()
-    build_all()
+    build_all(force=True)
     for p in sorted(ASSETS.rglob("*.glb")):
         print(f"{p.relative_to(ASSETS)}  {p.stat().st_size // 1024} KB")

@@ -11,6 +11,13 @@ import PyInstaller.__main__
 sys.path.insert(0, "src")
 from version import __version__  # noqa: E402
 
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+import pygame  # noqa: E402
+
+from graphics.models import build_all  # noqa: E402
+
+pygame.init()
+build_all()  # the control room's models aren't in git: build them before they're bundled
 PyInstaller.__main__.run(["src/main.py", "--onefile", "--windowed", "--clean", "--noconfirm",
                           "--name", "SilentSolution", "--exclude-module", "tkinter",
                           "--hidden-import", "glcontext",  # moderngl picks its GL backend at run time

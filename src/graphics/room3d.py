@@ -11,7 +11,7 @@ import pygame
 import control_room as cr
 from graphics import console_art as art
 from graphics import gltf
-from graphics.models import ASSETS, CREW_FILES, HELM_SEATS, SEAT_OUT, STATION_FILES
+from graphics.models import ASSETS, CREW_FILES, HELM_SEATS, SEAT_OUT, STATION_FILES, build_all
 from layout import H, W
 from sim import KNOT
 
@@ -633,6 +633,7 @@ class RoomRenderer:
         self.solid = self.ctx.program(vertex_shader=SOLID_VS, fragment_shader=SOLID_FS)
         self.flat = self.ctx.program(vertex_shader=PANEL_VS, fragment_shader=PANEL_FS)
         self.model = self.ctx.program(vertex_shader=MODEL_VS, fragment_shader=MODEL_FS)
+        build_all()  # the models live outside git: build any that are missing (once, about two seconds)
         self.consoles = [(Model(self.ctx, self.model, ASSETS / STATION_FILES[s.name]), placement(s))
                          for s in cr.STATIONS]
         vbo = self.ctx.buffer(build_room().tobytes())
