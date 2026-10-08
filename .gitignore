@@ -11,3 +11,7 @@ wheels/
 .remember
 .vscode
 *.spec
+
+# OS clutter
+.DS_Store
+Thumbs.db
