@@ -6,14 +6,14 @@ from pathlib import Path
 import pygame
 
 import campaign
+import settings
 from audio import AudioSynthesizer
 from console import Console
 from layout import CRT_RECT, H, W
+from tuning import DIFFICULTY
 from tutorial import CHAPTERS, TRAINING, Tutorial
 from version import __version__
 from workstation import Workstation
-import settings
-from tuning import DIFFICULTY
 
 FPS = 60
 CRASH_LOG = Path.home() / ".silent_solution" / "crash.log"
@@ -166,9 +166,10 @@ def main():
         station.over_hint = "ANY KEY: DEBRIEF" if run else None
         station.confirm = None
         if confirm:
-            station.confirm = (["LEAVE TRAINING?", "BACK TO THE CHAPTER LIST"] if console.tutorial else
-                               ["ABANDON PATROL?", "IT WON'T COUNT FOR OR AGAINST YOU"] if run else
-                               ["QUIT PATROL?", f"{console.score:,} GRT GOES ON THE SCORES"]) + ["", "[Y] YES      [N] NO"]
+            question = (["LEAVE TRAINING?", "BACK TO THE CHAPTER LIST"] if console.tutorial else
+                        ["ABANDON PATROL?", "IT WON'T COUNT FOR OR AGAINST YOU"] if run else
+                        ["QUIT PATROL?", f"{console.score:,} GRT GOES ON THE SCORES"])
+            station.confirm = question + ["", "[Y] YES      [N] NO"]
         station.draw(screen, console, state, paused, show_help, dt)
         pygame.display.flip()
 

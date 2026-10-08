@@ -7,8 +7,18 @@ from typing import Any
 
 import numpy as np
 
-from tuning import (CHARGE_LETHAL, CHARGE_REACH, DAMAGED_BATTERY, DAMAGED_MOTOR_KT, DAMAGED_PLANES, DAMAGED_RUDDER,
-                    REPAIR_TIME, SPOT_BASE, SPOT_REACH, WIRE_LENGTH)
+from tuning import (
+    CHARGE_LETHAL,
+    CHARGE_REACH,
+    DAMAGED_BATTERY,
+    DAMAGED_MOTOR_KT,
+    DAMAGED_PLANES,
+    DAMAGED_RUDDER,
+    REPAIR_TIME,
+    SPOT_BASE,
+    SPOT_REACH,
+    WIRE_LENGTH,
+)
 
 SOUND_SPEED = 1500.0  # m/s
 KNOT = 0.514444       # m/s
@@ -54,7 +64,8 @@ R_EFF = 7.6e6            # m, effective earth radius with refraction (hull-down 
 TELEGRAPH = (("STOP", 0.0), ("SLOW", 4.0), ("HALF", 8.0), ("FULL", 14.0), ("FLANK", 20.0))  # order, knots
 
 
-SHIP_CLASSES = {  # ship families as a lookout or recognition manual knows them: (length, beam, mast top, freeboard) m - the recognition manual's numbers
+# ship families as a lookout or recognition manual knows them: (length, beam, mast top, freeboard) m
+SHIP_CLASSES = {
     "merchant": (130.0, 17.0, 30.0, 8.0),
     "tanker": (150.0, 20.0, 26.0, 6.0),
     "escort": (95.0, 11.0, 24.0, 5.0),
@@ -400,7 +411,8 @@ class Ocean:
     def __post_init__(self):
         if not self.swells:
             self.swells = [(a, 2 * math.pi / lam, off, random.uniform(0, 2 * math.pi))
-                           for a, lam, off in ((0.55, 90.0, 0.0), (0.3, 45.0, 25.0), (0.15, 22.0, -35.0), (0.1, 11.0, 60.0))]
+                           for a, lam, off in ((0.55, 90.0, 0.0), (0.3, 45.0, 25.0), (0.15, 22.0, -35.0),
+                                               (0.1, 11.0, 60.0))]
 
     def step(self, dt):
         self.timer -= dt
@@ -447,7 +459,7 @@ class WorldSimulation:
     targets: list  # ships and decoys: anything sonar can hear or a seeker can lock
     torpedoes: list = field(default_factory=list)
     charges: list = field(default_factory=list)
-    ais: list = field(default_factory=list)  # ship behaviours: .update(world, dt) -> events, .hear_ping/.hear_launch(world)
+    ais: list = field(default_factory=list)  # ship behaviours: .update(world, dt) -> events, .hear_ping/.hear_launch
     director: Any = None                    # spawns waves: .update(world, dt) -> events
     ocean: Ocean = field(default_factory=Ocean)
     time: float = 0.0

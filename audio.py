@@ -9,7 +9,6 @@ import pygame
 
 from settings import volume
 
-
 SAMPLE_RATE = 44100
 MIX_RMS = {"SONAR": 0.16, "EFFECTS": 0.2, "AMBIENCE": 0.14}  # buffer loudness per category before play strength
 HULL_WET = 0.4   # reverb share on interior sounds

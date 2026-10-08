@@ -3,7 +3,6 @@ import pygame
 
 from sim import CRUSH_DEPTH
 
-
 W, H = 1280, 720
 
 # ---------- workstation layout (logical 1280x720, scaled to the window) ----------
