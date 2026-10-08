@@ -1,5 +1,5 @@
 """Film the README GIFs from scripted, headless runs of the real game: time-lapse with real-time beats, Dymo
-captions, crossfaded loops. Run: uv run --with pillow docs/gifs.py [attack tma escort wire storm]"""
+captions, crossfaded loops. Run: uv run --with pillow docs/gifs.py [attack tma escort wire storm table]"""
 import os
 import random
 import sys
@@ -23,7 +23,9 @@ from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
 from geometry import fix, offset  # noqa: E402
 from graphics import console_art as art  # noqa: E402
+from graphics.tabletop import ReplayView  # noqa: E402
 from layout import EYEPIECE_C, MONITOR, SCOPE_C, SCOPE_R  # noqa: E402
+from replay import Replay  # noqa: E402
 from sim import KNOT, YARD, Vessel  # noqa: E402
 from workstation import Workstation  # noqa: E402
 
@@ -307,7 +309,84 @@ def storm():
     reel.save()
 
 
-SCENES = {"attack": attack, "tma": tma, "escort": escort, "wire": wire, "storm": storm}
+def table():
+    """The after-action replay of a convoy attack: an escort hunts back and a second boat waits under the layer."""
+    seed(11)
+    con = Console("COMMANDER", AUDIO)
+    calm(con)
+    w, p = con.world, con.world.player
+    w.min_hull = 30.0
+    p.z = p.ordered_depth = 60.0
+    merchant = place(con, 38, 4300, 300, 9, noise=1.15)
+    place(con, 75, 7800, 285, 11, noise=0.9)
+    escort = place(con, 140, 3500, 0, 0, kind="ESCORT")
+    w.ais.append(EscortAI(escort, p.heading + 320, charges=15, decoys=0, aggression=0.9, detect_radius=3000.0))
+    sub = place(con, -70, 5000, 60, 6, kind="SUB", z=140.0)
+    for _ in range(int(200 / SUB)):
+        con.update(SUB, NoKeys())
+    con.dial = fix(p, merchant).rel_brg
+    con.mark()
+    con.tdc.set("RNG", p.range_to(merchant) / YARD)
+    con.tdc.set("SPD", merchant.speed / KNOT)
+    con.tdc.set("CRS", merchant.heading)
+    con.tdc.set("SPR", 3.0)
+    fired = w.time
+    con.fire()
+    for _ in range(int(420 / SUB)):
+        con.update(SUB, NoKeys())
+    assert merchant in w.sunk, "the replay must show a sinking"
+    r = Replay(con.recorder.data(dict(mode="COMMANDER", title="CONVOY ATTACK", result=f"{con.score:,} GRT SUNK")))
+    sunk = r.bodies[merchant.uid]["sunk"]
+    charges = [e["t"] for e in r.events if e["kind"] == "CHARGES"]
+    assert charges, "the escort must come back for us"
+    view = ReplayView(r, "TITLE")
+    view.playing, cam = True, view.cam
+    reel = Reel("table", crop=(0, 48, 1280, 576), width=768, colors=128)  # the table, not the replay's own HUD
+
+    def beat(seconds, speed, caption, to=None, until=None, hover=False, ex=None):
+        """Play `seconds` of GIF at `speed`, easing the camera to `to` (yaw, pitch, dist, target) and the depth
+        exaggeration to `ex`."""
+        start, ex0 = (cam.yaw, cam.pitch, cam.dist, list(cam.target)), view.tab.ex
+        n = int(seconds * reel.fps)
+        for i in range(n):
+            if to:
+                k = 0.5 - 0.5 * np.cos(np.pi * (i + 1) / n)
+                cam.yaw = start[0] + ((to[0] - start[0] + 180) % 360 - 180) * k
+                cam.pitch, cam.dist = start[1] + (to[1] - start[1]) * k, start[2] + (to[2] - start[2]) * k
+                cam.target = [a + (b - a) * k for a, b in zip(start[3], to[3])]
+                view.tab.ex = ex0 + ((ex or ex0) - ex0) * k
+            view.speed = speed
+            view.update(1 / reel.fps)
+            if hover:  # the pointer rests on own boat: its hover label
+                x, y, z, *_ = r.at(view.t)[view.own]
+                sx, sy, _ = cam.project(x, y, view.tab.h(z))
+                view.mouse = reel.cursor = (int(sx) + 3, int(sy) + 3)
+            view.draw(screen)
+            reel.grab(caption, speed)
+            if until and view.t >= until:
+                break
+        reel.cursor, view.mouse = None, (0, 0)
+
+    hit, boat, deep = r.at(sunk)[merchant.uid], r.at(charges[0])[view.own], r.at(charges[0])[sub.uid]
+    side = float(np.degrees(np.arctan2(deep[0] - boat[0], deep[1] - boat[1]))) + 90  # square on to boat and sub
+    yaw, pitch, dist, centre = cam.yaw, cam.pitch, cam.dist, list(cam.target)
+    view.t = fired - 120
+    beat(3.0, 40, "EVERY PATROL IS RECORDED - REPLAY IT ON THE PLOTTING TABLE", until=fired,
+         to=(yaw + 20, pitch, dist, centre))
+    beat(5.0, 40, "TWO FISH RUN OUT ON THE SOLUTION", until=sunk - 15,
+         to=(yaw + 35, 38, dist * 0.32, [(boat[0] + hit[0]) / 2, (boat[1] + hit[1]) / 2]))
+    beat(3.0, 6, "HIT - SHE SETTLES AND GOES DOWN", to=(yaw + 45, 32, dist * 0.18, hit[:2]))
+    beat(2.5, 30, "THE ESCORT HUNTS BACK", until=charges[0] - 4, to=(yaw + 60, 30, dist * 0.2, boat[:2]))
+    beat(3.0, 4, "DEPTH CHARGES OVER OWN BOAT", until=charges[0] + 12)
+    beat(3.0, 4, "SIDE VIEW - DEPTH x5: A BOAT WAITS UNDER THE LAYER", ex=5,
+         to=(side, 4, dist * 0.3, [(boat[0] + deep[0]) / 2, (boat[1] + deep[1]) / 2]))
+    beat(2.0, 4, "HOVER FOR DEPTH, SPEED AND COURSE", hover=True)
+    beat(2.5, 30, "PLAN VIEW - THE WHOLE ENGAGEMENT", to=(180, 89, dist * 0.8, centre))
+    beat(1.5, 30, "PLAN VIEW - THE WHOLE ENGAGEMENT", to=(yaw, pitch, dist, centre), ex=10)
+    reel.save()
+
+
+SCENES = {"attack": attack, "tma": tma, "escort": escort, "wire": wire, "storm": storm, "table": table}
 
 if __name__ == "__main__":
     settings.reset()
