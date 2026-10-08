@@ -10,6 +10,7 @@ import replay
 import settings
 from audio import AudioSynthesizer
 from console import Console
+from graphics.tabletop import ReplayView
 from layout import CRT_RECT, H, W
 from tuning import DIFFICULTY
 from tutorial import CHAPTERS, TRAINING, Tutorial
@@ -37,13 +38,21 @@ def main():
                                               wave=con.wave, version=__version__))
         station.last_replay = path
         return path
+
+    def open_replay(path, back):
+        """The tabletop for a saved patrol; False if the file is gone or unreadable."""
+        r = replay.load(path) if path else None
+        if r:
+            station.replay_view = ReplayView(r, back)
+        return bool(r)
     confirm = False  # Esc during a patrol: "quit this patrol?" waiting for Y / N
     lost_at, leave_over = 0, False  # a lost campaign boat: when, and whether the player has moved on
 
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.1)
         for e in pygame.event.get():
-            pages = ("SETTINGS", "CAREER", "DEBRIEF", "CHAPTERS", "PLAY")  # Esc means "back" or "ask" on these
+            # Esc means "back" or "ask" on these
+            pages = ("SETTINGS", "CAREER", "DEBRIEF", "CHAPTERS", "PLAY", "REPLAY", "REPLAYS")
             quit_key = (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state not in pages
                         and not (state == "OVER" and run))
             if e.type == pygame.QUIT or quit_key:
@@ -71,6 +80,34 @@ def main():
                 continue
             if e.type == pygame.KEYDOWN and e.key == pygame.K_F1:
                 show_help = not show_help
+            elif state == "REPLAY":
+                view = station.replay_view
+                if e.type == pygame.KEYDOWN and view.key(e.key, e.mod) == "BACK":
+                    state = view.back
+                elif e.type == pygame.MOUSEBUTTONDOWN:
+                    view.mouse_down(e.pos, e.button)
+                elif e.type == pygame.MOUSEBUTTONUP:
+                    view.mouse_up()
+                elif e.type == pygame.MOUSEMOTION:
+                    view.motion(e.pos)
+                elif e.type == pygame.MOUSEWHEEL:
+                    view.wheel(e.y)
+            elif state == "REPLAYS":
+                choice, n = None, len(station.replays)
+                if e.type == pygame.KEYDOWN and e.key in (pygame.K_UP, pygame.K_DOWN) and n:
+                    station.replay_pick = (station.replay_pick + (1 if e.key == pygame.K_DOWN else -1)) % n
+                elif e.type == pygame.KEYDOWN:
+                    choice = {pygame.K_ESCAPE: "BACK", pygame.K_RETURN: station.replay_pick}.get(e.key)
+                elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                    choice = next((name for rect, name in station.buttons if rect.collidepoint(e.pos)), None)
+                if choice == "BACK":
+                    state = "TITLE"
+                elif isinstance(choice, int) and choice < n:
+                    station.replay_pick = choice
+                    if open_replay(station.replays[choice][0], "REPLAYS"):
+                        state = "REPLAY"
+                    else:
+                        station.replay_note = "THAT REPLAY CAN'T BE READ"
             elif state == "SETTINGS":
                 back = None
                 if e.type == pygame.KEYDOWN:
@@ -99,10 +136,13 @@ def main():
                     picks = {pygame.K_1: 0, pygame.K_2: 1}
                     choice = (offer[picks[e.key]] if e.key in picks and picks[e.key] < len(offer) else
                               {pygame.K_RETURN: "SAIL" if state == "CAREER" else "CONTINUE", pygame.K_n: "NEW CAREER",
-                               pygame.K_ESCAPE: "BACK"}.get(e.key))
+                               pygame.K_ESCAPE: "BACK", pygame.K_a: "REPLAY"}.get(e.key))
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                     choice = next((name for rect, name in station.buttons if rect.collidepoint(e.pos)), None)
-                if state == "DEBRIEF":
+                if choice == "REPLAY" or isinstance(choice, tuple):  # the last patrol, or one from the log
+                    if open_replay(station.last_replay if choice == "REPLAY" else replay.DIR / choice[1], state):
+                        state = "REPLAY"
+                elif state == "DEBRIEF":
                     if choice in campaign.UPGRADES:
                         career.fit(choice)
                         state = "CAREER"
@@ -128,6 +168,8 @@ def main():
                     choice = "SETTINGS"
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_c:
                     choice = "CAMPAIGN"
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_r:
+                    choice = "REPLAYS"
                 elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                     choice = next((name for rect, name in station.buttons if rect.collidepoint(e.pos)), None)
                 if choice == "CAMPAIGN":
@@ -136,6 +178,9 @@ def main():
                     station.menu, state = settings.SettingsMenu(), "SETTINGS"
                 elif choice == "TRAINING":
                     state = "CHAPTERS"
+                elif choice == "REPLAYS":
+                    station.replays, station.replay_pick, station.replay_note = replay.listing(), 0, ""
+                    state = "REPLAYS"
                 elif choice:
                     console, state = Console(choice, audio), "PLAY"
             elif state == "OVER" and run:  # campaign loss: any key on to the debrief
@@ -145,6 +190,8 @@ def main():
                     console, state = Console(console.level, audio), "PLAY"
                 elif e.type == pygame.KEYDOWN and e.key == pygame.K_t:
                     console, state = None, "TITLE"
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_a and open_replay(station.last_replay, "OVER"):
+                    state = "REPLAY"
             elif e.type == pygame.KEYDOWN and e.key == pygame.K_p:
                 paused = not paused
             elif not paused:
@@ -158,7 +205,9 @@ def main():
                     console.drag(e.pos)
                 elif e.type == pygame.MOUSEWHEEL:
                     console.scroll(pygame.mouse.get_pos(), e.y)
-        if console and not paused and not confirm:
+        if state == "REPLAY":
+            station.replay_view.update(dt)
+        elif console and not paused and not confirm:
             console.update(dt, pygame.key.get_pressed())
             if console.tutorial:
                 console.tutorial.update(dt)
