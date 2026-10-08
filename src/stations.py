@@ -45,7 +45,7 @@ from layout import (
 )
 from settings import SETTINGS
 from settings import label as keys_for
-from sim import CRUSH_DEPTH, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, TELEGRAPH, TORP_MAX_RUN, YARD
+from sim import AIR_FULL, CRUSH_DEPTH, KNOT, MAST_DEPTH, MAX_RUDDER, PERISCOPE_DEPTH, TELEGRAPH, TORP_MAX_RUN, YARD
 from workstation import alarm_states
 
 R = pygame.Rect
@@ -284,6 +284,20 @@ def planes_state(s, con, ws, at, size):
     art.engrave(s, f"PLANES {planes}    ORDER {p.ordered_depth:.0f} M", at, size, art.LEGEND, center=True)
 
 
+HP_SPEC = dict(lo=0, hi=AIR_FULL, major=1000, minor=250, red=(0, 500), units="PSI")
+
+
+def hp_air(s, con, ws):
+    """The H.P. air groups: a white pressure gauge each, drained by a blow and by every torpedo fired, charged by the
+    compressors only while snorkelling."""
+    for k, psi in enumerate(con.world.player.air):
+        c = (946 + 127 * k, 500)
+        ins.gauge(s, c, 54, dict(HP_SPEC, title=f"No.{k + 1}"), [(psi, BLACK_NEEDLE, 3.4, 1.0)], white=True)
+        art.engrave(s, f"GROUP {k + 1}", (c[0], c[1] + 82), 13, center=True)
+    if con.world.player.snorkeling:
+        art.engrave(s, "COMPRESSORS RUNNING", (1073, 610), 14, art.GREEN, center=True)
+
+
 def holding(con):
     p = con.world.player
     return abs(p.ordered_depth - p.z) < 1 and not p.blowing
@@ -336,9 +350,10 @@ VIEWS = {v.name: v for v in (
                                               lambda con: con.world.player.blowing and int(con.world.time * 4) % 2
                                               == 0, art.RED), ("BLOW",))),
          plates=((R(16, 12, 370, 696), "BATTERY  /  DEPTH"), (R(400, 12, 468, 380), "MASTS"),
-                 (R(400, 406, 468, 302), "EMERGENCY BLOW"), (R(882, 12, 382, 696), "WARNING")),
-         lamps=((R(906, 70, 340, 320), ("DIESEL", "MASTS UP", "LEAK", "HULL STRESS")),),
-         extras=(lambda s, con, ws: art.tape(s, (634, 450), "CAPTAIN'S ORDER ONLY", -2, 16),)),
+                 (R(400, 406, 468, 302), "EMERGENCY BLOW"), (R(882, 12, 382, 330), "WARNING"),
+                 (R(882, 356, 382, 352), "H.P. AIR")),
+         lamps=((R(906, 40, 340, 250), ("DIESEL", "MASTS UP", "LEAK", "HULL STRESS")),),
+         extras=(lambda s, con, ws: art.tape(s, (634, 450), "CAPTAIN'S ORDER ONLY", -2, 16), hp_air)),
     View("DAMAGE CONTROL", "DAMAGE", frozenset(),
          (P(MONITOR, (16, 36), 1.42), P(GAUGE["HULL"], (972, 24), 1.6, gauge("HULL", white=True))),
          plates=((R(944, 12, 320, 300), "HULL"), (R(944, 330, 320, 180), "WARNING")),

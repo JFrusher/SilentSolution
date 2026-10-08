@@ -81,6 +81,8 @@ MAST_MESSAGES = {  # own mast events: (sonar log line, teleprinter line or "")
     "SNORKEL_FLOODED": ("SNORKEL FLOODED - DIESELS TRIPPED", "ENGINE ROOM: SNORKEL HEAD FLOODED AT SPEED. DIESELS "
                         "STOPPED FOR TEN SECONDS. KEEP UNDER EIGHT KNOTS WHILE SNORKELLING."),
     "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST ({DAMAGE BOARD})."),
+    "AIR_EXHAUSTED": ("BLOW STOPPED - H.P. AIR EXHAUSTED", "CHIEF OF THE WATCH: H.P. AIR GROUPS EMPTY, THE BLOW HAS "
+                      "STOPPED. THE COMPRESSORS CHARGE THEM ONLY WHILE WE SNORKEL."),
 }
 ECHO_FADE = 40.0          # s an echo blip glows on the scope
 TDC_CRANK_NOTCH = 6       # px of crank drag per notch of a TDC value
@@ -358,6 +360,8 @@ class Console:
             return self.say(f"BEYOND RANGE: RUN {sol.run / YARD:,.0f} YD. FIRE AGAIN TO SHOOT")
         spread = self.tdc.values["SPR"]
         for k, i in enumerate(ready):
+            if not self.world.player.impulse():
+                return self.say("NO IMPULSE AIR TO FIRE", "FIRE CONTROL")
             gyro = (sol.gyro + (k - (len(ready) - 1) / 2) * spread) % 360
             fish = self.world.fire(gyro, arm_distance=self.tdc.values["ARM"] * YARD, run_depth=self.tdc.values["DEP"],
                                    tube=i + 1, wired=True)
@@ -421,6 +425,8 @@ class Console:
         self.say("NOISEMAKER AWAY")
 
     def blow(self):
+        if sum(self.world.player.air) <= 0:
+            return self.say("NO H.P. AIR TO BLOW", "CHIEF")
         self.world.player.blowing = True
         self.audio.play_blow()
         self.actions.add("BLOW")

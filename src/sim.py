@@ -39,6 +39,10 @@ CRUSH_DEPTH = 250.0      # m, hull starts to fail below this
 MAX_DEPTH = 300.0        # m, deepest order the planesman accepts
 DIVE_RATE = 1.5          # m/s on the planes
 BLOW_RATE = 5.0          # m/s emergency blow
+AIR_FULL = 4000.0        # psi in each of the three H.P. air groups, charged
+BLOW_AIR = 120.0         # psi/s a blow draws at the surface; deeper it takes more (x (1 + depth / 100 m))
+TORP_AIR = 300.0         # psi of impulse air per torpedo fired
+AIR_CHARGE = 12.0        # psi/s the compressors put back, only while snorkelling
 ACCEL = 0.15             # m/s^2, own boat
 MAX_RUDDER = 30.0        # deg
 TURN_RATE = 3.5          # deg/s at full rudder with steerage way
@@ -191,6 +195,7 @@ class Submarine(Vessel):
     battery: float = 100.0
     o2: float = 100.0
     blowing: bool = False
+    air: list = field(default_factory=lambda: [AIR_FULL] * 3)  # the three H.P. air groups, psi
     cavitating: bool = False
     snorkeling: bool = False   # diesels running on the snorkel
     # masts
@@ -299,6 +304,21 @@ class Submarine(Vessel):
         self.head_valve = shut
         self.snorkeling = self.snorkel_up and self.snorkel_clear and self.diesel_trip <= 0
 
+    def draw_air(self, psi):
+        """Take psi from the H.P. air groups, the first group first."""
+        for k in range(3):
+            took = min(self.air[k], psi)
+            self.air[k] -= took
+            psi -= took
+
+    def impulse(self):
+        """Air to fire a torpedo, from the fullest group: False if none holds enough."""
+        k = self.air.index(max(self.air))
+        if self.air[k] < TORP_AIR:
+            return False
+        self.air[k] -= TORP_AIR
+        return True
+
     def step(self, dt):
         kt = self.speed / KNOT
         self.cavitating = kt > 8 + self.z / 15  # pressure suppresses cavitation: deeper boats can run faster quietly
@@ -310,6 +330,9 @@ class Submarine(Vessel):
             self.battery = max(0.0, self.battery - drain * dt)
             if self.snorkeling:
                 self.battery = min(100.0, self.battery + 0.35 * dt)
+        if self.snorkeling:  # the compressors run off the diesels: emptiest group first
+            k = self.air.index(min(self.air))
+            self.air[k] = min(AIR_FULL, self.air[k] + AIR_CHARGE * dt)
         if self.uses_oxygen:
             fresh = self.snorkeling or self.broached
             self.o2 = min(100.0, self.o2 + dt) if fresh else max(0.0, self.o2 - 100 / 1200 * dt)
@@ -318,9 +341,13 @@ class Submarine(Vessel):
         top = DAMAGED_MOTOR_KT * KNOT if "MOTORS" in hurt else math.inf
         self.speed += clamp((min(self.ordered_speed, top) if self.battery > 0 else 0.0) - self.speed, -dv, dv)
         if self.blowing:
+            self.draw_air(BLOW_AIR * (1 + self.z / 100) * dt)
             self.z = max(PERISCOPE_DEPTH, self.z - BLOW_RATE * dt)
             if self.z <= PERISCOPE_DEPTH:
                 self.blowing, self.ordered_depth = False, PERISCOPE_DEPTH
+            elif sum(self.air) <= 0:  # the bottles are empty: the blow stops where she is
+                self.blowing, self.ordered_depth = False, self.z
+                self.alerts.append("AIR_EXHAUSTED")
         else:
             rate = DIVE_RATE * (DAMAGED_PLANES if "PLANES" in hurt else 1.0) * dt
             self.z += clamp(self.ordered_depth - self.z, -rate, rate)
