@@ -48,14 +48,14 @@ def _tilted(dx, dz, tilt=18.0):
     return (dx * math.cos(t), math.sin(t), dz * math.cos(t))
 
 
-STATIONS = (  # 16:9 panels; the sonar console is the one you have
+STATIONS = (  # 16:9 panels, so each crewed station can be taken and its 2D close-up fills the screen
     Station("SONAR", (-2.05, 1.30, 1.70), _tilted(1, 0), 1.60, 0.90, working=True),
-    Station("FIRE CONTROL", (-2.05, 1.30, -0.55), _tilted(1, 0), 1.60, 0.90),
-    Station("RADIO / ESM", (-2.05, 1.30, -2.70), _tilted(1, 0), 1.20, 0.68),
-    Station("HELM AND PLANES", (0.0, 1.35, -4.75), _tilted(0, 1), 2.40, 1.00, stand=1.40),
-    Station("BALLAST CONTROL", (2.05, 1.30, -2.30), _tilted(-1, 0), 1.60, 0.90),
-    Station("TRIM MANIFOLD", (2.05, 1.30, 0.10), _tilted(-1, 0), 1.40, 0.80),
-    Station("NAVIGATION", (2.05, 1.30, 2.40), _tilted(-1, 0), 1.20, 0.68),
+    Station("FIRE CONTROL", (-2.05, 1.30, -0.55), _tilted(1, 0), 1.60, 0.90, working=True),
+    Station("RADIO", (-2.05, 1.30, -2.70), _tilted(1, 0), 1.20, 0.675, working=True),
+    Station("HELM AND PLANES", (0.0, 1.35, -4.75), _tilted(0, 1), 1.92, 1.08, working=True, stand=1.40),
+    Station("BALLAST CONTROL", (2.05, 1.30, -2.30), _tilted(-1, 0), 1.60, 0.90, working=True),
+    Station("DAMAGE CONTROL", (2.05, 1.30, 0.10), _tilted(-1, 0), 1.60, 0.90, working=True),
+    Station("NAVIGATION", (2.05, 1.30, 2.40), _tilted(-1, 0), 1.20, 0.675),
 )
 PERISCOPE = (0.0, 0.55)            # x, z of the search periscope in its well
 PERISCOPE_R = 0.55                 # the rail round it
@@ -212,6 +212,6 @@ if __name__ == "__main__":  # self-check: the room's geometry holds together
         f = s.front()
         assert not blocked(f[0], f[2]), f"{s.name}: you can't stand at it"
         if s.working:
-            assert seated(s)
+            assert seated(s)  # its shape fits the screen
     assert not blocked(0.0, PERISCOPE[1] + PERISCOPE_R + 0.4), "you can't stand at the periscope"
     print("control room ok")

@@ -102,7 +102,7 @@ class Workstation:
     def __init__(self):
         self.frame = pygame.Surface((W, H))
         self.crt_surf = pygame.Surface(CRT_RECT.size)
-        self.crt = CRTRenderer(CRT_RECT.size)
+        self.crts = {}  # one phosphor per CRT page, so a station drawn on another page never ghosts this one
         self.scope_surf = pygame.Surface((SCOPE_R * 2, SCOPE_R * 2))
         self.scope_crt = CRTRenderer(self.scope_surf.get_size(), ghost_decay=200)  # long-persistence PPI phosphor
         self.background = self._background()
@@ -337,7 +337,8 @@ class Workstation:
 
     # --- centre monitor ---
     def draw_crt(self, con, state, paused):
-        s, crt = self.crt_surf, self.crt
+        page = con.crt_page if con and state in ("PLAY", "OVER") else state
+        s, crt = self.crt_surf, self.crts.setdefault(page, CRTRenderer(CRT_RECT.size))
         s.fill((0, 0, 0))
         self.buttons = []
         if state == "SETTINGS":

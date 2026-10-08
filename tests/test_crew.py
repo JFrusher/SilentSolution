@@ -108,12 +108,11 @@ w.press()
 w.motion(5, 5)
 assert w.release() is None and not w.open, "letting go in the middle closes it"
 
-# on his feet, the captain's station keys reach the crew as orders
+# a patrol starts with the captain on his feet at the conn: his station keys reach the crew as orders
 app = main.App()
 settings.reset()
 pygame.mouse.set_relative_mode = lambda on: None
 scene = main.Patrol(app, Console("COMMANDER", app.audio, seed=2))
-scene.event(pygame.event.Event(pygame.KEYDOWN, key=settings.code("STAND UP"), mod=0, unicode="", scancode=0))
 assert scene.on_foot and scene.console.crew.captain_at is None
 scene.event(pygame.event.Event(pygame.KEYDOWN, key=settings.code("FASTER"), mod=0, unicode="", scancode=0))
 assert scene.console.crew.pending and scene.console.crew.pending[0][1] == "ENGINES"

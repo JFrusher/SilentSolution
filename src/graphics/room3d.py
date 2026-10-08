@@ -308,7 +308,7 @@ def console(m, s):
 
 def trim_valves(m):
     """The trim manifold's valve wheels and the pipes they sit on, to the left of its panel."""
-    s = next(s for s in cr.STATIONS if s.name == "TRIM MANIFOLD")
+    s = next(s for s in cr.STATIONS if s.name == "DAMAGE CONTROL")
     x, z = s.centre[0] + 0.1, s.centre[2] - s.w / 2 - 0.45
     m.cylinder((x, 0.6, z - 0.35), (x, 0.6, z + 0.35), 0.06, PIPES[0])
     m.cylinder((x, 1.0, z - 0.35), (x, 1.0, z + 0.35), 0.06, PIPES[2])
@@ -320,47 +320,15 @@ def trim_valves(m):
 
 # ---------- panel faces ----------
 def panel_art(name, size):
-    """Set dressing for a station that doesn't work yet: a worn faceplate with gauges, lamps and labels."""
+    """Set dressing for a station nobody mans yet: a worn faceplate with a readout, lamps and its name."""
     surf = art.texture(size, art.FACE, grain=3)
     w, h = size
     art.label_plate(surf, (w // 2, 18), name, 13)
-    if name == "FIRE CONTROL":
-        for i in range(6):
-            r = pygame.Rect(30, 50 + i * 46, 200, 36)
-            art.faceplate(surf, r)
-            art.engrave(surf, ("TARGET BRG", "TARGET RNG", "TARGET CRS", "TARGET SPD", "GYRO", "TRACK")[i],
-                        (r.x + 10, r.y + 12), 11)
-            art.counter(surf, (r.x + 120, r.y + 9), f"{(i * 37) % 360:03d}.0", 13)
-        for k in range(3):
-            g = art.gauge_face(52, ("ANGLE", "SPREAD", "TIME")[k], 0, 100, 20, 5)[0]
-            surf.blit(g, (270 + k * 120, 60))
-        for i, lab in enumerate(("TUBE 1", "TUBE 2", "TUBE 3", "TUBE 4")):
-            art.annunciator(surf, pygame.Rect(280 + i * 85, 230, 78, 22), lab, i < 2, art.GREEN)
-    elif name == "BALLAST CONTROL":  # the 'Christmas tree': a hull-opening board of lamps
-        for row in range(5):
-            for col in range(9):
-                art.lamp(surf, (60 + col * 62, 80 + row * 46), (row + col) % 4 != 0,
-                         art.GREEN if (row + col) % 3 else art.RED, 9)
-        art.engrave(surf, "HULL OPENINGS  -  GREEN BOARD BEFORE DIVING", (w // 2, h - 30), 12, center=True)
-    elif name == "HELM AND PLANES":
-        for k, (t, lo, hi) in enumerate((("DEPTH", 0, 300), ("BOW PLANES", -30, 30), ("STERN PLANES", -30, 30),
-                                         ("RUDDER", -30, 30), ("SPEED", 0, 20))):
-            g = art.gauge_face(70, t, lo, hi, (hi - lo) / 6, (hi - lo) / 30)[0]
-            surf.blit(g, (40 + k * 185, 70))
-        art.engrave(surf, "ORDERED DEPTH", (120, h - 50), 12)
-        art.counter(surf, (260, h - 54), "060", 15)
-    elif name == "TRIM MANIFOLD":
-        for k, t in enumerate(("FWD TRIM", "AFT TRIM", "AUX 1", "AUX 2")):
-            g = art.gauge_face(48, t, 0, 100, 25, 5)[0]
-            surf.blit(g, (30 + (k % 2) * 140, 50 + (k // 2) * 135))
-        for i in range(6):
-            art.toggle(surf, (340 + (i % 3) * 70, 100 + (i // 3) * 120), i % 2 == 0)
-    else:  # radio / ESM, navigation
-        art.faceplate(surf, pygame.Rect(30, 50, w - 60, h // 2 - 20))
-        for i in range(8):
-            art.lamp(surf, (60 + i * (w - 120) // 7, h // 2 + 70), i % 3 == 0, art.AMBER, 7)
-        art.counter(surf, (w // 2 - 50, 90), "00 00 00", 18)
-        art.engrave(surf, name, (w // 2, h - 40), 12, center=True)
+    art.faceplate(surf, pygame.Rect(30, 50, w - 60, h // 2 - 20))
+    for i in range(8):
+        art.lamp(surf, (60 + i * (w - 120) // 7, h // 2 + 70), i % 3 == 0, art.AMBER, 7)
+    art.counter(surf, (w // 2 - 50, 90), "00 00 00", 18)
+    art.engrave(surf, name, (w // 2, h - 40), 12, center=True)
     return surf
 
 
@@ -434,10 +402,11 @@ class RoomRenderer:
     def texture(self, name):
         return next(p[1] for p in self.panels if p[4] == name)
 
-    def render(self, pose, console_surf=None, plot_surf=None):
-        """Draw the room from `pose`. console_surf: the live 2D station for the working panel; plot_surf: the table."""
-        if console_surf is not None:
-            self.upload(self.texture("SONAR"), console_surf)
+    def render(self, pose, screens=None, plot_surf=None):
+        """Draw the room from `pose`. screens: fresh station canvases by name (the rest keep their last picture);
+        plot_surf: the plot table, when it has changed."""
+        for name, surf in (screens or {}).items():
+            self.upload(self.texture(name), surf)
         if plot_surf is not None:
             self.upload(self.texture("TABLE"), plot_surf)
         w, h = self.size
