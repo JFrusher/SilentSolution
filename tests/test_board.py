@@ -52,6 +52,14 @@ marked = pygame.surfarray.array3d(plot_art(track, 0.0, [(100, 45.0, "MARK", None
 assert np.abs(marked - plain).sum() > 0, "marks and the solution show on the plot"
 noted = pygame.surfarray.array3d(plot_art(track, 0.0, notes=[(50, 0.0, 200.0, 90.0, 3000.0, "CONVOY 2M 1E")]))
 assert np.abs(noted - plain).sum() > 0, "a report goes on the plot"
+# the chart is the Iceland-Faroes gap: the patrol's origin at 63°30'N 10°00'W, soundings in fathoms off the ridge
+from graphics.room3d import DATUM, dms, latlon, sounding  # noqa: E402
+
+assert np.allclose(latlon(0.0, 0.0), DATUM) and dms(DATUM[0], "N", "S") == "63°30'N" and dms(DATUM[1], "E", "W") == \
+    "10°00'W"
+assert abs(latlon(0.0, 1852.0)[0] - DATUM[0] - 1 / 60) < 1e-4, "a nautical mile north is a minute of latitude"
+assert 200 < sounding(0.0, 0.0) < 500 < sounding(0.0, 60000.0), "on the ridge, and deeper toward the Norwegian Sea"
+
 # the TDC's cranks: take hold of a row's crank and wind it up a notch per few pixels; scroll on a row winds that row
 from console import TDC_CRANK_NOTCH  # noqa: E402
 from fire_control import FIELDS  # noqa: E402

@@ -417,6 +417,39 @@ _SMUDGE_RNG = random.Random(7)  # drawing's own dice: the rubbed-out patches sit
 SMUDGES = [(_SMUDGE_RNG.uniform(0.1, 0.9), _SMUDGE_RNG.uniform(0.1, 0.9)) for _ in range(3)]
 
 
+# ---------- the chart under the plot: the Iceland-Faroes gap ----------
+DATUM = (63.5, -10.0)       # where the patrol's origin lies: 63°30'N 10°00'W, on the Iceland-Faroe Ridge
+RIDGE = ((64.6, -13.5), (62.2, -7.0))  # the ridge's crest, south-east Iceland to the Faroes
+VARIATION = -18.0           # magnetic variation there in 1965, deg (west)
+MILE = 1852.0
+
+
+def latlon(x, y):
+    """Patrol metres (x east, y north of the datum) to latitude and longitude, deg (east +)."""
+    lat = DATUM[0] + y / 111320.0
+    return lat, DATUM[1] + x / (111320.0 * math.cos(math.radians(lat)))
+
+
+def sounding(x, y):
+    """The charted depth there, in fathoms: about 240 on the ridge's crest, falling away to the Norwegian Sea in the
+    north and the Iceland Basin in the south, with the seabed's small rises and hollows."""
+    lat, lon = latlon(x, y)
+    (a_lat, a_lon), (b_lat, b_lon) = RIDGE
+    kx = 111.32 * math.cos(math.radians(lat))  # km per degree of longitude here
+    ax, ay, bx, by = a_lon * kx, a_lat * 111.32, b_lon * kx, b_lat * 111.32
+    px, py = lon * kx, lat * 111.32
+    side = ((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / math.hypot(bx - ax, by - ay)  # km, + north-east
+    lumps = 14 * math.sin(x / 2300.0 + 1.3) * math.cos(y / 3100.0) + 6 * math.sin((x + y) / 900.0)
+    return 240.0 + (6.5 if side > 0 else 5.0) * abs(side) + lumps
+
+
+def dms(deg, pos, neg):
+    """63.517 -> 63°31'N"""
+    d = abs(deg)
+    m = round((d - int(d)) * 60)
+    return f"{int(d) + m // 60:d}°{m % 60:02d}'{pos if deg >= 0 else neg}"
+
+
 def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 720), span=8000.0):
     """The attack plot: tracing paper over a printed sea chart, worked in pencil. Our dead-reckoning track with time
     marks, each bearing ruled from where we took it, the reports, and the TDC's target in red. Centred on where we
@@ -431,18 +464,20 @@ def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 7
     chart = pygame.Surface(size)
     chart.fill(SEA)
     small, tiny = art.mono(13), art.mono(11)
-    for gx in range(int((x0 - span / 2) // 2000) * 2000, int(x0 + span / 2) + 2000, 2000):  # graticule, 2 km
-        px = at(gx, 0)[0]
-        pygame.draw.line(chart, PRINT, (px, 0), (px, h))
-        chart.blit(small.render(f"12°{30 + gx / 1852:04.1f}'W", True, PRINT), (px + 3, h - 18))
-    for gy in range(int((y0 - span / 2) // 2000) * 2000, int(y0 + span / 2) + 2000, 2000):
-        py = at(0, gy)[1]
+    lat0, lon0 = latlon(x0, y0)
+    per_lon = 111320.0 * math.cos(math.radians(lat0))  # metres per degree of longitude here
+    half = span / 2
+    for minute in range(math.floor((lat0 - half / 111320) * 60), math.ceil((lat0 + half / 111320) * 60) + 1):
+        py = at(0, (minute / 60 - DATUM[0]) * 111320)[1]  # a parallel every minute of latitude
         pygame.draw.line(chart, PRINT, (0, py), (w, py))
-        chart.blit(small.render(f"47°{15 + gy / 1852:04.1f}'N", True, PRINT), (4, py + 2))
+        chart.blit(small.render(dms(minute / 60, "N", "S"), True, PRINT), (4, py + 2))
+    for m2 in range(math.floor((lon0 - half / per_lon) * 30), math.ceil((lon0 + half / per_lon) * 30) + 1):
+        px = at((m2 / 30 - DATUM[1]) * per_lon, 0)[0]  # a meridian every two minutes of longitude
+        pygame.draw.line(chart, PRINT, (px, 0), (px, h))
+        chart.blit(small.render(dms(m2 / 30, "E", "W"), True, PRINT), (px + 3, h - 18))
     for sx in range(int((x0 - span / 2) // 700) * 700, int(x0 + span / 2) + 700, 700):  # soundings, fixed to the sea
         for sy in range(int((y0 - span / 2) // 700) * 700, int(y0 + span / 2) + 700, 700):
-            depth = 1900 + 650 * math.sin(sx / 9000) + 420 * math.cos(sy / 7000 + sx / 15000)
-            chart.blit(tiny.render(f"{depth:.0f}", True, PRINT), at(sx + 120 * math.sin(sy), sy))
+            chart.blit(tiny.render(f"{sounding(sx, sy):.0f}", True, PRINT), at(sx + 120 * math.sin(sy), sy))
     rose, r = (w - 120, h - 130), 92  # the printed compass rose
     for rr in (r, r - 14):
         pygame.draw.circle(chart, MAGENTA, rose, rr, 1)
@@ -453,6 +488,13 @@ def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 7
                          (rose[0] + r * math.sin(a), rose[1] - r * math.cos(a)))
     pygame.draw.polygon(chart, MAGENTA, [(rose[0], rose[1] - r + 16), (rose[0] - 8, rose[1]), (rose[0] + 8, rose[1])])
     chart.blit(small.render("N", True, MAGENTA), (rose[0] - 4, rose[1] - r - 18))
+    v = math.radians(VARIATION)  # the magnetic rose inside it, turned by the local variation
+    tip = (rose[0] + (r - 30) * math.sin(v), rose[1] - (r - 30) * math.cos(v))
+    pygame.draw.line(chart, MAGENTA, rose, tip, 2)
+    pygame.draw.circle(chart, MAGENTA, tip, 4, 1)
+    for k, line in enumerate((f"VAR {abs(VARIATION):.0f}°W (1965)", "DECREASING 10' ANNUALLY")):
+        label = tiny.render(line, True, MAGENTA)
+        chart.blit(label, label.get_rect(center=(rose[0], rose[1] + 24 + 13 * k)))
     paper = art.texture(size, art.PAPER, grain=2, mottle=6)  # tracing paper: the chart shows through
     paper.set_alpha(105)
     chart.blit(paper, (0, 0))
@@ -502,11 +544,13 @@ def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 7
             crs, spd = math.degrees(math.atan2(vx, vy)) % 360, math.hypot(vx, vy) / KNOT
             chart.blit(art.hand(19).render(f"TGT C{crs:03.0f} S{spd:.0f}", True, RED_PENCIL),
                        (here[0] + 14, here[1] + 8))
-    bar = w * 2000 / span  # scale bar and title block, bottom left
-    pygame.draw.line(chart, PENCIL, (20, h - 50), (20 + bar, h - 50), 3)
-    for kx in (0, bar / 2, bar):
-        pygame.draw.line(chart, PENCIL, (20 + kx, h - 56), (20 + kx, h - 44), 2)
-    chart.blit(pen.render("0      1      2 KM", True, PENCIL), (16, h - 44))
+    bar = w * MILE / span  # a nautical mile in cables, and the chart's title, bottom and top left
+    pygame.draw.line(chart, PRINT, (90, h - 70), (90 + bar, h - 70), 3)
+    for c in range(11):
+        pygame.draw.line(chart, PRINT, (90 + bar * c / 10, h - (78 if c % 5 == 0 else 74)), (90 + bar * c / 10, h - 66),
+                         2 if c % 5 == 0 else 1)
+    chart.blit(tiny.render("0     5 CABLES      1 N.MILE", True, PRINT), (86, h - 62))
+    chart.blit(small.render("ICELAND - FAROE RIDGE.  SOUNDINGS IN FATHOMS", True, PRINT), (w - 420, 12))
     chart.blit(art.hand(22).render("ATTACK PLOT", True, PENCIL), (20, 12))
     return chart
 
