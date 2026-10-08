@@ -6,6 +6,7 @@ from collections import deque
 
 import numpy as np
 
+from geometry import true_bearings
 from sim import KNOT, YARD
 
 HISTORY = 480.0     # s of bearings kept
@@ -54,7 +55,7 @@ class TMALog:
         tx = own.x + tdc.x - vx * (now - times)
         ty = own.y + tdc.y - vy * (now - times)
         ox, oy = self.own_at(times)
-        return np.degrees(np.arctan2(tx - ox, ty - oy)) % 360, np.hypot(tx - ox, ty - oy)
+        return true_bearings(ox, oy, tx, ty), np.hypot(tx - ox, ty - oy)
 
     def recent(self, now, window):
         return [b for b in self.bearings if now - b[0] <= window]
@@ -90,7 +91,7 @@ class TMALog:
         tx = px[None, None, :, None] - vx[:, :, None, None] * back
         ty = py[None, None, :, None] - vy[:, :, None, None] * back
         dx, dy = tx - ox, ty - oy
-        err = np.abs(wrap(meas - np.degrees(np.arctan2(dx, dy)) % 360)).mean(axis=-1)
+        err = np.abs(wrap(meas - true_bearings(0.0, 0.0, dx, dy))).mean(axis=-1)
         if ranged:  # measured ranges pin down what bearings alone can't
             idx = np.array([i for i, _ in ranged])
             r_meas = np.array([r for _, r in ranged])

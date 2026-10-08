@@ -10,6 +10,7 @@ from campaign import PATROLS, UPGRADES, objective
 from console import ECHO_FADE
 from displays import CLASS_TAGS, CLASSES, SPEC_BINS, TEMPLATES
 from fire_control import FIELDS
+from geometry import bearing
 from graphics import console_art as art
 from graphics.crt_renderer import DIM, PHOSPHOR, RED, CRTRenderer
 from graphics.periscope import EYE, PeriscopeRenderer, View
@@ -556,7 +557,7 @@ class Workstation:
         speed and range are right, the curve runs through the dots."""
         x0, y0 = WF_POS
         now, own, tdc, log = con.world.time, con.world.player, con.tdc, con.tma
-        centre = math.degrees(math.atan2(tdc.x, tdc.y)) % 360
+        centre = bearing(0.0, 0.0, tdc.x, tdc.y)
         span = PLOT_SPAN
 
         def X(b):
