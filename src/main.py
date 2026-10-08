@@ -621,6 +621,8 @@ class Patrol(Scene):
                 self.on_foot.leave()
             self.on_foot, self.at = None, "ALL"
         elif self.on_foot and running:
+            pos, (tx, tz) = self.on_foot.room.pose.pos, cr.TABLE[:2]  # at the plot table, working it, or about
+            con.crew.captain_at = "TABLE" if math.hypot(pos[0] - tx, pos[2] - tz) < 1.4 else None
             then = self.on_foot.update(dt)
             if isinstance(then, tuple):
                 self.sit(then[1])

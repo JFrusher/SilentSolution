@@ -18,6 +18,7 @@ TRAINING = dict(DIFFICULTY["CADET"], battery=True, enemy_torp_kt=35, enemy_seeke
 HULL_FLOOR = 25.0  # training warheads: shaken, never sunk
 CHAPTERS = {  # chapter -> what it covers; the first watch runs the lot, each drill starts at the step tagged with it
     "FIRST WATCH": "THE COXSWAIN TAKES YOU ROUND EVERY STATION, THEN A LIVE ATTACK",
+    "THE ROOM": "ORDERS FROM THE CONN, THE PLOT TABLE, ALARMS AND CAPTIONS, RELIEVING A STATION",
     "STATION DRILL": "EVERY CONTROL: TELEGRAPH, HELM, DIVING, BLOW, PAGES",
     "SONAR AND FIRE CONTROL": "WATERFALL, PROFILE, MARK, PING, TDC, TMA PLOT",
     "THE PERISCOPE": "MASTS, EYEPIECE, MARKS, BEING SEEN, SNORKEL, A LIVE SHOT",
@@ -84,7 +85,7 @@ class Tutorial:
         self.i = self.start - 1
         self.timer = 0.0
         self.memo = {}
-        self.merchant = self.escort = self.sub = None
+        self.merchant = self.escort = self.sub = self.escort_ai = None
         self.finished = False
         self.advance()
 
@@ -154,6 +155,9 @@ class Tutorial:
             self.memo["outcome"] = kind
         elif kind == "CHARGES":
             self.memo.setdefault("charges_at", self.timer)
+        elif kind == "ESCORT_PING" and self.escort_ai in con.world.ais and not self.memo.get("pinged"):
+            self.memo["pinged"] = True  # the alarm drill: sonar reports it, by name
+            con.say(f"ACTIVE SONAR {con.passive.bearing_of(a):03.0f}R, ESCORT PINGING", "CONN, SONAR")
 
     @staticmethod
     def _with_stations(steps):
@@ -185,13 +189,45 @@ class Tutorial:
     def _script(self):
         S = Step
         return [
-            # --- station drill: every command ---
+            # --- the room: fighting the boat from the conn, through the crew ---
             S("WELCOME ABOARD, CAPTAIN. YOU STAND AT THE CONN AND YOUR CREW MANS THE STATIONS. WASD WALKS, E TAKES "
               "A STATION OR THE PERISCOPE, {STAND UP} STANDS YOU UP; HOLD THE RIGHT MOUSE BUTTON FOR THE ORDER WHEEL "
               "(ITS STATIONS RING TAKES YOU STRAIGHT THERE). A STATION'S KEYS PRESSED ANYWHERE ELSE ARE ORDERS TO ITS "
               "CREW. YOUR ORDER IS ON THE CARD ABOVE WITH THE STATION IT NEEDS, AND THE PART YOU NEED GLOWS. F1 SHOWS "
               "THE KEY CARD; {SKIP DRILL} SKIPS A DRILL.",
-              "PRESS {ACKNOWLEDGE} (OR CLICK THIS SLIP)", lambda t, c: "ENTER" in c.actions, chapter="STATION DRILL"),
+              "PRESS {ACKNOWLEDGE} (OR CLICK THIS SLIP)", lambda t, c: "ENTER" in c.actions, chapter="THE ROOM"),
+            S("CONN BY ORDERS: FROM HERE YOU FIGHT THE BOAT THROUGH YOUR CREW. HOLD THE RIGHT MOUSE BUTTON FOR THE "
+              "ORDER WHEEL, DRAG TO HELM, THEN COURSE, PICK ONE AND LET GO. THE HELMSMAN ANSWERS AND STEERS IT.",
+              "ORDER A COURSE ON THE ORDER WHEEL",
+              lambda t, c: c.crew.course is not None and abs(angle_diff(c.crew.course, c.world.player.heading)) < 3),
+            S("NOW THE DEPTH, ON THE WHEEL'S DEPTH RING: THE PLANESMAN TAKES HER DOWN.",
+              "ORDER 100 M ON THE ORDER WHEEL",
+              lambda t, c: c.world.player.ordered_depth == 100 and c.crew.worked.get("PLANES", -1) >= t.memo["t0"],
+              setup=lambda t, c: t.memo.update(t0=c.world.time)),
+            S("A HAND ON A CONTROL CANCELS THE STANDING ORDER FOR IT: PUT ON SOME RUDDER YOURSELF ({RUDDER LEFT} OR "
+              "{RUDDER RIGHT}) AND THE HELMSMAN DROPS THE COURSE HE WAS STEERING.", "CANCEL THE COURSE WITH RUDDER",
+              lambda t, c: c.crew.course is None, setup=self._steering),
+            S("THE PLOT TABLE, FORWARD OF THE PERISCOPE, IS WORKED IN PENCIL: YOUR TRACK, BEARING LINES, AND FIRE "
+              "CONTROL'S TARGET IN RED. WALK TO IT.", "WALK TO THE PLOT TABLE",
+              lambda t, c: c.crew.captain_at == "TABLE",
+              setup=self._plotted_merchant),
+            S("THE RED CIRCLE IS THE TARGET; ITS LINE IS WHERE IT WILL BE IN FIVE MINUTES. HEAD IT OFF: ORDER A COURSE "
+              "AHEAD OF IT, NOT AT IT.", "ORDER AN INTERCEPT COURSE", self._intercepting),
+            S("LISTEN WITH YOUR EYES. AN ORANGE LAMP FLASHES OVER A STATION WHEN SOMETHING'S WRONG, AND THE LEGEND AT "
+              "THE CONN SAYS WHAT. A MAN'S REPORT IS CAPTIONED WITH HIS NAME, AND AN ARROW POINTS TO HIM IF HE'S "
+              "BEHIND YOU. WAIT FOR IT, THEN GO TO HIM.", "WHEN THE LAMP FLASHES, GO TO THE MAN REPORTING",
+              lambda t, c: t.memo.get("pinged") and c.crew.captain_at == "SONAR", setup=self._distant_escort),
+            S("RELIEVING A STATION: TAKE FIRE CONTROL. ITS MAN GETS UP AND STANDS ASIDE FOR YOU.",
+              "TAKE OVER FIRE CONTROL", lambda t, c: c.crew.captain_at == "FIRE CONTROL",
+              setup=lambda t, c: _clear(c.world)),
+            S("WORK IT: WIND THE TARGET'S SPEED ON THE TDC WITH ITS CRANK (DRAG IT, OR SCROLL ON ITS ROW).",
+              "WIND TGT SPD ON THE TDC", lambda t, c: c.tdc.values["SPD"] != t.memo["spd"],
+              setup=lambda t, c: t.memo.update(spd=c.tdc.values["SPD"])),
+            S("NOW STAND UP ({STAND UP}). HE SITS BACK DOWN AND CARRIES ON FROM WHERE YOU LEFT IT.",
+              "STAND UP AND HAND IT BACK", lambda t, c: c.crew.captain_at is None),
+            # --- station drill: every command ---
+            S("THE STATION DRILL: EVERY CONTROL ON THE BOAT, STATION BY STATION.",
+              "PRESS {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, chapter="STATION DRILL"),
             S("THE SHIP'S GAUGES: DEPTH WITH HULL PRESSURE IN PSI (RED PAST 250 M IS CRUSH DEPTH), "
               "BATTERY, SELF NOISE (RED MEANS CAVITATION - ENEMIES HEAR IT), HULL INTEGRITY.",
               "STUDY THE GAUGES - {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, highlight=("gauges",)),
@@ -421,6 +457,39 @@ class Tutorial:
         return sol is not None and 300 <= arm <= sol.run / YARD - 300 and dep <= 15
 
     # ------------------------------------------------------------------ scenario setups
+    def _steering(self, t, con):
+        if con.crew.course is None:  # a standing course to cancel
+            con.crew.order("COURSE", round(con.world.player.heading + 40) % 360)
+
+    def _plotted_merchant(self, t, con):
+        """A merchant, with fire control's solution on it already: the red target on the plot."""
+        self._spawn_merchant(t, con)
+        p, m = con.world.player, self.merchant
+        con.tdc.set("BRG", fix(p, m).rel_brg)
+        con.tdc.set("RNG", p.range_to(m) / YARD)
+        con.tdc.set("SPD", m.speed / KNOT)
+        con.tdc.set("CRS", m.heading)
+
+    def _intercepting(self, t, con):
+        """An ordered course within 40 degrees of where the merchant will be in five minutes."""
+        p, m = con.world.player, self.merchant
+        if con.crew.course is None:
+            return False
+        vx, vy = m.velocity()
+        ahead = Vessel(m.x + vx * 300, m.y + vy * 300, 0, 0)
+        return abs(angle_diff(con.crew.course, fix(p, ahead).true_brg)) < 40
+
+    def _distant_escort(self, t, con):
+        """An escort far off, searching with its sonar but carrying no charges: the drill's alarm."""
+        _clear(con.world)
+        w = con.world
+        self.escort = _spawn(w, 200.0, 7000.0, w.player.heading + 90, 6 * KNOT)
+        self.escort_ai = EscortAI(self.escort, self.escort.heading, charges=0, decoys=0, aggression=0.2,
+                                  detect_radius=1500.0)
+        self.escort_ai.alarm = True
+        self.escort_ai._mark(w, 300.0)
+        w.ais.append(self.escort_ai)
+
     def _spawn_merchant(self, t, con):
         _clear(con.world)
         rel = 45.0

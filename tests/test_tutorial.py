@@ -54,6 +54,28 @@ def act(tut, con, once):
 
     if g.startswith("TAKE THE"):  # walks over and takes the station the coxswain sends him to
         con.crew.captain_at = g.removeprefix("TAKE THE ").removesuffix(" STATION")
+    elif g.startswith("ORDER A COURSE"):
+        do("course", lambda: con.crew.order("COURSE", 90))
+    elif g.startswith("ORDER 100 M"):
+        do("depth", lambda: con.crew.order("DEPTH", 100))
+    elif g.startswith("CANCEL THE COURSE"):
+        do("rudder", lambda: con.crew.order("RUDDER", 10))
+    elif g.startswith("WALK TO THE PLOT"):
+        con.crew.captain_at = "TABLE"
+    elif g.startswith("ORDER AN INTERCEPT"):  # reads the red line on the plot: where she'll be in five minutes
+        m = tut.merchant
+        vx, vy = m.velocity()
+        do("intercept", lambda: con.crew.order("COURSE", round(bearing(p.x, p.y, m.x + vx * 300, m.y + vy * 300)
+                                                                / 45) * 45 % 360))
+    elif g.startswith("WHEN THE LAMP FLASHES"):
+        if tut.memo.get("pinged"):
+            con.crew.captain_at = "SONAR"
+    elif g.startswith("TAKE OVER FIRE"):
+        con.crew.captain_at = "FIRE CONTROL"
+    elif g.startswith("WIND TGT SPD"):
+        do("crank", lambda: con.scroll((60, layout.TDC_ROW_Y0 + 2 * layout.TDC_ROW_H + 9), 1))  # on its row
+    elif g.startswith("STAND UP AND HAND"):
+        con.crew.captain_at = None
     elif g.startswith(("PRESS ENTER", "STUDY", "WATCH THE NOISE", "TRAINING COMPLETE")):
         do("enter", lambda: con.key(pygame.K_RETURN))
     elif g.startswith("RING UP HALF"):

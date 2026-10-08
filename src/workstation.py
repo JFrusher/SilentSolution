@@ -438,10 +438,10 @@ class Workstation:
                  (cx, 76), DIM, small=True, center=True)
         for i, (name, blurb) in enumerate(CHAPTERS.items()):
             locked = i > 0 and not SETTINGS["trained"]
-            box = pygame.Rect(70, 96 + i * 46, 440, 40)
+            box = pygame.Rect(70, 92 + i * 40, 440, 36)
             crt.frame(s, box, color=DIM if locked else PHOSPHOR)
-            crt.text(s, f"[{i + 1}]  {name}", (box.x + 16, box.y + 4), DIM if locked else PHOSPHOR, big=True)
-            crt.text(s, "LOCKED: FINISH THE FIRST WATCH" if locked else blurb, (box.x + 16, box.y + 25), DIM,
+            crt.text(s, f"[{i + 1}]  {name}", (box.x + 16, box.y + 2), DIM if locked else PHOSPHOR, big=True)
+            crt.text(s, "LOCKED: FINISH THE FIRST WATCH" if locked else blurb, (box.x + 16, box.y + 22), DIM,
                      small=True)
             self.buttons.append((box.move(CRT_RECT.topleft), i))
         self._crt_button(s, crt, (220, 336, 140, 26), "[ESC] TITLE", "BACK", DIM)
