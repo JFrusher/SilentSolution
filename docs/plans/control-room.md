@@ -1,7 +1,6 @@
 # Control room — design and build plan
 
-> **Status: planned.** The walkable room exists (`control_room.py`, `graphics/room3d.py`, PR #5); everything
-> below splits the all-in-one console into crewed, job-specific stations.
+> **Status: built (all six milestones, PR #5).** Departures from the plan are noted on each milestone.
 
 **Decisions (agreed):**
 - You are the **captain**, and an AI **crew** mans every station.
@@ -92,12 +91,19 @@ Each milestone ships with its tests; the golden run is regenerated only where pl
      convoy and sonar reports, the TDC target in red. A parallel ruler, dividers, pencils and a rubber lie on it.
    - **Tests:** the klaxon sounds once; the lamps follow the four alarms; the legend lights the cause; marks,
      solution and reports show on the plot.
-4. **Crew figures**
-   - Procedural seated crewmen whose arms reach the controls; they stand aside when you take over.
-5. **Quick-glide and polish**
-   - Station keys and a wheel; "rig for red" lighting at battle stations; spatial audio for callouts.
-6. **Training rewritten for the room**
-   - Chapters walk you station to station, with 3D highlights and the crew explaining their jobs.
+4. **Crew figures** (built)
+   - Procedural crewmen seated at each station with their hands on the desk; the helmsman and planesman sit in the
+     helm seats. A station's crewman stands aside while the camera carries you to or from his seat.
+     (No animation yet; they hold their pose.)
+5. **Quick travel** (built)
+   - A STATIONS ring on the order wheel: a dip to black, then you're carried into the station (or to the eyepiece).
+     The number keys stayed weapon keys, so there are no station hotkeys. "Rig for red" and spatial callouts were
+     left out: the orange alarm lamps already change the room's light in a crisis.
+6. **Training in the room** (built)
+   - Training starts at the conn like a patrol. An instructor's card shows the order, his last words, and which
+     station to take (worked out from the step's highlighted parts); rings land on the right pieces of a station's
+     view. Drill texts explain the room; the drills' own goals and checks are unchanged, so the scripted trainee in
+     `tests/test_tutorial.py` still passes them all.
 
 ## 6. Risks
 

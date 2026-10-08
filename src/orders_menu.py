@@ -18,6 +18,9 @@ MENU = (
     ("WEAPONS", (("SALVO", ("FIRE", None)), ("TUBE 1", ("FIRE", 0)), ("TUBE 2", ("FIRE", 1)),
                  ("NOISEMAKER", ("NOISEMAKER", None)), ("PING", ("PING", None)))),
     ("MASTS", (("PERISCOPE", ("SCOPE", None)), ("SNORKEL", ("SNORKEL", None)))),
+    ("STATIONS", (("SONAR", ("GOTO", "SONAR")), ("FIRE CTRL", ("GOTO", "FIRE CONTROL")), ("RADIO", ("GOTO", "RADIO")),
+                  ("HELM", ("GOTO", "HELM AND PLANES")), ("BALLAST", ("GOTO", "BALLAST CONTROL")),
+                  ("DAMAGE CTRL", ("GOTO", "DAMAGE CONTROL")), ("PERISCOPE", ("GOTO", "PERISCOPE")))),
     ("EMERGENCY", (("CRASH DIVE", ("CRASH DIVE", None)), ("BLOW", ("BLOW", None)), ("EVADE LEFT", ("EVADE", -1)),
                    ("EVADE RIGHT", ("EVADE", 1)))),
 )

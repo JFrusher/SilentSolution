@@ -85,6 +85,39 @@ def allows(view, action):
     return view.name == "ALL" or action in view.actions or action in GLOBAL
 
 
+def shape_rect(shape):
+    """A tutorial highlight (a rect, or a centre and radius) as a rect on the full console."""
+    if isinstance(shape, pygame.Rect):
+        return shape
+    (cx, cy), r = shape
+    return R(cx - r, cy - r, 2 * r, 2 * r)
+
+
+def rings(view, shape):
+    """Where a highlight on the full console lands on a station canvas: a rect per piece that shows it."""
+    box = shape_rect(shape)
+    out = []
+    for p in view.pieces:
+        cut = box.clip(p.src)
+        if cut.w > 4 and cut.h > 4:
+            d = p.dst
+            out.append(R(d.x + (cut.x - p.src.x) * p.scale, d.y + (cut.y - p.src.y) * p.scale,
+                         cut.w * p.scale, cut.h * p.scale))
+    return out
+
+
+def station_for(highlights, shapes):
+    """The station that shows most of a drill step's highlighted parts, or None when there are none to show."""
+    best, most = None, 0
+    for v in VIEWS.values():
+        if v.name in ("ALL", "PERISCOPE"):
+            continue
+        n = sum(bool(rings(v, shapes[h])) for h in highlights)
+        if n > most:
+            best, most = v.name, n
+    return best
+
+
 class HeldAt:
     """pygame.key.get_pressed() as one station sees it: only that station's held keys count."""
 

@@ -56,6 +56,7 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
     "gauges": GAUGES.inflate(-4, -4),
     "noise": (GAUGE_POS["NOISE"], GAUGE_R + 4),
     "battery": (GAUGE_POS["BATTERY"], GAUGE_R + 4),
+    "hull": (GAUGE_POS["HULL"], GAUGE_R + 4),
     "telegraph": TELEGRAPH_RECT.inflate(6, 6),
     "wheel": pygame.Rect(WHEEL_C[0] - 90, WHEEL_C[1] - 78, 180, 168),
     "depth": pygame.Rect(DEPTH_C[0] - 86, DEPTH_C[1] - DEPTH_R - 8, 172, 140),
@@ -64,6 +65,7 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
     "ping": PING_BTN.inflate(10, 10),
     "lamps": pygame.Rect(796, 492, 114, 206),
     "masts": pygame.Rect(416, 492, 228, 96),
+    "periscope": pygame.Rect(416, 492, 228, 96),  # the full console rings the mast levers; the room, the scope
 }
 
 # periscope screen (look mode): the eyepiece and the instruments you can glimpse around it

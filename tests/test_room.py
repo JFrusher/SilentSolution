@@ -79,6 +79,8 @@ def take(station):
 
 # the patrol starts on your feet at the conn, the crew on watch
 frames(5)
+manned = {s.name for s in cr.STATIONS if s.working} - {"HELM AND PLANES"}  # the helm's pair belong to the room
+assert set(app.room().crew) == manned, "every crewed station has its crewman, seated or stood aside"
 assert scene.on_foot and scene.at is None and con.crew.captain_at is None
 assert np.linalg.norm(scene.on_foot.room.pose.pos - cr.by_periscope().pos) < 0.05
 

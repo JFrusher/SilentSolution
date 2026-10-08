@@ -117,3 +117,42 @@ assert scene.on_foot and scene.console.crew.captain_at is None
 scene.event(pygame.event.Event(pygame.KEYDOWN, key=settings.code("FASTER"), mod=0, unicode="", scancode=0))
 assert scene.console.crew.pending and scene.console.crew.pending[0][1] == "ENGINES"
 print("crew ok")
+
+# quick travel from the order wheel: on foot or from another station, a dip to black and you're carried in
+scene.go("HELM AND PLANES")
+assert scene.on_foot.fade > 0 and scene.on_foot.room.moving
+for _ in range(80):
+    scene = scene.update(1 / 60) or scene
+assert scene.at == "HELM AND PLANES" and scene.on_foot is None
+scene.go("SONAR")  # from a seat: up and across
+for _ in range(80):
+    scene = scene.update(1 / 60) or scene
+assert scene.at == "SONAR"
+print("quick travel ok")
+
+# training in the room: the drill sends you to the right station, rings land on it, ENTER works on your feet
+import stations  # noqa: E402
+from layout import HIGHLIGHTS  # noqa: E402
+from tutorial import TRAINING, Tutorial  # noqa: E402
+
+con = Console("TRAINING", app.audio, TRAINING)
+Tutorial(con, 1)  # SONAR AND FIRE CONTROL: the waterfall drill
+scene = main.Patrol(app, con)
+assert scene.on_foot, "training starts on your feet at the conn too"
+assert stations.station_for(con.tutorial.step.highlight, HIGHLIGHTS) == "SONAR"
+assert stations.station_for(("tdc", "waterfall"), HIGHLIGHTS) == "FIRE CONTROL"
+assert stations.station_for(("waterfall", "hull"), HIGHLIGHTS) == "DAMAGE CONTROL"
+scene.go("SONAR")
+for _ in range(80):
+    scene = scene.update(1 / 60) or scene
+assert scene.at == "SONAR" and stations.rings(scene.view, HIGHLIGHTS["waterfall"]), "the waterfall ring shows here"
+screen = pygame.display.get_surface()
+scene.draw(screen, 1 / 60)  # the instructor's card over the station
+first = main.Patrol(app, Console("TRAINING", app.audio, TRAINING))
+Tutorial(first.console, 0)
+step = first.console.tutorial.i
+first.event(pygame.event.Event(pygame.KEYDOWN, key=settings.code("ACKNOWLEDGE"), mod=0, unicode="", scancode=0))
+for _ in range(900):  # the drill moves on once the teleprinter has finished printing its briefing
+    first.update(1 / 60)
+assert not first.console.teletype.queue and first.console.tutorial.i > step, "ENTER acknowledges a drill on your feet"
+print("training in the room ok")

@@ -315,6 +315,57 @@ def console(m, s):
             m.box(seat + (0, 0.35, 0.22), (0.48, 0.6, 0.08), (0.3, 0.12, 0.1))
             m.cylinder((seat[0], 0.95, seat[2] - 0.45), (seat[0], 0.95, seat[2] - 0.75), 0.03, DARK)  # yoke column
             m.wheel((seat[0], 0.95, seat[2] - 0.45), (0, 0, 1), 0.17, DARK, mat=0)
+            crewman(m, (seat[0], 0.0, seat[2]), (0.0, 0.0, -1.0), seated=True, stool=False, hands=0.95)
+
+
+COVERALL, SKIN, HAIR = (0.16, 0.19, 0.26), (0.78, 0.6, 0.47), (0.18, 0.12, 0.08)
+
+
+def crewman(m, base, facing, seated, stool=True, hands=0.86):
+    """A crewman from boxes and rods: seated at his panel, hands on the desk (at height `hands`), or standing.
+    base: the floor point under him; facing: the level direction he faces."""
+    f = np.array(facing, float)
+    u = np.array((0.0, 1.0, 0.0))
+    r = np.cross(f, u)
+    axes = np.column_stack((r, u, f))
+    b = np.array(base, float)
+
+    def at(x, y, z):
+        return b + r * x + u * y + f * z
+    hip = 0.55 if seated else 0.92
+    if seated:
+        if stool:
+            m.cylinder(b, b + u * 0.45, 0.035, DARK, seg=8)
+            m.cylinder(b + u * 0.44, b + u * 0.5, 0.19, DARK, seg=12)
+        for side in (-0.1, 0.1):
+            m.box(at(side, hip, 0.2), (0.13, 0.12, 0.42), COVERALL, axes=axes)  # thighs
+            m.box(at(side, 0.27, 0.4), (0.11, 0.5, 0.12), COVERALL, axes=axes)  # shins
+            m.box(at(side, 0.03, 0.45), (0.12, 0.06, 0.24), DARK, axes=axes)  # boots
+    else:
+        for side in (-0.1, 0.1):
+            m.box(at(side, 0.46, 0.0), (0.13, 0.86, 0.14), COVERALL, axes=axes)
+            m.box(at(side, 0.03, 0.05), (0.12, 0.06, 0.24), DARK, axes=axes)
+    m.box(at(0, hip + 0.3, 0.04), (0.36, 0.55, 0.22), COVERALL, axes=axes)  # torso
+    m.box(at(0, hip + 0.72, 0.06), (0.17, 0.21, 0.19), SKIN, axes=axes)  # head
+    m.box(at(0, hip + 0.84, 0.03), (0.18, 0.05, 0.2), HAIR, axes=axes)
+    for side in (-1, 1):
+        shoulder = at(0.21 * side, hip + 0.52, 0.04)
+        if seated:  # reaching forward to the controls
+            elbow, hand = at(0.25 * side, hip + 0.28, 0.24), at(0.17 * side, hands, 0.5)
+        else:  # arms at his sides
+            elbow, hand = at(0.25 * side, hip + 0.22, 0.03), at(0.24 * side, hip - 0.05, 0.06)
+        m.cylinder(shoulder, elbow, 0.045, COVERALL, seg=6)
+        m.cylinder(elbow, hand, 0.04, COVERALL, seg=6)
+        m.box(hand, (0.07, 0.04, 0.09), SKIN, axes=axes)
+
+
+def watch_spot(s):
+    """Where a station's crewman sits (floor point) and faces, and where he stands aside when the captain takes over."""
+    c, n = np.array(s.centre), np.array(s.normal)
+    flat = np.array([n[0], 0.0, n[2]]) / math.hypot(n[0], n[2])
+    seat = np.array([c[0], 0.0, c[2]]) + flat * 0.62
+    side = np.cross(flat, (0.0, 1.0, 0.0))
+    return seat, -flat, seat + side * (s.w / 2 + 0.25) + flat * 0.15
 
 
 def _alert_lamps():
@@ -521,6 +572,18 @@ class RoomRenderer:
         vbo = self.ctx.buffer(build_room().tobytes())
         self.room = self.ctx.vertex_array(self.solid, [(vbo, "3f 3f 3f 1f", "in_pos", "in_norm", "in_col", "in_mat")])
         self.panels = []  # (vertex array, texture, normal, glow, name)
+        self.crew = {}    # station -> (seated, stood aside): its crewman, drawn one way or the other
+        for s in cr.STATIONS:
+            if s.working and s.name != "HELM AND PLANES":  # the helmsman and planesman are part of the room
+                seat, facing, aside = watch_spot(s)
+                poses = []
+                for base, seated in ((seat, True), (aside, False)):
+                    mesh = Mesh()
+                    crewman(mesh, base, facing, seated)
+                    buf = self.ctx.buffer(mesh.array().tobytes())
+                    poses.append(self.ctx.vertex_array(self.solid, [(buf, "3f 3f 3f 1f", "in_pos", "in_norm",
+                                                                     "in_col", "in_mat")]))
+                self.crew[s.name] = tuple(poses)
         for s in cr.STATIONS:
             tex_size = (W, H) if s.working else (int(s.w * 400), int(s.h * 400))
             surf = None if s.working else panel_art(s.name, tex_size)
@@ -558,9 +621,10 @@ class RoomRenderer:
     def texture(self, name):
         return next(p[1] for p in self.panels if p[4] == name)
 
-    def render(self, pose, screens=None, plot_surf=None, legend_surf=None, alert=0.0):
+    def render(self, pose, screens=None, plot_surf=None, legend_surf=None, alert=0.0, aside=()):
         """Draw the room from `pose`. screens: fresh station canvases by name (the rest keep their last picture);
-        plot_surf: the plot table, when it has changed; legend_surf: the alarm legend; alert: the orange lamps, 0..1."""
+        plot_surf: the plot table, when it has changed; legend_surf: the alarm legend; alert: the orange lamps, 0..1;
+        aside: stations whose crewman has stood aside for the captain."""
         for name, surf in (screens or {}).items():
             self.upload(self.texture(name), surf)
         if legend_surf is not None:
@@ -586,6 +650,8 @@ class RoomRenderer:
         self.msaa.use()
         self.ctx.clear(*FOG, depth=1.0)
         self.room.render()
+        for name, (sat, stood) in self.crew.items():
+            (stood if name in aside else sat).render()
         for vao, tex, n, glow, _ in self.panels:
             tex.use(0)
             self.flat["tex"].value = 0

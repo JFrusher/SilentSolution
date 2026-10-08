@@ -147,11 +147,13 @@ class Tutorial:
         S = Step
         return [
             # --- station drill: every command ---
-            S("WELCOME ABOARD. THIS DRILL WALKS YOU THROUGH EVERY STATION, THEN LIVE EXERCISES. YOUR CURRENT "
-              "ORDER IS PINNED ON THE SLIP ABOVE; THE PART OF THE STATION YOU NEED GLOWS. F1 SHOWS THE KEY CARD; "
-              "{SKIP DRILL} SKIPS A DRILL.",
+            S("WELCOME ABOARD, CAPTAIN. YOU STAND AT THE CONN AND YOUR CREW MANS THE STATIONS. WASD WALKS, E TAKES "
+              "A STATION OR THE PERISCOPE, {STAND UP} STANDS YOU UP; HOLD THE RIGHT MOUSE BUTTON FOR THE ORDER WHEEL "
+              "(ITS STATIONS RING TAKES YOU STRAIGHT THERE). A STATION'S KEYS PRESSED ANYWHERE ELSE ARE ORDERS TO ITS "
+              "CREW. YOUR ORDER IS ON THE CARD ABOVE WITH THE STATION IT NEEDS, AND THE PART YOU NEED GLOWS. F1 SHOWS "
+              "THE KEY CARD; {SKIP DRILL} SKIPS A DRILL.",
               "PRESS {ACKNOWLEDGE} (OR CLICK THIS SLIP)", lambda t, c: "ENTER" in c.actions, chapter="STATION DRILL"),
-            S("ENGINEERING GAUGES, TOP RIGHT: DEPTH WITH HULL PRESSURE IN PSI (RED PAST 250 M IS CRUSH DEPTH), "
+            S("THE SHIP'S GAUGES: DEPTH WITH HULL PRESSURE IN PSI (RED PAST 250 M IS CRUSH DEPTH), "
               "BATTERY, SELF NOISE (RED MEANS CAVITATION - ENEMIES HEAR IT), HULL INTEGRITY.",
               "STUDY THE GAUGES - {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, highlight=("gauges",)),
             S("THE ALARM PANEL HAS A LIT TILE FOR EVERY SOUND CUE, LEGEND PRINTED ON IT: ENEMY SONAR, TORPEDO, "
@@ -216,13 +218,15 @@ class Tutorial:
               "SET TGT RNG = ECHO RANGE  ({TDC ROW UP}/{TDC ROW DOWN}, {TDC VALUE UP}/{TDC VALUE DOWN})",
               lambda t, c: abs(c.tdc.get("RNG") * YARD - c.world.player.range_to(t.merchant)) < 400 * YARD,
               highlight=("tdc",)),
-            S("{TMA PAGE} FLIPS THE LEFT OF THE MONITOR TO THE TMA PLOT: TRUE BEARING ACROSS, TIME DOWN. EVERY "
+            S("FIRE CONTROL'S MONITOR IS THE TMA PLOT ({TMA PAGE} FLIPS TO IT ON THE FULL CONSOLE): TRUE BEARING "
+              "ACROSS, TIME DOWN. EVERY "
               "BEARING YOU HOLD WITH THE DIAL, MARK OR PING IS A DOT; THE BRIGHT CURVE IS WHERE THE TDC SAYS THE "
               "TARGET SHOULD HAVE BEEN.", "OPEN THE TMA PLOT  ({TMA PAGE})", lambda t, c: c.crt_page == "TMA",
-              highlight=("waterfall",)),
+              highlight=("tdc", "waterfall")),
             S(lambda c: "TARGET MOTION ANALYSIS: SET TGT SPD AND TGT CRS UNTIL THE CURVE RUNS THROUGH THE DOTS AND THE "
-                        "FIT READS UNDER A DEGREE - {AUTO-SOLVE} AUTO-SOLVES IN TRAINING. THEN {TMA PAGE} BACK TO THE "
-                        f"WATERFALL. INTEL: ABOUT {self.merchant.speed / KNOT:.0f} KNOTS, COURSE ABOUT "
+                        "FIT READS UNDER A DEGREE - {AUTO-SOLVE} AUTO-SOLVES IN TRAINING. THEN BACK TO THE WATERFALL "
+                        "AT SONAR ({TMA PAGE} ON THE FULL CONSOLE). "
+                        f"INTEL: ABOUT {self.merchant.speed / KNOT:.0f} KNOTS, COURSE ABOUT "
                         f"{round(self.merchant.heading / 10) * 10:03.0f}. RE-MARK ({{MARK}}) IF THE TICK HAS DRIFTED.",
               "SET TGT SPD AND TGT CRS, THEN {TMA PAGE}",
               lambda t, c: abs(c.tdc.get("SPD") - t.merchant.speed / KNOT) <= 1.5 and c.crt_page == "SONAR" and
@@ -233,23 +237,25 @@ class Tutorial:
               "18 M OR SHALLOWER.", "PERISCOPE DEPTH  ({PERISCOPE DEPTH}, P.D. BUTTON)",
               lambda t, c: c.world.player.z <= 16,
               setup=self._ensure_merchant, highlight=("depth",), chapter="THE PERISCOPE"),
-            S("UP SCOPE: {RAISE SCOPE} OR THE SCOPE SWITCH. THEN {LOOK} OR LOOK PUTS YOUR EYE TO IT. AT THE "
+            S("UP SCOPE: AT THE PERISCOPE STAND, E RAISES THE SCOPE AND PUTS YOUR EYE TO IT ({RAISE SCOPE} THEN "
+              "{LOOK} ON THE FULL CONSOLE). AT THE "
               "EYEPIECE YOU CANNOT SEE THE STATION - THE STRIP ALONG THE BOTTOM STILL CARRIES THE WARNINGS. ON THE "
               "BEARING TAPE, S MARKS YOUR SONAR DIAL AND T THE TDC'S TARGET; {SCOPE TO SONAR} SWINGS THE SCOPE ONTO "
               "THE SONAR BEARING.",
-              "UP SCOPE ({RAISE SCOPE}) AND LOOK ({LOOK})", lambda t, c: c.looking, highlight=("masts",)),
+              "UP SCOPE ({RAISE SCOPE}) AND LOOK ({LOOK})", lambda t, c: c.looking, highlight=("masts", "periscope")),
             S(lambda c: "TRAIN THE SCOPE: {TRAIN LEFT} / {TRAIN RIGHT} OR DRAG ACROSS THE EYEPIECE. {SCOPE POWER} OR "
                         "THE MOUSE WHEEL SWITCHES TO HIGH POWER (6X). THE MERCHANT BEARS ABOUT "
                         f"{self._merchant_rel(c):03.0f} RELATIVE - PUT HER IN THE WIRES.",
               "MERCHANT IN THE WIRES, HIGH POWER  ({TRAIN LEFT}/{TRAIN RIGHT}, {SCOPE POWER})",
-              self._merchant_in_wires),
+              self._merchant_in_wires, highlight=("periscope",)),
             S("PRESS {MARK}: THE EXACT BEARING AND A RANGEFINDER RANGE (HER KNOWN MAST HEIGHT AGAINST THE GRADUATIONS) "
               "GO STRAIGHT INTO THE TDC - FAR BETTER THAN SONAR. HER BOW TELLS YOU WHICH WAY SHE IS HEADING.",
-              "MARK  ({MARK})", lambda t, c: "SCOPE_MARK" in c.actions and c.scope_fix is not None),
+              "MARK  ({MARK})", lambda t, c: "SCOPE_MARK" in c.actions and c.scope_fix is not None,
+              highlight=("periscope",)),
             S("EVERY SECOND THE SCOPE IS UP YOU CAN BE SEEN. THE EXPOSURE METER ON THE RIGHT PLATE IS THE RISK PER "
-              "MINUTE; SPEED THROWS A FEATHER OF SPRAY. LOOK BRIEFLY, THEN GET IT DOWN: {LOOK} BACK TO THE STATION, "
-              "{RAISE SCOPE} DOWN SCOPE.", "BACK ({LOOK}) AND DOWN SCOPE ({RAISE SCOPE})",
-              lambda t, c: not c.looking and not c.world.player.scope_up, highlight=("masts", "lamps")),
+              "MINUTE; SPEED THROWS A FEATHER OF SPRAY. LOOK BRIEFLY, THEN GET IT DOWN: {LOOK} STEPS BACK FROM THE "
+              "EYEPIECE, {RAISE SCOPE} ORDERS IT DOWN.", "BACK ({LOOK}) AND DOWN SCOPE ({RAISE SCOPE})",
+              lambda t, c: not c.looking and not c.world.player.scope_up, highlight=("periscope",)),
             # --- fire control, one piece at a time ---
             S("FIRE CONTROL, ONE STEP AT A TIME. FIRST READ THE SOLUTION. AT THE FOOT OF THE TDC, GYRO IS THE "
               "COURSE THE FISH WILL RUN AND RUN IS HOW FAR IT SWIMS TO MEET HER; THE LAMP BESIDE THEM IS GREEN WHEN "
@@ -321,14 +327,14 @@ class Tutorial:
               lambda t, c: c.world.player.z <= 70 and _kt(c) == 4, setup=lambda t, c: _clear(c.world),
               highlight=("depth", "telegraph")),
             S("DAMAGE CONTROL: THAT PATTERN SPRANG THE BOAT - HYDROPHONES, PLANES AND TUBE 2 ARE OUT. ONE PARTY "
-              "WORKS DOWN THE LIST, TOP FIRST. {DAMAGE BOARD} OPENS THE DAMAGE BOARD: CLICK A LINE TO SEND THE "
-              "PARTY THERE FIRST. JAMMED PLANES CAN'T PULL YOU OUT OF A DIVE - PUT THEM FIRST, THEN {DAMAGE BOARD} "
-              "BACK TO THE WATERFALL.",
+              "WORKS DOWN THE LIST, TOP FIRST. DAMAGE CONTROL'S MONITOR IS THE DAMAGE BOARD ({DAMAGE BOARD} ON THE "
+              "FULL CONSOLE): CLICK A LINE TO SEND THE PARTY THERE FIRST. JAMMED PLANES CAN'T PULL YOU OUT OF A DIVE "
+              "- PUT THEM FIRST, THEN BACK TO THE WATERFALL AT SONAR.",
               "{DAMAGE BOARD}, PLANES FIRST, {DAMAGE BOARD} BACK",
               lambda t, c: "REPAIR_FIRST" in c.actions and c.crt_page == "SONAR" and
               next(iter(c.world.player.damaged), None) == "PLANES",
               setup=lambda t, c: c.world.player.break_systems(["HYDROPHONES", "PLANES", "TUBE 2"]),
-              highlight=("waterfall",),
+              highlight=("waterfall", "hull"),
               outro="INSTRUCTOR: GOOD. FOR THE EXERCISE THE DAMAGE IS MADE GOOD; ON PATROL HITS BREAK SYSTEMS AT "
                     "RANDOM AND THE PARTY TAKES MINUTES OVER EACH."),
             S("TORPEDO IN THE WATER! AN ENEMY SUBMARINE HAS FIRED ON YOU. THE TORPEDO LAMP FLASHES AND ITS TRACE IS "

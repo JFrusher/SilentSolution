@@ -1,6 +1,8 @@
 """Silent Solution: game loop and screens (title, settings, training, replays, career, debrief, patrol).
 Each screen is a Scene: it takes events, advances, draws, and hands back the next scene when it changes."""
 import datetime
+import math
+import textwrap
 import traceback
 from pathlib import Path
 
@@ -17,7 +19,7 @@ from console import Console
 from graphics import console_art as art
 from graphics.room3d import RoomRenderer, legend_art, plot_art
 from graphics.tabletop import ReplayView
-from layout import CRT_RECT, H, W
+from layout import CRT_RECT, HIGHLIGHTS, H, W
 from orders_menu import OrderWheel
 from tuning import DIFFICULTY
 from tutorial import CHAPTERS, TRAINING, Tutorial
@@ -289,6 +291,7 @@ class OnFoot:
         if to is not None:  # carried somewhere first: you have your feet once it's done
             self.room.carry(to, "ROOM")
         self.focus = focus  # the station being left or approached: its screen is kept exact for the cut
+        self.fade = 0.0     # s left of a quick-travel's dip to black
         self.plot_at, self.turn = -1e9, 0
         con.crew.captain_at = None  # the crew has the watch
         pygame.mouse.set_relative_mode(True)
@@ -306,30 +309,52 @@ class OnFoot:
         elif use:
             return self.use()
         elif e.type == pygame.KEYDOWN:  # a station's key, pressed away from it: an order to the crew
-            order = crew.order_for(settings.action_for(e.key), self.con)
+            action = settings.action_for(e.key)
+            order = crew.order_for(action, self.con)
             if order:
                 self.con.crew.order(*order)
+            elif action in stations.GLOBAL:  # acknowledge, skip drill, debug work wherever you stand
+                self.con.key(e.key)
         return None
 
     def use(self):
-        con, thing = self.con, self.room.target()
+        thing = self.room.target()
         if thing == "PERISCOPE":
-            if not con.world.player.scope_up:
-                con.toggle_scope()  # take hold of the handles: up scope
-            if con.world.player.scope_up:
-                self.room.carry(cr.at_eyepiece(), "EYEPIECE")
-            return None
-        if thing is not None and thing.working:
-            self.focus = thing.name
-            self.room.carry(cr.seated(thing), ("SEATED", thing.name))
-            return None
-        return f"{thing.name}: NOT MANNED THIS PATROL" if thing is not None else None
+            self.periscope()
+        elif thing is not None and thing.working:
+            self.take(thing)
+        elif thing is not None:
+            return f"{thing.name}: NOT MANNED THIS PATROL"
+        return None
+
+    def periscope(self):
+        p = self.con.world.player
+        if not p.scope_up:
+            self.con.toggle_scope()  # take hold of the handles: up scope
+        if p.scope_up:
+            self.room.carry(cr.at_eyepiece(), "EYEPIECE")
+
+    def take(self, station):
+        self.focus = station.name
+        self.room.carry(cr.seated(station), ("SEATED", station.name))
+
+    def go(self, name):
+        """Quick travel: a dip to black, and you're at the station (or the periscope), being carried in."""
+        self.fade = 0.35
+        if name == "PERISCOPE":
+            self.room.pose = cr.by_periscope()
+            self.periscope()
+        else:
+            station = next(s for s in cr.STATIONS if s.name == name)
+            self.room.pose = cr.standing(station)
+            self.take(station)
 
     def update(self, dt):
         """Walk; returns where a finished camera move has put you: ("SEATED", station), "EYEPIECE" or "ROOM"."""
         k = pygame.key.get_pressed()
         shift = k[pygame.K_LSHIFT] or k[pygame.K_RSHIFT]
         then = self.room.update(dt, k[pygame.K_w] - k[pygame.K_s], k[pygame.K_d] - k[pygame.K_a], shift)
+        self.fade = max(0.0, self.fade - dt)
         if then == "ROOM":
             self.focus = None
         return then
@@ -353,7 +378,12 @@ class OnFoot:
             self.plot_at = w.time
         lamps = alerts(con)  # the lamps flash with their alarms; the legend at the conn says which
         alert = float(any(on for _, on, _ in lamps))
-        screen.blit(app.room().render(self.room.pose, screens, plot, legend_art(lamps), alert), (0, 0))
+        aside = (self.focus,) if self.focus else ()  # his crewman steps out of the way of the station you take
+        screen.blit(app.room().render(self.room.pose, screens, plot, legend_art(lamps), alert, aside), (0, 0))
+        if self.fade:
+            dark = pygame.Surface((W, H))
+            dark.set_alpha(int(255 * self.fade / 0.35))
+            screen.blit(dark, (0, 0))
         if self.room.moving:
             return
         font = art.mono(15, True)
@@ -386,12 +416,8 @@ class Patrol(Scene):
         self.grip = None           # the station piece a drag started on
         self.note = ("", 0)        # the line on the subtitle and when it went up
         self.log_seen = console.log[-1] if console.log else ""
-        self.at, self.on_foot = None, None  # the station you're working, or OnFoot while you walk the room
-        if console.tutorial:
-            self.at = "ALL"
-            console.crew.captain_at = "SONAR"
-        else:
-            self.on_foot = OnFoot(app, console, cr.by_periscope())
+        self.at = None  # the station you're working (the full console, "ALL", once the boat is lost)
+        self.on_foot = OnFoot(app, console, cr.by_periscope())  # you start on your feet at the conn
 
     @property
     def name(self):
@@ -456,7 +482,9 @@ class Patrol(Scene):
             self.wheel.motion(*e.rel)
         elif self.wheel.open and e.type == pygame.MOUSEBUTTONUP and e.button == 3:
             order = self.wheel.release()
-            if order:
+            if order and order[0] == "GOTO":
+                self.go(order[1])
+            elif order:
                 con.crew.order(*order)
         elif self.on_foot:
             said = self.on_foot.event(e)
@@ -465,6 +493,18 @@ class Patrol(Scene):
         else:
             self.station_event(e)
         return None
+
+    def go(self, name):
+        """Quick travel from the order wheel, from wherever you are; training keeps the full console."""
+        con = self.console
+        if self.at == "ALL" or self.over:
+            return
+        if not self.on_foot:
+            station = next((s for s in cr.STATIONS if s.name == self.at), None)
+            start = cr.seated(station) if station else cr.at_eyepiece()
+            con.looking, self.from_room = False, False
+            self.on_foot, self.at = OnFoot(self.app, con, start), None
+        self.on_foot.go(name)
 
     def station_event(self, e):
         """Your hands on a station: its own keys and panels work; any other station key is an order."""
@@ -540,6 +580,33 @@ class Patrol(Scene):
                 app.career.add_score(con.level, con.score, con.wave)
         return None
 
+    def training(self, screen):
+        """The instructor's card over the room or a station: the order, his last words, and where to go for it;
+        at a station, rings round the parts the order is about."""
+        tut, con = self.console.tutorial, self.console
+        step = tut.step
+        if not self.on_foot:
+            pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 160)
+            for name in step.highlight:
+                for rect in stations.rings(self.view, HIGHLIGHTS[name]):
+                    pygame.draw.rect(screen, (255, int(150 + 90 * pulse), 40), rect.inflate(6, 6), 3, border_radius=8)
+        needed = "PERISCOPE" if "periscope" in step.highlight else stations.station_for(step.highlight, HIGHLIGHTS)
+        lines = textwrap.wrap(f"ORDER {tut.progress}: {tut.goal}", 64)
+        at_scope = self.on_foot and self.on_foot.room.target() == "PERISCOPE"
+        if needed and needed != self.at and not con.looking and not (needed == "PERISCOPE" and at_scope):
+            lines.append("GO TO THE PERISCOPE STAND" if needed == "PERISCOPE" else f"TAKE THE {needed} STATION")
+        said = [*list(con.teletype.lines)[-4:], con.teletype.typing]
+        card = pygame.Rect(0, 0, 720, 18 + 22 * len(lines) + 17 * len(said))
+        card.midtop = (W // 2, 34)
+        pygame.draw.rect(screen, (246, 242, 222), card)
+        pygame.draw.rect(screen, art.INK_RED, card, 2)
+        for i, line in enumerate(lines):
+            colour = art.INK_RED if line.startswith(("TAKE", "GO TO")) else art.INK
+            screen.blit(art.mono(16, True).render(line, True, colour), (card.x + 12, card.y + 8 + 22 * i))
+        top = card.y + 12 + 22 * len(lines)
+        for i, line in enumerate(said):
+            screen.blit(art.mono(13).render(line, True, (90, 88, 80)), (card.x + 12, top + 17 * i))
+
     def sit(self, station):
         self.on_foot.leave()
         self.on_foot, self.at = None, station
@@ -564,6 +631,8 @@ class Patrol(Scene):
                 self.on_foot.draw(screen, dt)
             else:
                 screen.blit(self.app.canvas(self.view, con, self.paused, dt), (0, 0))
+            if con.tutorial and not con.tutorial.finished:
+                self.training(screen)
             notice(screen, st.confirm or (["PATROL PAUSED", "", "[P] RESUME"] if self.paused else []))
             said, at = self.note
             if said and pygame.time.get_ticks() - at < self.SUBTITLE_TIME:
