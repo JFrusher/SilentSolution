@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 
+import geometry
+from geometry import angle_diff, bearing  # re-exported: the rest of the code imports them from here
 from tuning import (
     CHARGE_LETHAL,
     CHARGE_REACH,
@@ -80,15 +82,6 @@ def silhouette_class(ship):
 RUNNING, ACQUIRING, HOMING, EXHAUSTED = "RUNNING", "ACQUIRING", "HOMING", "EXHAUSTED"
 
 
-def bearing(ax, ay, bx, by):
-    return math.degrees(math.atan2(bx - ax, by - ay)) % 360
-
-
-def angle_diff(a, b):
-    """Signed a - b in degrees, wrapped to [-180, 180)."""
-    return (a - b + 180) % 360 - 180
-
-
 def clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
@@ -146,8 +139,7 @@ class Vessel:
     signal_until: float = -1.0  # an escort that has spotted us flashes its signal lamp until then
 
     def velocity(self):
-        h = math.radians(self.heading)
-        return self.speed * math.sin(h), self.speed * math.cos(h)
+        return geometry.velocity(self)
 
     def step(self, dt):
         vx, vy = self.velocity()
@@ -155,7 +147,12 @@ class Vessel:
         self.y += vy * dt
 
     def range_to(self, other):
-        return math.hypot(other.x - self.x, other.y - self.y)
+        """Horizontal range: navigation, lookouts, plotting."""
+        return geometry.horizontal(self, other)
+
+    def slant_to(self, other):
+        """3D range: what sound and seekers travel."""
+        return geometry.slant(self, other)
 
 
 @dataclass(eq=False)
@@ -375,11 +372,11 @@ class Torpedo(Vessel):
         def heard(c):  # the layer bends the seeker's sound away too
             return ocean.transmission(self, c)
 
-        in_cone = [c for c in contacts if self.range_to(c) <= self.seeker_range * heard(c) and
+        in_cone = [c for c in contacts if self.slant_to(c) <= self.seeker_range * heard(c) and
                    abs(angle_diff(bearing(self.x, self.y, c.x, c.y), self.heading)) <= self.seeker_half_arc]
 
         def signal(c):
-            return c.noise * heard(c) / max(self.range_to(c), 1.0)
+            return c.noise * heard(c) / max(self.slant_to(c), 1.0)
         best = max(in_cone, key=signal, default=None)
         if self.lock in in_cone and signal(best) < 1.5 * signal(self.lock):
             best = self.lock  # seeker holds its lock unless something clearly louder appears
@@ -532,7 +529,7 @@ class WorldSimulation:
         p = self.player
         for c in [c for c in self.charges if c.z >= c.set_depth]:
             self.charges.remove(c)
-            d = math.dist((c.x, c.y, c.z), (p.x, p.y, p.z))
+            d = c.slant_to(p)
             dmg = 100.0 if d < CHARGE_LETHAL else 60.0 * max(0.0, 1 - d / CHARGE_REACH) ** 2
             events.append(("CHARGE", c, dmg))
             self.damage(dmg, events)

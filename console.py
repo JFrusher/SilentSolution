@@ -10,6 +10,7 @@ import settings
 from ai import ThreatDirector
 from displays import CLASSES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
+from geometry import bearing, offset
 from graphics import console_art as art
 from graphics.periscope import EYE
 from layout import (
@@ -459,7 +460,7 @@ class Console:
                 self.actions.add("REPAIR_FIRST")
                 self.say(f"PARTY TO THE {rows[k]}")
         elif wf.collidepoint(pos) and self.crt_page == "TMA":  # the plot's x is true bearing round the TDC's
-            centre = math.degrees(math.atan2(self.tdc.x, self.tdc.y))
+            centre = bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
             self.dial = (centre + (x - wf.centerx) / WF_W * PLOT_SPAN - self.world.player.heading) % 360
         elif wf.collidepoint(pos):
             self.dial = (x - wf.x) / WF_W * 360
@@ -561,10 +562,9 @@ class Console:
                 continue
             self.audio.play_echo(2500 / rng, brg)
             self.waterfall.blip(brg, 230)
-            b = math.radians(brg + p.heading)
-            self.echoes.append((p.x + rng * math.sin(b), p.y + rng * math.cos(b), world.time))
+            self.echoes.append((*offset(p.x, p.y, brg + p.heading, rng), world.time))
             self.last_echo = (brg, rng / YARD)
-            tdc_true = math.degrees(math.atan2(self.tdc.x, self.tdc.y)) % 360
+            tdc_true = bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
             if abs(angle_diff(brg + p.heading, tdc_true)) < 3:  # an echo on the plotted target: range for TMA
                 self.tma.add(world.time, brg + p.heading, "ECHO", rng)
             self.say(f"ECHO {brg:05.1f}R {rng / YARD:,.0f} YD")

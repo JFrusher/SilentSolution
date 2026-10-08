@@ -157,7 +157,7 @@ class ShipAI:
         return 1 - self.layer_sensitivity * (1 - world.ocean.transmission(self.ship, other))
 
     def _in_earshot(self, world, max_range):
-        return self.ship.range_to(world.player) <= max_range * self._trans(world, world.player)
+        return self.ship.slant_to(world.player) <= max_range * self._trans(world, world.player)
 
     def _mark(self, world, error):
         p = world.player
@@ -212,7 +212,7 @@ class ShipAI:
             return
         self.listen_timer = 1.0
         p = world.player
-        r = self.ship.range_to(p)
+        r = self.ship.slant_to(p)  # sound travels the slant path
         heard = (self.cavitation_instant and getattr(p, "cavitating", False) and r < PING_HEARING) or \
             r <= self.detect_radius * p.noise * self._trans(world, p)
         if heard or self._sighted(world):

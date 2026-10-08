@@ -6,8 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from ai import PATROL, EscortAI, SubmarineAI
+from geometry import fix
 from settings import keyed
-from sim import KNOT, YARD, Vessel, angle_diff, bearing
+from sim import KNOT, YARD, Vessel, angle_diff
 from tuning import DIFFICULTY
 
 # Cadet rules with a working battery (for the snorkel drill) and a homing enemy fish (for the decoy drill)
@@ -317,8 +318,7 @@ class Tutorial:
 
     # ------------------------------------------------------------------ periscope grading
     def _merchant_rel(self, con):
-        p = con.world.player
-        return (bearing(p.x, p.y, self.merchant.x, self.merchant.y) - p.heading) % 360
+        return fix(con.world.player, self.merchant).rel_brg
 
     def _merchant_in_wires(self, t, con):
         if not (con.looking and con.high_power and con.view):
