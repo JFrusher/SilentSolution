@@ -17,10 +17,11 @@ KEYS = {  # action -> pygame key name
     "SLOWER": "z", "FASTER": "x", "RUDDER LEFT": "left", "RUDDER RIGHT": "right", "RUDDER AMIDSHIPS": "c",
     "NOISEMAKER": "n", "SCOPE RANGE": "t", "WIRE LEFT": "[", "WIRE RIGHT": "]", "NEXT FISH": "\\", "CUT WIRE": "l",
     "TMA PAGE": "f2", "DAMAGE BOARD": "f5", "DEBUG": "f3", "ACKNOWLEDGE": "return", "SKIP DRILL": "f6",
+    "BEARING MODE": "f7", "WATERFALL SCALE": "f8", "SCOPE TO SONAR": "o",
 }
 RESERVED = ("escape", "f1", "p")  # quit / back, help card, pause
 DEFAULTS = dict(volume=dict(MASTER=0.8, SONAR=1.0, EFFECTS=1.0, AMBIENCE=1.0), mouse=1.0, large_text=False,
-                colorblind=False, keys=KEYS)
+                colorblind=False, true_bearings=True, keys=KEYS)
 SETTINGS = copy.deepcopy(DEFAULTS)
 
 
@@ -122,7 +123,8 @@ class SettingsMenu:
 
     def __init__(self):
         self.rows = [*(("VOLUME", c) for c in DEFAULTS["volume"]), ("MOUSE", None), ("LARGE TEXT", None),
-                     ("COLOUR-BLIND LAMPS", None), *(("KEY", a) for a in KEYS), ("RESET DEFAULTS", None),
+                     ("COLOUR-BLIND LAMPS", None), ("TRUE BEARINGS", None), *(("KEY", a) for a in KEYS),
+                     ("RESET DEFAULTS", None),
                      ("BACK", None)]
         self.sel = self.top = 0
         self.waiting = False
@@ -141,6 +143,8 @@ class SettingsMenu:
             return kind, None, "ON" if SETTINGS["large_text"] else "OFF"
         if kind == "COLOUR-BLIND LAMPS":
             return kind, None, "ON" if SETTINGS["colorblind"] else "OFF"
+        if kind == "TRUE BEARINGS":
+            return kind, None, "ON (NORTH-STABILISED)" if SETTINGS["true_bearings"] else "OFF (SHIP'S HEAD)"
         if kind == "KEY":
             waiting = self.waiting and row == self.rows[self.sel]
             return arg, None, "PRESS A KEY..." if waiting else SETTINGS["keys"][arg].upper()
@@ -156,6 +160,8 @@ class SettingsMenu:
             SETTINGS["large_text"] = not SETTINGS["large_text"]
         elif kind == "COLOUR-BLIND LAMPS":
             SETTINGS["colorblind"] = not SETTINGS["colorblind"]
+        elif kind == "TRUE BEARINGS":
+            SETTINGS["true_bearings"] = not SETTINGS["true_bearings"]
 
     def _select(self, i):
         self.sel = i % len(self.rows)

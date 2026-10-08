@@ -187,15 +187,22 @@ class Tutorial:
               lambda t, c: c.world.player.z >= 55, highlight=("depth",)),
 
             # --- sensors and fire control on a live merchant ---
-            S("A MERCHANT IS ON THE WATERFALL - THE BRIGHT VERTICAL TRACE. THE RED LINE IS YOUR HYDROPHONE DIAL: "
-              "{TRAIN LEFT} / {TRAIN RIGHT} OR CLICK THE WATERFALL. PUT IT ON THE TRACE UNTIL SIG READS LOCK.",
-              "DIAL ONTO THE TRACE: SIG = LOCK  ({TRAIN LEFT}/{TRAIN RIGHT}, CLICK)", lambda t, c: c.signal > 0.5,
+            S("A MERCHANT IS ON THE WATERFALL - THE BRIGHT TRACE. THE RED LINE IS YOUR HYDROPHONE DIAL: "
+              "{TRAIN LEFT} / {TRAIN RIGHT} OR CLICK THE WATERFALL. SIG SHOWS < OR > AND HOW FAR OFF YOU ARE; PUT "
+              "THE DIAL ON THE TRACE UNTIL IT READS LOCK. FROM THEN ON THE DIAL TRACKS HER BY ITSELF (TRACK) UNTIL "
+              "YOU TRAIN IT AWAY.",
+              "DIAL ONTO THE TRACE: SIG = LOCK  ({TRAIN LEFT}/{TRAIN RIGHT}, CLICK)", lambda t, c: c.locked,
               setup=self._spawn_merchant, highlight=("waterfall",), chapter="SONAR AND FIRE CONTROL"),
             S("THE ACOUSTIC PROFILE IS THE SPECTRUM OF WHATEVER THE DIAL HEARS. EVEN LOW PEAKS ARE A SLOW 2-BLADE "
               "MERCHANT SHAFT. THE LIBRARY BELOW IT MATCHES THE SHAPE: WARSHIPS WHINE HIGH, SUBS SHOW ONE FAINT "
               "LINE, TORPEDOES A SHARP HIGH SPIKE, NOISEMAKERS A FLAT WALL.",
               "KEEP THE DIAL ON IT: CLASS = MERCHANT", lambda t, c: c.classification == "MERCHANT",
               highlight=("spectrum",)),
+            S("THE WATERFALL IS NORTH-STABILISED: BEARINGS ARE TRUE, SO A TRACE STAYS PUT WHEN YOU TURN, AND "
+              "SLANTS AS THE CONTACT MOVES ACROSS YOU - A STEEP SLANT IS A FAST BEARING DRIFT, CLOSE OR QUICK. THE "
+              "BRIGHT TICK ON THE BOTTOM EDGE IS YOUR OWN HEAD. {BEARING MODE} SWITCHES EVERY DISPLAY TO SHIP'S-HEAD "
+              "BEARINGS; {WATERFALL SCALE} CHANGES HOW MUCH TIME THE WATERFALL HOLDS.",
+              "STUDY THE WATERFALL - {ACKNOWLEDGE}", lambda t, c: "ENTER" in c.actions, highlight=("waterfall",)),
             S("PRESS {MARK} TO MARK THE DIAL BEARING INTO THE TORPEDO DATA COMPUTER. THE BRIGHT TICKS ON THE TOP AND "
               "BOTTOM EDGE OF THE WATERFALL SHOW WHERE THE TDC THINKS THE TARGET IS.",
               "MARK BEARING  ({MARK})", lambda t, c: "MARK" in c.actions, highlight=("tdc", "waterfall")),
@@ -227,7 +234,9 @@ class Tutorial:
               lambda t, c: c.world.player.z <= 16,
               setup=self._ensure_merchant, highlight=("depth",), chapter="THE PERISCOPE"),
             S("UP SCOPE: {RAISE SCOPE} OR THE SCOPE SWITCH. THEN {LOOK} OR LOOK PUTS YOUR EYE TO IT. AT THE "
-              "EYEPIECE YOU CANNOT SEE THE STATION - THE STRIP ALONG THE BOTTOM STILL CARRIES THE WARNINGS.",
+              "EYEPIECE YOU CANNOT SEE THE STATION - THE STRIP ALONG THE BOTTOM STILL CARRIES THE WARNINGS. ON THE "
+              "BEARING TAPE, S MARKS YOUR SONAR DIAL AND T THE TDC'S TARGET; {SCOPE TO SONAR} SWINGS THE SCOPE ONTO "
+              "THE SONAR BEARING.",
               "UP SCOPE ({RAISE SCOPE}) AND LOOK ({LOOK})", lambda t, c: c.looking, highlight=("masts",)),
             S(lambda c: "TRAIN THE SCOPE: {TRAIN LEFT} / {TRAIN RIGHT} OR DRAG ACROSS THE EYEPIECE. {SCOPE POWER} OR "
                         "THE MOUSE WHEEL SWITCHES TO HIGH POWER (6X). THE MERCHANT BEARS ABOUT "

@@ -10,7 +10,7 @@ from campaign import PATROLS, UPGRADES, objective
 from console import ECHO_FADE
 from displays import CLASS_TAGS, CLASSES, SPEC_BINS, TEMPLATES
 from fire_control import FIELDS
-from geometry import bearing
+from geometry import bearing, offset
 from graphics import console_art as art
 from graphics.crt_renderer import DIM, PHOSPHOR, RED, CRTRenderer
 from graphics.periscope import EYE, PeriscopeRenderer, View
@@ -166,11 +166,14 @@ class Workstation:
         p, w = con.world.player, con.world
         sightings, wakes, bursts = con.view if con.view else ([], [], [])
         fov = SCOPE_FOV[con.high_power]
-        true_brg = (con.scope_brg + p.heading) % 360
+        true_brg = con.scope_true
         kt = p.speed / KNOT
         shake = max(0.0, kt - FEATHER_KT) * 0.8 + (1.0 if p.snorkeling else 0.0)
+        marks = [(con.dial_true, "S", (40, 120, 60))]  # S: the sonar dial; T: where the TDC puts the target
+        marks.append(((con.tdc.get("BRG") + p.heading) % 360, "T", (170, 40, 30)))
         view = View(true_brg, fov, con.optics.eye_height(), p.x, p.y, w.time, w.ocean, sightings, wakes, bursts,
-                    under=con.view is None, shake=shake)
+                    under=con.view is None, shake=shake, scale_ref=0.0 if con.true_mode() else p.heading,
+                    marks=marks)
         f.blit(self.periscope.render(view), (EYEPIECE_C[0] - EYE // 2, EYEPIECE_C[1] - EYE // 2))
         f.blit(self.scope_surround, (0, 0))
         keys = (f"{keylabel('TRAIN LEFT', 'TRAIN RIGHT')}  or drag   TRAIN",
@@ -489,15 +492,27 @@ class Workstation:
         elif con.crt_page == "DAMAGE":
             self._crt_damage(s, crt, con)
         else:
+            true = con.true_mode()
+            wf = con.waterfall
+            mode = "TRUE" if true else "REL"
             pages = f"{keylabel('TMA PAGE')}: TMA  {keylabel('DAMAGE BOARD')}: DAMAGE"
-            crt.text(s, f"PASSIVE WATERFALL  BRG REL   {pages}", (x0 + 14, 12), DIM, small=True)
-            s.blit(con.waterfall.draw(), WF_POS)
+            crt.text(s, f"WATERFALL {mode} {wf.row_interval:g}S/LN  {pages}", (x0 + 14, 12), DIM, small=True)
+            s.blit(wf.draw(relative=not true), WF_POS)
             crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
             for b in (0, 90, 180, 270, 359):
                 crt.text(s, f"{b:03d}", (x0 + b / 360 * WF_W - 10, y0 + WF_H + 3), DIM, small=True)
-            dx = x0 + con.dial / 360 * WF_W
+            per_min = 60 / wf.row_interval  # time axis: a tick a minute when the history is that long
+            for m in range(1, int(WF_H / per_min) + 1):
+                gy = y0 + m * per_min
+                crt.line(s, (x0, gy), (x0 + 5, gy), DIM)
+                crt.text(s, f"-{m}M", (x0 + 7, gy - 6), DIM, small=True)
+            if true:  # own ship's head, so a true picture still says which way the boat points
+                hx = x0 + con.world.player.heading / 360 * WF_W
+                crt.line(s, (hx, y0 + WF_H - 6), (hx, y0 + WF_H + 6), (220, 255, 220), 2)
+            dx = x0 + con.display_brg(con.dial_true) / 360 * WF_W
             crt.line(s, (dx, y0), (dx, y0 + WF_H - 1), RED)
-            tx = x0 + con.tdc.get("BRG") / 360 * WF_W  # TDC estimate tick: stays on the trace if TMA is right
+            tdc_true = con.tdc.get("BRG") + con.world.player.heading
+            tx = x0 + con.display_brg(tdc_true) / 360 * WF_W  # TDC estimate tick: stays on the trace if TMA is right
             crt.line(s, (tx, y0 - 5), (tx, y0 + 8), PHOSPHOR, 2)
             crt.line(s, (tx, y0 + WF_H - 8), (tx, y0 + WF_H + 1), PHOSPHOR, 2)
         self._spectrum(s, crt, con)
@@ -506,11 +521,16 @@ class Workstation:
             crt.text(s, msg, (LOG_POS[0], LOG_POS[1] + i * 15), PHOSPHOR if i == len(con.log) - 1 else DIM, small=True)
 
         p, ocean, sp = con.world.player, con.world.ocean, con.spectrum
-        lock = "LOCK" if con.signal > 0.5 else "WEAK" if con.signal > 0.15 else "NONE"
+        lock = "LOCK" if con.locked else "WEAK" if con.signal > 0.15 else "NONE"
+        if con.tracking:
+            lock = "TRACK"
+        elif con.brg_err is not None and not con.locked:  # which way to train the dial onto the trace
+            lock += f" {'<' if con.brg_err < 0 else '>'}{abs(con.brg_err):.1f}"
         cls = f"{CLASSES[sp.best]} {sp.confidence * 100:.0f}%" if sp.best is not None else "NO SIGNAL"
         sea = "STORM" if ocean.rain > 0.5 else "RAIN" if ocean.rain > 0.15 else "CALM"
         sol = con.tdc.solve()
-        rows = [("HYD", f"{con.dial:05.1f} R", PHOSPHOR), ("SIG", lock, RED if lock == "LOCK" else PHOSPHOR),
+        hyd = f"{con.display_brg(con.dial_true):05.1f} {'T' if con.true_mode() else 'R'}"
+        rows = [("HYD", hyd, PHOSPHOR), ("SIG", lock, RED if con.locked or con.tracking else PHOSPHOR),
                 ("CLASS", cls, PHOSPHOR if sp.best is not None else DIM),
                 ("LAYER", ("BELOW" if p.z >= ocean.layer_depth else "ABOVE") + f" {ocean.layer_depth:.0f}M", PHOSPHOR),
                 ("SEA", sea + (f"  EXP {con.exposure * 100:.0f}%" if p.scope_up or p.snorkel_up else ""),
@@ -653,6 +673,10 @@ class Workstation:
         for ex, ey, t in con.echoes:
             fade = 1 - (world.time - t) / ECHO_FADE
             crt.circle(s, P(ex - own.x, ey - own.y), 3, (int(70 * fade), int(255 * fade), int(120 * fade)), 0)
+        for brg, color, on in ((con.dial_true, (150, 40, 30), True), (con.scope_true, (190, 150, 60),
+                                                                       world.player.scope_up)):
+            if on:  # sonar dial and periscope bearings: where the sensors are looking, on the same plot
+                crt.line(s, c, P(*offset(0, 0, brg, 1e6)), color, 1)
         for brg, _ in con.enemy_pings:
             crt.line(s, c, P(math.sin(math.radians(brg)) * 1e6, math.cos(math.radians(brg)) * 1e6), RED, 2)
         tdc, sol = con.tdc, con.tdc.solve()
@@ -878,6 +902,7 @@ class Workstation:
         (("LOOK", "SCOPE POWER"), "look through scope / power", "LOOK / wheel"),
         (("WIRE LEFT", "WIRE RIGHT", "NEXT FISH", "CUT WIRE"), "wire: nudge / next fish / cut", "click fish, aim"),
         (("TMA PAGE", "AUTO-SOLVE", "DAMAGE BOARD"), "TMA / auto-solve / damage board", ""),
+        (("BEARING MODE", "WATERFALL SCALE", "SCOPE TO SONAR"), "true-rel / waterfall time / scope to sonar", ""),
         (("ACKNOWLEDGE", "SKIP DRILL", "DEBUG"), "acknowledge / skip drill / debug", "click order slip"),
         ((), "pause / this card / quit (asks first)", ""),
     )
@@ -890,7 +915,7 @@ class Workstation:
             pygame.draw.rect(card, (40, 44, 48), card.get_rect(), 4)
             art.engrave(card, "STATION DRILL", (300, 26), 20, art.INK, center=True)
             for i, (actions, what, mouse) in enumerate(self.HELP_ROWS):
-                y = 58 + i * 29
+                y = 56 + i * 28
                 art.engrave(card, keylabel(*actions) if actions else "P / F1 / ESC", (30, y), 13, art.INK)
                 art.engrave(card, what, (210, y), 13, art.INK, bold=False)
                 art.engrave(card, mouse, (440, y), 12, art.INK_RED, bold=False)
