@@ -2,6 +2,7 @@
 title: 'CI: run checks.py headless on every push and pull request'
 labels: chore, area:repo, priority:medium
 milestone: v0.2.1 Fixes
+fixed_in: 37984ce
 ---
 ## Summary
 

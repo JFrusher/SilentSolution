@@ -2,6 +2,7 @@
 title: 'Misleading messages: resupply amounts and "[R] NEW PATROL"'
 labels: bug, area:ui, priority:low, good first issue
 milestone: v0.2.1 Fixes
+fixed_in: a6a3e74
 ---
 ## Summary
 

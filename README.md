@@ -12,7 +12,7 @@ but while the mast is up, the sea can see you too.
 [![pygame-ce](https://img.shields.io/badge/pygame--ce-2.5-6aa84f)](https://pyga.me/)
 [![NumPy](https://img.shields.io/badge/NumPy-procedural-013243?logo=numpy&logoColor=white)](https://numpy.org/)
 [![uv](https://img.shields.io/badge/run%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
-![Version](https://img.shields.io/badge/version-0.2.0-ffbe56)
+![Version](https://img.shields.io/badge/version-0.2.1-ffbe56)
 ![Asset files](https://img.shields.io/badge/asset%20files-0-84d670)
 ![Platform](https://img.shields.io/badge/build-Windows%20.exe-0078D6?logo=windows&logoColor=white)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
@@ -461,7 +461,7 @@ SilentSolution/
 
 <div align="center">
 
-**Silent Solution** · v0.2.0 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/) ·
+**Silent Solution** · v0.2.1 · by Jacob Frusher · built with [pygame-ce](https://pyga.me/) and [NumPy](https://numpy.org/) ·
 [MIT licence](LICENSE) ([third-party notices](THIRD-PARTY-NOTICES.txt))
 
 <sub>Run silent, run deep.</sub>

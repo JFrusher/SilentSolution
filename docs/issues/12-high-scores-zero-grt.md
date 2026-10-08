@@ -2,6 +2,7 @@
 title: High-score table fills with 0 GRT failed patrols
 labels: bug, area:campaign, priority:low, good first issue
 milestone: v0.2.1 Fixes
+fixed_in: afe089b
 ---
 ## Summary
 

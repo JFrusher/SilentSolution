@@ -2,6 +2,7 @@
 title: Firing is allowed when the solution is beyond torpedo range
 labels: enhancement, area:fire-control, priority:low, good first issue
 milestone: v0.2.1 Fixes
+fixed_in: 54eab29
 ---
 ## Summary
 

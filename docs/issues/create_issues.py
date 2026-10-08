@@ -5,7 +5,8 @@
     uv run docs/issues/create_issues.py
 
 Safe to re-run: labels are upserted, existing milestones and issues (matched by title) are reused, and only
-issues still carrying cross-reference placeholders are edited."""
+issues still carrying cross-reference placeholders are edited. Drafts with `fixed_in: <commit>` are created and
+then closed as completed with a comment naming the commit."""
 import glob
 import json
 import os
@@ -70,7 +71,8 @@ def drafts():
         if title.startswith("'") and title.endswith("'"):
             title = title[1:-1].replace("''", "'")
         out.append(dict(key=os.path.basename(path)[:2], title=title, body=body.strip() + "\n",
-                        labels=[s.strip() for s in meta["labels"].split(",")], milestone=meta["milestone"]))
+                        labels=[s.strip() for s in meta["labels"].split(",")], milestone=meta["milestone"],
+                        fixed_in=meta.get("fixed_in")))
     return out
 
 
@@ -109,7 +111,7 @@ def main():
     print(f"milestones: {len(set(MILESTONES) - have)} created, {len(set(MILESTONES) & have)} existing")
 
     existing = {i["title"]: i for i in json.loads(gh("issue", "list", "--repo", REPO, "--state", "all", "--limit",
-                                                     "1000", "--json", "number,title,url").stdout)}
+                                                     "1000", "--json", "number,title,url,state").stdout)}
     numbers, urls = {}, {}
     for d in items:
         if d["title"] in existing:
@@ -142,6 +144,15 @@ def main():
         os.unlink(path)
         fixed += 1
     print(f"cross-references: {fixed} issues linked")
+
+    closed = 0
+    for d in items:  # drafts already fixed: create-then-close, so the record lives on GitHub
+        state = existing.get(d["title"], {}).get("state", "OPEN")
+        if d["fixed_in"] and state == "OPEN":
+            gh("issue", "close", str(numbers[d["key"]]), "--repo", REPO, "--reason", "completed",
+               "--comment", f"Fixed in {d['fixed_in']}.")
+            closed += 1
+    print(f"closed as fixed: {closed}")
 
     if want_project:
         boards = json.loads(gh("project", "list", "--owner", OWNER, "--format", "json").stdout)["projects"]

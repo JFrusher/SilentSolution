@@ -2,6 +2,7 @@
 title: Waves stall for 40–90+ minutes while an enemy sub or escort lingers nearby
 labels: bug, area:ai, priority:high
 milestone: v0.2.1 Fixes
+fixed_in: 8341acd
 ---
 ## Summary
 

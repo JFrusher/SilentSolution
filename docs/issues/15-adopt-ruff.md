@@ -2,6 +2,7 @@
 title: Adopt ruff for lint and format, and fix the existing warnings
 labels: tech-debt, area:repo, priority:low
 milestone: v0.2.1 Fixes
+fixed_in: 33a0850
 ---
 ## Summary
 

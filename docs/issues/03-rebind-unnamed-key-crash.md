@@ -2,6 +2,7 @@
 title: Rebinding a held action to a key with no name crashes the game every frame
 labels: bug, area:settings, priority:high
 milestone: v0.2.1 Fixes
+fixed_in: 7f79fdf
 ---
 ## Summary
 

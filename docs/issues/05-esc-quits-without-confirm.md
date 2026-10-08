@@ -2,6 +2,7 @@
 title: Esc quits the whole game instantly mid-patrol, losing the patrol
 labels: bug, area:ui, priority:medium
 milestone: v0.2.1 Fixes
+fixed_in: 6e75db6
 ---
 ## Summary
 

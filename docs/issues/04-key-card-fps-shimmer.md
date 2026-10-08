@@ -2,6 +2,7 @@
 title: F1 key card drops the game to ~14 FPS and its paper shimmers
 labels: bug, area:ui, priority:medium, good first issue
 milestone: v0.2.1 Fixes
+fixed_in: e9b6d18
 ---
 ## Summary
 

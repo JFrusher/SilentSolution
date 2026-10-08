@@ -2,6 +2,7 @@
 title: Key card and training text ignore rebound keys, and the key card is out of date
 labels: bug, area:ui, area:settings, area:tutorial, priority:medium
 milestone: v0.2.1 Fixes
+fixed_in: e9b6d18
 ---
 ## Summary
 

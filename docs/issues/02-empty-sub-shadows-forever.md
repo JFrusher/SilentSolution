@@ -2,6 +2,7 @@
 title: Enemy sub with no torpedoes left shadows the boat forever (47 m away, same depth)
 labels: bug, area:ai, priority:high
 milestone: v0.2.1 Fixes
+fixed_in: 8341acd
 ---
 ## Summary
 
