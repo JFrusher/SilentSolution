@@ -361,13 +361,16 @@ class Console:
         spread = self.tdc.values["SPR"]
         for k, i in enumerate(ready):
             if not self.world.player.impulse():
-                return self.say("NO IMPULSE AIR TO FIRE", "FIRE CONTROL")
+                self.say("NO IMPULSE AIR TO FIRE", "FIRE CONTROL")
+                break
             gyro = (sol.gyro + (k - (len(ready) - 1) / 2) * spread) % 360
             fish = self.world.fire(gyro, arm_distance=self.tdc.values["ARM"] * YARD, run_depth=self.tdc.values["DEP"],
                                    tube=i + 1, wired=True)
             self.tubes[i] = math.inf
             self.say(f"T{i + 1} AWAY. GYRO {gyro:05.1f}")
             self.wire_sel = fish
+        if all(self.tubes[i] == 0 for i in ready):  # not one fish away
+            return
         self.actions.add("FIRE")
         if not self.wire_hint:
             self.wire_hint = True

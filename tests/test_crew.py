@@ -15,7 +15,7 @@ from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
 from geometry import offset  # noqa: E402
 from orders_menu import OrderWheel  # noqa: E402
-from sim import KNOT, Vessel, angle_diff  # noqa: E402
+from sim import KNOT, TORP_AIR, Vessel, angle_diff  # noqa: E402
 
 pygame.init()
 pygame.display.set_mode((main.W, main.H))
@@ -109,6 +109,17 @@ con.crew.order("COURSE", 90.0)
 con.crew.hand_on_wheel()
 run(con, 5)
 assert con.crew.course is None, "the captain's hand on the wheel cancels a course order not yet carried out"
+
+# a spread with air for one fish: that one goes, the rest are refused, and it counts as fired
+con = quiet_console()
+p = con.world.player
+ship = Vessel(*offset(0, 0, 40, 3000), 300.0, 8 * KNOT)
+con.world.targets.append(ship)
+con.tdc.set("BRG", 40.0), con.tdc.set("RNG", 3000 / 0.9144), con.tdc.set("SPD", 8.0), con.tdc.set("CRS", 300.0)
+con.tdc.set("SPR", 4.0)
+p.air = [TORP_AIR + 1, 0.0, 0.0]
+con.fire()
+assert len(con.world.torpedoes) == 1 and "FIRE" in con.actions, (con.world.torpedoes, con.actions)
 
 # the wheel: drag to a heading, let go, drag to an order, let go
 w = OrderWheel()
