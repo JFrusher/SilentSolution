@@ -167,7 +167,7 @@ class ShipAI:
             self.datum_vel = ((new[0] - self.datum[0]) / gap, (new[1] - self.datum[1]) / gap)
         self.datum, self.mark_time, self.since_contact = new, self.clock, 0.0
 
-    def _alertness(self):
+    def alertness(self):
         """How hard the lookouts are looking: unaware ships scan lazily, hunting ones sweep the sea."""
         return LOOKOUT_ALERT if self.state in (SEARCH, ALERT, ATTACK) else LOOKOUT_IDLE
 
@@ -178,7 +178,7 @@ class ShipAI:
         if not self.lookouts or not exposed:
             return False
         chance = spot_probability(exposed, p.speed / KNOT, self.ship.range_to(p), o.visibility, o.sea_state,
-                                  self._alertness()) * world.spot_mult
+                                  self.alertness()) * world.spot_mult
         if DICE.random() >= chance:
             return False
         self.ship.signal_until = world.time + 25.0  # the bridge lamp starts flashing: visible through our scope
@@ -271,7 +271,7 @@ class MerchantAI(ShipAI):
         if convoy:
             convoy.merchants.append(self)
 
-    def _alertness(self):
+    def alertness(self):
         return LOOKOUT_MERCHANT * (1.5 if self.state != CRUISE else 1.0)
 
     def scatter_from(self, x, y, index, count):

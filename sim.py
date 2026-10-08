@@ -483,7 +483,9 @@ class WorldSimulation:
     targets: list  # ships and decoys: anything sonar can hear or a seeker can lock
     torpedoes: list = field(default_factory=list)
     charges: list = field(default_factory=list)
-    ais: list = field(default_factory=list)  # ship behaviours: .update(world, dt) -> events, .hear_ping/.hear_launch
+    # ship behaviours, each with .ship, .lookouts, .alertness(), .update(world, dt) -> events, and
+    # .hear_ping(world) / .hear_launch(world) / .hear_explosion(world, x, y, sunk, torp)
+    ais: list = field(default_factory=list)
     director: Any = None                    # spawns waves: .update(world, dt) -> events
     ocean: Ocean = field(default_factory=Ocean)
     time: float = 0.0

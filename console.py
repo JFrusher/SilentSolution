@@ -307,7 +307,7 @@ class Console:
         mult = self.world.spot_mult
         if self.diff["ping_warning"]:  # cadet: the honest number
             per_s = max((spot_probability(exposed, p.speed / KNOT, ai.ship.range_to(p), o.visibility, o.sea_state,
-                                          ai._alertness()) for ai in self.world.ais if ai.lookouts), default=0.0)
+                                          ai.alertness()) for ai in self.world.ais if ai.lookouts), default=0.0)
         else:
             seen = [s.rng for s in self.view[0]] if self.view else []
             near = min(seen, default=3000.0)
