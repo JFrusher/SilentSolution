@@ -3,6 +3,8 @@ name = "silent-solution"
 version = "0.2.0"
 description = "Submarine sonar and fire-control simulator: you never see the ocean, only the instruments."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Jacob Frusher", email = "jacob.frusher@cil-uk.co.uk" }
 ]

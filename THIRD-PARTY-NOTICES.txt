@@ -1,0 +1,27 @@
+Silent Solution is MIT licensed (see LICENSE). The packaged build (SilentSolution.exe) also contains the
+following third-party software, each under its own licence.
+
+pygame-ce
+    GNU Lesser General Public License v2.1
+    Source and licence: https://github.com/pygame-community/pygame-ce
+    Licence text:       https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+    pygame-ce is loaded as separate dynamic libraries. To use a modified pygame-ce, run Silent Solution from
+    source (uv run main.py) with your own build installed.
+
+SDL2, SDL2_mixer, SDL2_ttf, SDL2_image (bundled with pygame-ce)
+    zlib License: https://www.libsdl.org/license.php
+
+FreeType (bundled with pygame-ce, via SDL2_ttf)
+    FreeType License (FTL): https://freetype.org/license.html
+
+NumPy
+    BSD 3-Clause, with bundled components under 0BSD, MIT, Zlib and CC0-1.0.
+    Source: https://github.com/numpy/numpy
+    The full NumPy licence texts are copied next to the executable under licenses/numpy/.
+
+Python
+    Python Software Foundation License: https://docs.python.org/3/license.html
+
+PyInstaller bootloader
+    GPL 2.0 with the PyInstaller bootloader exception, which permits distributing bundled applications under
+    any licence: https://github.com/pyinstaller/pyinstaller/blob/develop/COPYING.txt
