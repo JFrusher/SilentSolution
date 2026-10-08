@@ -105,6 +105,48 @@ def capture():  # main makes its own Workstation: keep a handle on it
     return main.station
 
 
+def scenes():
+    """Every screen the scripted loop doesn't reach, driven scene by scene with a frame drawn after each step.
+    Runs first, on its own replay folder and career, so the loop's counts are its own."""
+    keep = replay.DIR, campaign.Career.__init__.__defaults__
+    replay.DIR, campaign.Career.__init__.__defaults__ = TMP / "scene-replays", (TMP / "scene-career.json",)
+    pygame.init()
+    screen = pygame.display.set_mode((main.W, main.H))
+    app = main.App()
+
+    def go(scene, *events, frames=1):
+        for e in events:
+            scene = scene.event(e) or scene
+        for _ in range(frames):
+            scene = scene.update(1 / 60) or scene
+            scene.draw(screen, 1 / 60)
+        return scene
+
+    s = go(main.Title(app), *key(pygame.K_s))
+    assert s.name == "SETTINGS" and go(s, *key(pygame.K_ESCAPE)).name == "TITLE"
+    s = go(main.Title(app), *key(pygame.K_t), *key(pygame.K_1), frames=5)  # a training chapter
+    assert s.name == "PLAY" and s.console.tutorial
+    s = go(s, *key(pygame.K_ESCAPE), *key(pygame.K_y))
+    assert s.name == "CHAPTERS", s.name
+    s = go(main.Title(app), *key(pygame.K_1), frames=5)  # endless: the key card holds the sim
+    app.show_help, t = True, s.console.world.time
+    s = go(s, frames=30)
+    assert s.console.world.time == t, "the sim ran under the key card"
+    app.show_help = False
+    s.console.world.hull = 0.0
+    s = go(s, frames=2)
+    assert s.name == "OVER" and s.esc_quits and go(s, *key(pygame.K_t)).name == "TITLE"
+    s = go(main.Title(app), *key(pygame.K_c), *key(pygame.K_RETURN), frames=5)  # a campaign patrol, lost
+    assert s.name == "PLAY" and s.run, s.name
+    s.console.world.hull = 0.0
+    s = go(s, frames=2)
+    assert s.name == "OVER" and not s.esc_quits
+    s = go(s, *key(pygame.K_SPACE), frames=2)
+    assert s.name == "DEBRIEF", s.name
+    replay.DIR, campaign.Career.__init__.__defaults__ = keep
+
+
+scenes()
 main.Workstation = capture
 main.main()
 assert "REPLAY" in seen and next(frames, None) is None, "the script ran to the end"
