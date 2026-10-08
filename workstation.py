@@ -116,6 +116,7 @@ class Workstation:
         self.debrief = None  # the last patrol's debrief
         self.confirm = None  # lines of a yes/no question over the patrol, or None
         self.over_hint = None  # game-over key line, when it isn't the endless one
+        self.last_replay = None  # path of the replay the last patrol left
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
         self.scope_surround = self.scope_bg.convert_alpha()  # same art with a round hole: hides the square corners

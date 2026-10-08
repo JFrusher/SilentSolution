@@ -6,6 +6,7 @@ from pathlib import Path
 import pygame
 
 import campaign
+import replay
 import settings
 from audio import AudioSynthesizer
 from console import Console
@@ -29,6 +30,13 @@ def main():
     station.career = career = campaign.Career()
     console, state, paused, show_help = None, "TITLE", False, False
     run = None  # the campaign patrol at sea, if any
+
+    def keep_replay(con, result, title):
+        """Every patrol, however it ends, leaves an after-action replay."""
+        path = replay.save(con.recorder, dict(mode=con.level, title=title, result=result, grt=con.score,
+                                              wave=con.wave, version=__version__))
+        station.last_replay = path
+        return path
     confirm = False  # Esc during a patrol: "quit this patrol?" waiting for Y / N
     lost_at, leave_over = 0, False  # a lost campaign boat: when, and whether the player has moved on
 
@@ -44,10 +52,13 @@ def main():
             if state == "PLAY" and e.type == pygame.KEYDOWN and (e.key == pygame.K_ESCAPE or confirm):
                 if e.key == pygame.K_y and confirm:  # leave the patrol: where to depends on what it was
                     if console.tutorial:
+                        keep_replay(console, "TRAINING", "TRAINING")
                         state = "CHAPTERS"
                     elif run:
+                        keep_replay(console, "ABANDONED", run.patrol["name"])
                         run, state = None, "CAREER"  # abandoned, not lost: the career doesn't move
                     else:
+                        keep_replay(console, "QUIT", console.level)
                         career.add_score(console.level, console.score, console.wave)
                         state = "TITLE"
                     console = None
@@ -152,16 +163,19 @@ def main():
             if console.tutorial:
                 console.tutorial.update(dt)
                 if console.tutorial.finished:
+                    keep_replay(console, "TRAINING", "TRAINING")
                     console, state = None, "TITLE"
             elif run:
                 result = run.update(console)
                 if result == "LOST" and state == "PLAY":  # let the loss sink in before the debrief
                     state, lost_at = "OVER", pygame.time.get_ticks()
                 elif result and (state == "PLAY" or leave_over or pygame.time.get_ticks() - lost_at > 8000):
-                    station.debrief = career.record(run, console)
+                    path = keep_replay(console, result, run.patrol["name"])
+                    station.debrief = career.record(run, console, replay=path.name if path else None)
                     console, run, state, leave_over = None, None, "DEBRIEF", False
             elif console.dead and state == "PLAY":
                 state = "OVER"
+                keep_replay(console, "LOST", console.level)
                 career.add_score(console.level, console.score, console.wave)
         station.over_hint = "ANY KEY: DEBRIEF" if run else None
         station.confirm = None
