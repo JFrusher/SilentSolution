@@ -80,6 +80,8 @@ def main():
                 continue
             if e.type == pygame.KEYDOWN and e.key == pygame.K_F1:
                 show_help = not show_help
+            elif e.type == pygame.WINDOWFOCUSLOST and state == "PLAY":
+                paused = True  # alt-tab mid-attack must not cost the boat
             elif state == "REPLAY":
                 view = station.replay_view
                 if e.type == pygame.KEYDOWN and view.key(e.key, e.mod) == "BACK":
@@ -207,7 +209,7 @@ def main():
                     console.scroll(pygame.mouse.get_pos(), e.y)
         if state == "REPLAY":
             station.replay_view.update(dt)
-        elif console and not paused and not confirm:
+        elif console and not (paused or confirm or show_help):  # the key card covers the station
             console.update(dt, pygame.key.get_pressed())
             if console.tutorial:
                 console.tutorial.update(dt)

@@ -11,8 +11,6 @@ from ai import ThreatDirector
 from displays import CLASSES, SCALES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from geometry import bearing, offset
-from graphics import console_art as art
-from graphics.periscope import EYE
 from layout import (
     BLOW_BTN,
     CRT_RECT,
@@ -20,6 +18,7 @@ from layout import (
     DC_ROW_Y0,
     DEPTH_C,
     DEPTH_R,
+    EYE,
     HOLD_BTN,
     LOOK_BTN,
     NMKR_BTN,
@@ -42,6 +41,7 @@ from layout import (
     WF_W,
     WHEEL_C,
     WHEEL_R,
+    angle_value,
 )
 from replay import Recorder
 from sensors import SCOPE_FOV, SCOPE_TRAIN_RATE, ActiveSonar, PassiveSonar, PeriscopeOptics, cone_gain
@@ -536,7 +536,7 @@ class Console:
             self.drag(pos)
         elif math.hypot(x - DEPTH_C[0], y - DEPTH_C[1]) <= DEPTH_R:
             a = math.degrees(math.atan2(DEPTH_C[1] - y, x - DEPTH_C[0]))
-            self.order_depth(round(art.angle_value(a, 0, 300) / 5) * 5)
+            self.order_depth(round(angle_value(a, 0, 300) / 5) * 5)
         elif TDC_PANEL.collidepoint(pos) and 0 <= (y - TDC_ROW_Y0) // TDC_ROW_H < len(FIELDS):
             self.tdc.selected = int((y - TDC_ROW_Y0) // TDC_ROW_H)
         else:
@@ -675,7 +675,7 @@ class Console:
             return
         err = angle_diff(bearings[int(np.argmax(heard))], self.dial)  # noisy measured bearing: operator data
         self.brg_err = err if self.brg_err is None else self.brg_err + (err - self.brg_err) * min(1.0, dt * 4)
-        lock = self.diff.get("lock_deg", 2.0)
+        lock = self.diff["lock_deg"]
         self.locked = self.signal > 0.5 and abs(self.brg_err) <= lock
         self.tracking = (self.tracking or self.locked) and self.signal > 0.3 and abs(self.brg_err) < 3 * lock
         if self.tracking:  # a tracker servo: the dial walks onto the smoothed bearing

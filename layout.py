@@ -66,5 +66,19 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
 }
 
 # periscope screen (look mode): the eyepiece and the instruments you can glimpse around it
+EYE = 600  # eyepiece diameter, px
 EYEPIECE_C = (640, 340)
 STRIP = pygame.Rect(40, 676, 1200, 36)
+
+
+# dials: a value on a gauge sweep, and back (maths angles, 0 = east, CCW positive)
+def clamp01(f):
+    return min(max(f, 0.0), 1.0)
+
+
+def value_angle(v, lo, hi, start=225.0, sweep=270.0):
+    return start - clamp01((v - lo) / (hi - lo)) * sweep
+
+
+def angle_value(deg, lo, hi, start=225.0, sweep=270.0):
+    return lo + clamp01(((start - deg) % 360) / sweep) * (hi - lo)

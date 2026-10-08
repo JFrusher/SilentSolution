@@ -311,7 +311,6 @@ class Workstation:
             self.replay_view.draw(screen)
             return
         f = self.frame
-        art.SAFE_LAMPS = SETTINGS["colorblind"]
         if con and con.looking and state == "PLAY":
             self.draw_periscope(f, con, paused)
         else:

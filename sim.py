@@ -77,7 +77,7 @@ SHIP_CLASSES = {
 def silhouette_class(ship):
     if ship.kind == "ESCORT":
         return "escort"
-    return "tanker" if id(ship) % 3 == 0 else "merchant"
+    return "tanker" if ship.uid % 3 == 0 else "merchant"  # uid, not id(): same ship, same class, every run
 
 
 # torpedo lifecycle
