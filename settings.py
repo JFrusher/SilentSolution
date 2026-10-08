@@ -65,7 +65,10 @@ def _valid(name):
 
 
 def code(action):
-    return pygame.key.key_code(SETTINGS["keys"][action])
+    try:
+        return pygame.key.key_code(SETTINGS["keys"][action])
+    except ValueError:  # a name SDL can't resolve: fall back rather than crash the frame
+        return pygame.key.key_code(KEYS[action])
 
 
 def action_for(k):
@@ -85,6 +88,8 @@ def bind(action, k):
     name = pygame.key.name(k)
     if name in RESERVED:
         return f"{name.upper()} IS RESERVED"
+    if not _valid(name):  # media / OEM keys SDL can't name
+        return "KEY CAN'T BE BOUND"
     keys = SETTINGS["keys"]
     other = next((a for a, n in keys.items() if n == name), None)
     if other:
@@ -204,6 +209,10 @@ if __name__ == "__main__":  # self-check: load/save round trip, rebinding swaps,
     assert SETTINGS["volume"]["MASTER"] == 0.3 and SETTINGS["mouse"] == 2.0 and SETTINGS["keys"]["FIRE"] == "f"
     assert bind("FIRE", pygame.K_SPACE) is None and SETTINGS["keys"]["PING"] == "f"
     assert action_for(pygame.K_SPACE) == "FIRE" and bind("FIRE", pygame.K_p)
+    assert bind("TRAIN LEFT", 0) and SETTINGS["keys"]["TRAIN LEFT"] == "a"  # an unnamed key is refused
+    SETTINGS["keys"]["TRAIN LEFT"] = ""
+    assert code("TRAIN LEFT") == pygame.K_a  # and a bad stored name never raises
+    SETTINGS["keys"]["TRAIN LEFT"] = "a"
     save(tmp)
     load(tmp)
     assert SETTINGS["keys"]["FIRE"] == "space"
