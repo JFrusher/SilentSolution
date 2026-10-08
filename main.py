@@ -29,15 +29,33 @@ def main():
     station.career = career = campaign.Career()
     console, state, paused, show_help = None, "TITLE", False, False
     run = None  # the campaign patrol at sea, if any
+    confirm = False  # Esc during a patrol: "quit this patrol?" waiting for Y / N
 
     while True:
         dt = min(clock.tick(FPS) / 1000.0, 0.1)
         for e in pygame.event.get():
-            pages = ("SETTINGS", "CAREER", "DEBRIEF", "CHAPTERS")  # Esc means "back" on these
+            pages = ("SETTINGS", "CAREER", "DEBRIEF", "CHAPTERS", "PLAY")  # Esc means "back" or "ask" on these
             quit_key = e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE and state not in pages
             if e.type == pygame.QUIT or quit_key:
                 pygame.quit()
                 return
+            if state == "PLAY" and e.type == pygame.KEYDOWN and (e.key == pygame.K_ESCAPE or confirm):
+                if e.key == pygame.K_y and confirm:  # leave the patrol: where to depends on what it was
+                    if console.tutorial:
+                        state = "CHAPTERS"
+                    elif run:
+                        run, state = None, "CAREER"  # abandoned, not lost: the career doesn't move
+                    else:
+                        career.add_score(console.level, console.score, console.wave)
+                        state = "TITLE"
+                    console = None
+                    confirm = False
+                elif e.key in (pygame.K_ESCAPE, pygame.K_n):
+                    confirm = not confirm and e.key == pygame.K_ESCAPE
+                    console.looking = False  # step back from the eyepiece so the question can be read
+                continue
+            if confirm:
+                continue
             if e.type == pygame.KEYDOWN and e.key == pygame.K_F1:
                 show_help = not show_help
             elif state == "SETTINGS":
@@ -123,7 +141,7 @@ def main():
                     console.drag(e.pos)
                 elif e.type == pygame.MOUSEWHEEL:
                     console.scroll(pygame.mouse.get_pos(), e.y)
-        if console and not paused:
+        if console and not paused and not confirm:
             console.update(dt, pygame.key.get_pressed())
             if console.tutorial:
                 console.tutorial.update(dt)
@@ -136,6 +154,11 @@ def main():
             elif console.dead and state == "PLAY":
                 state = "OVER"
                 career.add_score(console.level, console.score, console.wave)
+        station.confirm = None
+        if confirm:
+            station.confirm = (["LEAVE TRAINING?", "BACK TO THE CHAPTER LIST"] if console.tutorial else
+                               ["ABANDON PATROL?", "IT WON'T COUNT FOR OR AGAINST YOU"] if run else
+                               ["QUIT PATROL?", f"{console.score:,} GRT GOES ON THE SCORES"]) + ["", "[Y] YES      [N] NO"]
         station.draw(screen, console, state, paused, show_help, dt)
         pygame.display.flip()
 

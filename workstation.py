@@ -54,6 +54,7 @@ class Workstation:
         self.menu = None     # the settings page, while it is open
         self.career = None   # campaign career, for its page
         self.debrief = None  # the last patrol's debrief
+        self.confirm = None  # lines of a yes/no question over the patrol, or None
         self.periscope = PeriscopeRenderer()
         self.scope_bg = self._periscope_background()
         self.scope_surround = self.scope_bg.convert_alpha()  # same art with a round hole: hides the square corners
@@ -281,6 +282,8 @@ class Workstation:
                 self._crt_box(s, crt, ["LOST WITH ALL HANDS" if con.cause == "HULL BREACHED" else "CREW UNCONSCIOUS",
                                        con.cause, f"WAVE {con.wave}   {con.score:,} GRT SUNK", "",
                                        "[R] NEW PATROL     [ESC] QUIT"])
+            elif self.confirm:
+                self._crt_box(s, crt, self.confirm)
             elif paused:
                 self._crt_box(s, crt, ["PATROL PAUSED", "", "[P] RESUME"])
             if con.flash > 0:
