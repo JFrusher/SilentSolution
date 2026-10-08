@@ -341,8 +341,7 @@ if __name__ == "__main__":
     assert "WIRE_CUT" in run(w, 0.2) and not t.wired
     t2 = w.fire(0.0, wired=True, arm_distance=1e9)
     w.player.speed = w.player.ordered_speed = 0.0
-    t2.run = 8001.0
-    assert "WIRE_CUT" in run(w, 0.2) and not t2.wired
+    assert "WIRE_CUT" in run(w, 230) and not t2.wired and t2 in w.torpedoes  # end of spool, before fuel out
 
     # TMA: noisy bearings across an own-ship leg change plus one echo let auto-solve recover the target
     random.seed(7)
