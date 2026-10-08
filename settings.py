@@ -2,6 +2,7 @@
 Saved as JSON in the user's home folder; a missing or broken file just means defaults."""
 import copy
 import json
+import re
 from pathlib import Path
 
 import pygame
@@ -81,6 +82,20 @@ def action_for(k):
 def volume(category):
     v = SETTINGS["volume"]
     return v["MASTER"] * v[category]
+
+
+SHOWN = {"return": "ENTER", "space": "SPACE"}  # key names as the station prints them
+TOKEN = re.compile(r"\{([A-Z0-9 -]+)\}")
+
+
+def label(*actions):
+    """Display name of the key(s) bound to these actions: label("SLOWER", "FASTER") -> "Z / X"."""
+    return " / ".join(SHOWN.get(n, n.upper()) for n in (SETTINGS["keys"][a] for a in actions))
+
+
+def keyed(text):
+    """Fill {ACTION} tokens with the bound key: "PRESS {MARK}" -> "PRESS M"."""
+    return TOKEN.sub(lambda m: label(m.group(1)) if m.group(1) in KEYS else m.group(0), text)
 
 
 def bind(action, k):
@@ -216,6 +231,10 @@ if __name__ == "__main__":  # self-check: load/save round trip, rebinding swaps,
     save(tmp)
     load(tmp)
     assert SETTINGS["keys"]["FIRE"] == "space"
+    assert keyed("PRESS {FIRE}, THEN {SLOWER} - {NOT AN ACTION}") == "PRESS SPACE, THEN Z - {NOT AN ACTION}"
+    assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
+    assert keyed("PRESS {FIRE}, THEN {SLOWER} - {NOT AN ACTION}") == "PRESS SPACE, THEN Z - {NOT AN ACTION}"
+    assert label("ACKNOWLEDGE", "PING") == "ENTER / F"
     tmp.write_text("not json")
     load(tmp)
     assert SETTINGS == DEFAULTS

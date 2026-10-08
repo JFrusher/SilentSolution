@@ -70,6 +70,7 @@ class AudioSynthesizer:
             return
         self.enabled = True
         pygame.mixer.set_num_channels(32)
+        pygame.mixer.set_reserved(3)  # channels 0-2 belong to the loops: one-shots can't steal them
         self.rate, _, self.channels = pygame.mixer.get_init()
         self.ir = hull_ir(self.rate)
         ping = self._ping_wave()
@@ -82,7 +83,7 @@ class AudioSynthesizer:
         self.blow = self._sound(reverb(rush, self.ir))
         self.clack = self._sound(np.random.uniform(-1, 1, int(self.rate * 0.02)) * np.exp(-300 * self._t(0.02)) * 0.5)
         self.creaks = [self._sound(reverb(self._creak_wave(f), self.ir)) for f in (38.0, 52.0, 67.0, 85.0)]
-        self.thrum_channel = self._sound(self._thrum_wave(), "SONAR").play(loops=-1)
+        self.thrum_channel = self._loop(0, self._sound(self._thrum_wave(), "SONAR"))
         self.thrum_channel.set_volume(0.0)
         t = self._t(1.2)  # hydraulic mast ram: a rising whine over a hiss
         self.mast = self._sound(reverb((np.sin(sweep_phase(180.0, 320.0, 1.2, t)) * 0.6
@@ -95,13 +96,19 @@ class AudioSynthesizer:
         t = self._t(2.0)  # diesel: 25 Hz firing pulses (whole cycles in 2 s -> seamless) through the hull
         chug = np.maximum(0, np.sin(2 * np.pi * 25 * t)) ** 4 - 0.25
         diesel = reverb(lowpass(chug + 0.3 * np.random.uniform(-1, 1, t.size), 12), self.ir, loop=True)
-        self.diesel_channel = self._sound(diesel, "AMBIENCE").play(loops=-1)
+        self.diesel_channel = self._loop(1, self._sound(diesel, "AMBIENCE"))
         self.diesel_channel.set_volume(0.0)
         t = self._t(4.0)  # surface: wind hiss with slow wave slaps
         slap = 0.5 + 0.5 * np.sin(2 * np.pi * 0.5 * t) ** 8
         surface = lowpass(np.random.uniform(-1, 1, t.size), 8) * slap
-        self.surface_channel = self._sound(surface, "AMBIENCE").play(loops=-1)
+        self.surface_channel = self._loop(2, self._sound(surface, "AMBIENCE"))
         self.surface_channel.set_volume(0.0)
+
+    @staticmethod
+    def _loop(index, sound):
+        ch = pygame.mixer.Channel(index)
+        ch.play(sound, loops=-1)
+        return ch
 
     def _sound(self, wave, category="EFFECTS", level=1.0):
         pcm = (np.clip(normalise(wave, MIX_RMS[category] * level), -1, 1) * 32767).astype(np.int16)

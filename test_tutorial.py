@@ -12,6 +12,8 @@ import layout  # noqa: E402
 from audio import AudioSynthesizer  # noqa: E402
 from console import Console  # noqa: E402
 from sim import KNOT, YARD, bearing  # noqa: E402
+import settings  # noqa: E402
+from settings import keyed  # noqa: E402
 from tutorial import CHAPTERS, TRAINING, Tutorial  # noqa: E402
 
 DT = 0.05
@@ -157,6 +159,15 @@ if __name__ == "__main__":
     for chapter in range(1, len(CHAPTERS)):  # every chapter stands on its own
         tut, con, _ = play(4, chapter)
         assert tut.finished and not con.dead, f"chapter {chapter}: stuck on drill {tut.progress}: {tut.goal}"
+    # every key named in the syllabus comes from the bindings: no raw {TOKEN} survives, and a rebind shows up
+    tut, con, _ = play(1)
+    for st in tut.steps:
+        for field, args in ((st.brief, (con,)), (st.goal, (con,)), (st.outro, (tut, con))):
+            text = keyed(field(*args) if callable(field) else field)
+            assert not settings.TOKEN.search(text), text
+    settings.bind("FIRE", pygame.K_g)
+    assert "(G, TUBE SWITCH)" in keyed(next(st.goal for st in tut.steps if "SINK THE MERCHANT" in st.goal))
+    settings.reset()
     con = Console("TRAINING", AudioSynthesizer(), TRAINING)  # skipping every drill must never trip a later one
     tut = Tutorial(con)
     for _ in range(len(tut.steps)):
