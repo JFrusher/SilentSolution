@@ -691,7 +691,7 @@ class Console:
         heard = gains * levels / 160
         self.signal = float(heard.max(initial=0.0)) / (1 + 2 * rain)
         self._track(dt, bearings, heard)
-        self.crew.update(dt, bearings, heard)
+        self.crew.update(dt, bearings, heard, levels)
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
         self.audio.set_hydrophone(self.signal, self.dial)
         self.tma.update(world.time, p, self.locked, self.dial_true)

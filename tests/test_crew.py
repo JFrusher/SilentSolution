@@ -96,6 +96,12 @@ run(con, 60)
 assert con.locked and abs(angle_diff(con.dial_true, sim.bearing(0, 0, ship.x, ship.y))) < 5, con.dial_true
 assert any("CONN, SONAR: CONTACT" in line for line in con.log), list(con.log)
 assert con.tma.recent(con.world.time, 60.0), "fire control marked it"
+con = quiet_console()  # nothing in his cone: he goes for the loudest trace, not whichever ship is listed first
+faint, loud = Vessel(*offset(0, 0, 300, 9000), 0, 4 * KNOT, noise=0.6), Vessel(*offset(0, 0, 60, 1500), 0, 8 * KNOT)
+con.world.targets += [faint, loud]
+con.crew.captain_at, con.dial = None, 180.0
+run(con, 5)
+assert abs(angle_diff(con.dial_true, 60)) < 10, con.dial_true
 
 # station keys away from the station become orders
 con = quiet_console()

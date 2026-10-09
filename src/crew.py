@@ -87,7 +87,7 @@ class Crew:
         self.con.telegraph(len(TELEGRAPH) - 1)
         self.steer(None, side * MAX_RUDDER)
 
-    def update(self, dt, bearings, heard):
+    def update(self, dt, bearings, heard, levels):
         now = self.con.world.time
         due = [o for o in self.pending if o[0] <= now]
         self.pending = [o for o in self.pending if o[0] > now]
@@ -97,7 +97,7 @@ class Crew:
         if self.course is not None:
             self._helm()
         if self.captain_at != "SONAR":
-            self._sonar(dt, bearings, heard)
+            self._sonar(dt, bearings, heard, levels)
 
     def _helm(self):
         """Rudder from the heading error, eased off as she comes round so she settles on the course."""
@@ -107,11 +107,12 @@ class Crew:
         if abs(err) < 0.5:
             p.rudder = 0.0
 
-    def _sonar(self, dt, bearings, heard):
+    def _sonar(self, dt, bearings, heard, levels):
         """The sonarman keeps the dial on the loudest contact; fire control marks it; new contacts are reported."""
         con = self.con
         if len(heard) and not con.tracking:
-            target = bearings[int(heard.argmax())]  # relative bearing he hears it on: operator data, not truth
+            # the loudest in his cone, or with none there the loudest trace on the waterfall: operator data, not truth
+            target = bearings[int((heard if heard.any() else levels).argmax())]
             step = angle_diff(target, con.dial)
             con.dial = con.dial + clamp(step, -60 * dt, 60 * dt)  # trains the dial like a hand would
         if not con.locked:
