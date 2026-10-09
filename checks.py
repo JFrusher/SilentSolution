@@ -2,16 +2,21 @@
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 SUITES = ("tests/test_sim.py", "tests/test_geometry.py", "tests/test_tutorial.py", "tests/test_periscope.py",
-          "tests/test_ui.py", "tests/test_golden.py",  # and these modules self-check:
+          "tests/test_ui.py", "tests/test_golden.py", "tests/test_room.py", "tests/test_crew.py", "tests/test_board.py",
+          # and these modules self-check:
           "src/geometry.py", "src/settings.py", "src/audio.py", "src/campaign.py", "src/replay.py",
-          "-m graphics.tabletop")
+          "src/control_room.py", "src/stations.py",
+          "-m graphics.tabletop", "-m graphics.gltf")
 LINT = ("-m", "ruff", "check", ".")  # ruff is a dev dependency: uv run installs it
 
 if __name__ == "__main__":
-    env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy", PYTHONPATH="src")  # flat game imports
+    home = tempfile.mkdtemp(prefix="silent-checks-")  # suites save settings, careers and replays: never the player's
+    env = dict(os.environ, SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy", PYTHONPATH="src",  # flat game imports
+               HOME=home, USERPROFILE=home)
     failed = []
     for suite in (*SUITES, "lint"):
         t0 = time.perf_counter()

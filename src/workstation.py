@@ -96,17 +96,39 @@ WEAPONS_PLATE = pygame.Rect(634, 486, 160, 214)
 ALARM_PLATE = pygame.Rect(796, 486, 114, 214)
 
 
+def alarm_states(con):
+    """The warning lamps, (legend, lit, colour) in panel order; the console panel and the overhead board share them."""
+    p, world = con.world.player, con.world
+    blink = int(world.time * 4) % 2 == 0
+    exposed = con.exposure > 0.25
+    masts = p.scope_up or p.snorkel_up
+    states = (con.lamp_enemy > 0 and blink, con.torpedo_warning and blink, p.cavitating, p.snorkeling,
+              masts and (blink or not exposed), p.broached and blink, bool(p.leaks),
+              p.z > CRUSH_DEPTH - 20 and blink, p.z >= world.ocean.layer_depth)
+    colors = (art.AMBER, art.RED, art.AMBER, art.GREEN, art.RED if exposed else art.AMBER, art.RED, art.RED,
+              art.RED, art.BLUE)
+    return list(zip(LAMPS, states, colors))
+
+
+ALERTS = ("ENEMY SONAR", "TORPEDO", "LEAK", "HULL STRESS")  # what the orange alarm lamps in the room are for
+
+
+def alerts(con):
+    """The alarms that light the control room's orange lamps, (legend, lit, colour), as the conn's panel names them."""
+    return [a for a in alarm_states(con) if a[0] in ALERTS]
+
+
 class Workstation:
     """Renders the operator station around the console state."""
 
     def __init__(self):
         self.frame = pygame.Surface((W, H))
         self.crt_surf = pygame.Surface(CRT_RECT.size)
-        self.crt = CRTRenderer(CRT_RECT.size)
+        self.crts = {}  # one phosphor per CRT page, so a station drawn on another page never ghosts this one
         self.scope_surf = pygame.Surface((SCOPE_R * 2, SCOPE_R * 2))
         self.scope_crt = CRTRenderer(self.scope_surf.get_size(), ghost_decay=200)  # long-persistence PPI phosphor
         self.background = self._background()
-        self.overlay = self._overlay()
+        self.overlays = {}  # page -> the glass, bezels and the monitor's plate naming that page
         self.yoke = art.helm_yoke(WHEEL_R)
         self.yoke_cache = {}
         self.paper = self._greenbar(PAPER_RECT.size)
@@ -289,7 +311,15 @@ class Workstation:
         art.engrave(bg, "GRT", (TELETYPE.x + 210, TELETYPE.y + 10), 10, art.INK)
         return bg.convert()
 
-    def _overlay(self):
+    PLATES = {"SONAR": "SONAR  -  PASSIVE / ACTIVE / ACOUSTIC ANALYSIS",
+              "TMA": "FIRE CONTROL  -  TARGET MOTION ANALYSIS", "DAMAGE": "DAMAGE CONTROL  -  STATE BOARD"}
+
+    def overlay(self, page):
+        if page not in self.overlays:
+            self.overlays[page] = self._overlay(self.PLATES.get(page, self.PLATES["SONAR"]))
+        return self.overlays[page]
+
+    def _overlay(self, plate):
         hole = pygame.Rect(0, 0, SCOPE_R * 2, SCOPE_R * 2)
         hole.center = SCOPE_C
         ov = art.bezel_overlay((W, H), [(MONITOR, CRT_RECT, 26), (SCOPE_PANEL, hole, None)])
@@ -298,15 +328,16 @@ class Workstation:
             ov.blit(g, (c[0] - g.get_width() / 2, c[1] - g.get_height() / 2))
         g = art.glint(DEPTH_R)
         ov.blit(g, (DEPTH_C[0] - g.get_width() / 2, DEPTH_C[1] - g.get_height() / 2))
-        art.label_plate(ov, (MONITOR.centerx, MONITOR.bottom - 13), "SONAR  -  PASSIVE / ACTIVE / ACOUSTIC ANALYSIS",
-                        11)
+        art.label_plate(ov, (MONITOR.centerx, MONITOR.bottom - 13), plate, 11)
         art.tape(ov, (MONITOR.right - 70, MONITOR.top + 14), "DO NOT ADJUST", 3, 11)
         art.tape(ov, (MONITOR.right - 96, MONITOR.bottom - 12), "TUBE 2 STICKS - HIT IT TWICE", -2, 10)
         art.label_plate(ov, (SCOPE_C[0], SCOPE_PANEL.bottom - 12), "TACTICAL PPI", 10)
         return ov
 
     # --- frame ---
-    def draw(self, screen, con, state, paused, show_help, dt):
+    def draw(self, screen, con, state, paused, show_help, dt, lean=False):
+        """lean: only what the job stations still cut from this frame (the screens and their bezels), and the
+        needles' movement their own gauges read; the old console's controls aren't drawn."""
         if state == "REPLAY":  # the tabletop has the whole screen
             self.replay_view.draw(screen)
             return
@@ -320,11 +351,12 @@ class Workstation:
             self.draw_scope(con)
             f.blit(self.scope_surf, (SCOPE_C[0] - SCOPE_R, SCOPE_C[1] - SCOPE_R))
             if con:
-                self.draw_needles(f, con, dt)
-            f.blit(self.overlay, (0, 0))
-            if con:
+                self.draw_needles(f, con, dt, draw=not lean)
+            f.blit(self.overlay(con.crt_page if con else "SONAR"), (0, 0))
+            if con and not lean:
                 self.draw_controls(f, con)
-            self.draw_teletype(f, con)
+            if not lean:
+                self.draw_teletype(f, con)
             if con and con.tutorial and not con.tutorial.finished:
                 self.draw_tutorial(f, con.tutorial)
         if con and con.debug:
@@ -337,7 +369,10 @@ class Workstation:
 
     # --- centre monitor ---
     def draw_crt(self, con, state, paused):
-        s, crt = self.crt_surf, self.crt
+        page = con.crt_page if con and state in ("PLAY", "OVER") else state
+        if page not in self.crts:  # built once per page: the vignette is costly
+            self.crts[page] = CRTRenderer(CRT_RECT.size)
+        s, crt = self.crt_surf, self.crts[page]
         s.fill((0, 0, 0))
         self.buttons = []
         if state == "SETTINGS":
@@ -404,13 +439,15 @@ class Workstation:
     def _crt_chapters(self, s, crt):
         cx = s.get_width() // 2
         crt.text(s, "TRAINING", (cx, 40), PHOSPHOR, huge=True, center=True)
-        crt.text(s, f"PICK A CHAPTER. EACH STANDS ON ITS OWN; {keylabel('SKIP DRILL')} SKIPS A DRILL INSIDE ONE.",
+        crt.text(s, f"START WITH THE FIRST WATCH; THE DRILLS OPEN AFTER IT. {keylabel('SKIP DRILL')} SKIPS A DRILL.",
                  (cx, 76), DIM, small=True, center=True)
         for i, (name, blurb) in enumerate(CHAPTERS.items()):
-            box = pygame.Rect(70, 100 + i * 56, 440, 48)
-            crt.frame(s, box, color=PHOSPHOR)
-            crt.text(s, f"[{i + 1}]  {name}", (box.x + 16, box.y + 6), PHOSPHOR, big=True)
-            crt.text(s, blurb, (box.x + 16, box.y + 30), DIM, small=True)
+            locked = i > 0 and not SETTINGS["trained"]
+            box = pygame.Rect(70, 92 + i * 40, 440, 36)
+            crt.frame(s, box, color=DIM if locked else PHOSPHOR)
+            crt.text(s, f"[{i + 1}]  {name}", (box.x + 16, box.y + 2), DIM if locked else PHOSPHOR, big=True)
+            crt.text(s, "LOCKED: FINISH THE FIRST WATCH" if locked else blurb, (box.x + 16, box.y + 22), DIM,
+                     small=True)
             self.buttons.append((box.move(CRT_RECT.topleft), i))
         self._crt_button(s, crt, (220, 336, 140, 26), "[ESC] TITLE", "BACK", DIM)
 
@@ -535,8 +572,7 @@ class Workstation:
             true = con.true_mode()
             wf = con.waterfall
             mode = "TRUE" if true else "REL"
-            pages = f"{keylabel('TMA PAGE')}: TMA  {keylabel('DAMAGE BOARD')}: DAMAGE"
-            crt.text(s, f"WATERFALL {mode} {wf.row_interval:g}S/LN  {pages}", (x0 + 14, 12), DIM, small=True)
+            crt.text(s, f"WATERFALL {mode} {wf.row_interval:g}S/LN", (x0 + 14, 12), DIM, small=True)
             s.blit(wf.draw(relative=not true), WF_POS)
             crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
             for b in (0, 90, 180, 270, 359):
@@ -555,11 +591,12 @@ class Workstation:
             tx = x0 + con.display_brg(tdc_true) / 360 * WF_W  # TDC estimate tick: stays on the trace if TMA is right
             crt.line(s, (tx, y0 - 5), (tx, y0 + 8), PHOSPHOR, 2)
             crt.line(s, (tx, y0 + WF_H - 8), (tx, y0 + WF_H + 1), PHOSPHOR, 2)
-        self._spectrum(s, crt, con)
-
         for i, msg in enumerate(con.log):
             crt.text(s, msg, (LOG_POS[0], LOG_POS[1] + i * 15), PHOSPHOR if i == len(con.log) - 1 else DIM, small=True)
 
+        if con.crt_page == "DAMAGE":  # the state board's own readouts: no sonar picture at damage control
+            return self._dc_readouts(s, crt, con)
+        self._spectrum(s, crt, con)
         p, ocean, sp = con.world.player, con.world.ocean, con.spectrum
         lock = "LOCK" if con.locked else "WEAK" if con.signal > 0.15 else "NONE"
         if con.tracking:
@@ -588,12 +625,27 @@ class Workstation:
             crt.frame(s, (x0 + 10, y0 + 90, WF_W - 20, 34), color=RED)
             crt.text(s, text, (x0 + WF_W / 2, y0 + 107), RED, big=True, center=True)
 
+    def _dc_readouts(self, s, crt, con):
+        """Beside the damage board: what the DC party lead watches, the hull, the water and how deep we are."""
+        p, w = con.world.player, con.world
+        leaks = len(getattr(p, "leaks", ()))
+        jobs = con.damage_rows()
+        rows = [("HULL", f"{w.hull:3.0f} %", RED if w.hull < 40 else PHOSPHOR),
+                ("LEAKS", f"{leaks}" if leaks else "NONE", RED if leaks else PHOSPHOR),
+                ("DEPTH", f"{p.z:3.0f} M", RED if p.z > CRUSH_DEPTH - 20 else PHOSPHOR),
+                ("CRUSH", f"{CRUSH_DEPTH:3.0f} M", DIM),
+                ("PARTY", jobs[0] if jobs and jobs[0] in p.damaged else "STANDING BY", PHOSPHOR)]
+        r = SPEC_RECT
+        crt.text(s, "STATE OF THE BOAT", (r.x, 12), DIM, small=True)
+        for i, (k, v, color) in enumerate(rows):
+            crt.text(s, k, (r.x, r.y + 8 + i * 30), DIM, small=True)
+            crt.text(s, v, (r.x + 60, r.y + 6 + i * 30), color)
+
     def _crt_damage(self, s, crt, con):
         """Damage board: the repair list in the party's work order. Click a line to send them there first."""
         x0, y0 = WF_POS
         p, w = con.world.player, con.world
-        crt.text(s, f"DAMAGE CONTROL  CLICK: WORK IT FIRST  {keylabel('DAMAGE BOARD')}: SONAR", (x0 + 14, 12), DIM,
-                 small=True)
+        crt.text(s, "DAMAGE CONTROL   TOUCH A LINE: WORK IT FIRST", (x0 + 14, 12), DIM, small=True)
         crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
         leaks = len(getattr(p, "leaks", ()))
         crt.text(s, f"HULL {w.hull:3.0f}%" + (f"   LEAKS {leaks}" if leaks else ""), (x0 + 10, y0 + 6),
@@ -626,7 +678,7 @@ class Workstation:
         def Y(t):
             return y0 + (now - t) / TMA_WINDOW * WF_H
 
-        crt.text(s, f"TMA  BRG TRUE vs TIME      {keylabel('TMA PAGE')}: WATERFALL", (x0 + 14, 12), DIM, small=True)
+        crt.text(s, "TMA  BRG TRUE vs TIME", (x0 + 14, 12), DIM, small=True)
         crt.frame(s, (x0 - 1, y0 - 1, WF_W + 2, WF_H + 2))
         grid = (12, 46, 22)
         for k in range(-20, 21, 10):
@@ -750,8 +802,13 @@ class Workstation:
         crt.text(s, f"{con.scope_range:,.0f} YD", (R, 2 * R - 30), PHOSPHOR, small=True, center=True)
 
     # --- instruments ---
-    def draw_needles(self, f, con, dt):
+    def draw_needles(self, f, con, dt, draw=True):
         p, world, nd = con.world.player, con.world, self.needles
+        if not draw:  # move them only: a station draws its own gauges from these
+            for name, v in (("DEPTH", p.z), ("BATTERY", p.battery), ("NOISE", p.noise), ("HULL", world.hull),
+                            ("O2", p.o2), ("ORDER", p.ordered_depth)):
+                nd[name].update(v, dt)
+            return
         stress = 0.6 if p.z > CRUSH_DEPTH else 0.05
         values = {"DEPTH": (p.z, stress), "BATTERY": (p.battery, 0.15), "NOISE": (p.noise, 0.02 + 0.04 * p.cavitating),
                   "HULL": (world.hull, 0.1 + 0.2 * (world.hull < 50))}
@@ -822,18 +879,11 @@ class Workstation:
             art.engrave(f, state, (sx, sy + 36), 10, art.RED if empty or broken else art.LEGEND, center=True)
         art.counter(f, (650, 604), f"{p.torpedoes:02d}", 14)
         art.counter(f, (718, 604), f"{p.noisemakers:02d}", 14)
-        art.button(f, NMKR_BTN, f"NOISEMAKER  [{keylabel('NOISEMAKER')}]", color=art.AMBER)
-        art.button(f, PING_BTN, f"ACTIVE PING  [{keylabel('PING')}]", lit=world.time - con.ping_time < 0.6,
+        art.button(f, NMKR_BTN, "NOISEMAKER", color=art.AMBER)
+        art.button(f, PING_BTN, "ACTIVE PING", lit=world.time - con.ping_time < 0.6,
                    color=art.RED)
         # annunciator panel: legend on every tile, so colour is never the only cue
-        exposed = con.exposure > 0.25
-        masts = p.scope_up or p.snorkel_up
-        states = (con.lamp_enemy > 0 and blink, con.torpedo_warning and blink, p.cavitating, p.snorkeling,
-                  masts and (blink or not exposed), p.broached and blink, bool(p.leaks),
-                  p.z > CRUSH_DEPTH - 20 and blink, p.z >= world.ocean.layer_depth)
-        colors = (art.AMBER, art.RED, art.AMBER, art.GREEN, art.RED if exposed else art.AMBER, art.RED, art.RED,
-                  art.RED, art.BLUE)
-        for rect, name, on, color in zip(ANNUNCIATORS, LAMPS, states, colors):
+        for rect, (name, on, color) in zip(ANNUNCIATORS, alarm_states(con)):
             art.annunciator(f, rect, name, on, color)
         # TDC readouts
         for i, (name, (_, _, fmt, *_)) in enumerate(FIELDS.items()):
@@ -874,11 +924,12 @@ class Workstation:
         pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 160)
         color = (255, int(150 + 90 * pulse), 40)
         for name in tut.step.highlight:
-            shape = HIGHLIGHTS[name]
-            if isinstance(shape, pygame.Rect):
-                pygame.draw.rect(f, color, shape, 3, border_radius=8)
-            else:
-                pygame.draw.circle(f, color, shape[0], shape[1], 3)
+            shapes = HIGHLIGHTS[name]
+            for shape in shapes if isinstance(shapes, list) else [shapes]:
+                if isinstance(shape, pygame.Rect):
+                    pygame.draw.rect(f, color, shape, 3, border_radius=8)
+                else:
+                    pygame.draw.circle(f, color, shape[0], shape[1], 3)
         slip = ORDER_SLIP
         pygame.draw.rect(f, (250, 246, 226), slip)
         pygame.draw.rect(f, art.INK_RED, slip, 2)
@@ -939,7 +990,7 @@ class Workstation:
         (("NOISEMAKER",), "noisemaker decoy astern", "button"),
         (("SCOPE RANGE",), "tactical scope range", "click scope (no fish)"),
         (("RAISE SCOPE", "RAISE SNORKEL"), "periscope / snorkel up-down", "levers"),
-        (("LOOK", "SCOPE POWER"), "look through scope / power", "LOOK / wheel"),
+        (("LOOK", "SCOPE POWER", "STAND UP"), "scope / power / stand: walk WASD, use E", "LOOK / wheel"),
         (("WIRE LEFT", "WIRE RIGHT", "NEXT FISH", "CUT WIRE"), "wire: nudge / next fish / cut", "click fish, aim"),
         (("TMA PAGE", "AUTO-SOLVE", "DAMAGE BOARD"), "TMA / auto-solve / damage board", ""),
         (("BEARING MODE", "WATERFALL SCALE", "SCOPE TO SONAR"), "true-rel / waterfall time / scope to sonar", ""),

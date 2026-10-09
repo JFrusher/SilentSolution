@@ -37,6 +37,7 @@ NMKR_BTN, PING_BTN = pygame.Rect(642, 640, 140, 24), pygame.Rect(642, 674, 140, 
 LAMPS = ("ENEMY SONAR", "TORPEDO", "CAVITATION", "DIESEL", "MASTS UP", "BROACH", "LEAK", "HULL STRESS", "BELOW LAYER")
 ANNUNCIATORS = tuple(pygame.Rect(802, 498 + i * 22, 102, 18) for i in range(len(LAMPS)))  # warning panel tiles
 TDC_ROW_Y0, TDC_ROW_H = 290, 20
+TDC_CRANK_X = 236  # right of this a TDC row's crank: drag it to wind the value
 
 # inside the CRT (local coordinates)
 WF_POS = (20, 30)
@@ -56,6 +57,7 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
     "gauges": GAUGES.inflate(-4, -4),
     "noise": (GAUGE_POS["NOISE"], GAUGE_R + 4),
     "battery": (GAUGE_POS["BATTERY"], GAUGE_R + 4),
+    "hull": (GAUGE_POS["HULL"], GAUGE_R + 4),
     "telegraph": TELEGRAPH_RECT.inflate(6, 6),
     "wheel": pygame.Rect(WHEEL_C[0] - 90, WHEEL_C[1] - 78, 180, 168),
     "depth": pygame.Rect(DEPTH_C[0] - 86, DEPTH_C[1] - DEPTH_R - 8, 172, 140),
@@ -63,7 +65,8 @@ HIGHLIGHTS = {  # tutorial rings: screen rect, or (centre, radius)
     "nmkr": NMKR_BTN.inflate(10, 10),
     "ping": PING_BTN.inflate(10, 10),
     "lamps": pygame.Rect(796, 492, 114, 206),
-    "masts": pygame.Rect(416, 492, 228, 96),
+    "masts": [(SCOPE_LEVER, 24), (SNORT_LEVER, 24)],  # the two mast levers, and nothing between them
+    "periscope": [(SCOPE_LEVER, 24), (SNORT_LEVER, 24)],  # the full console rings the mast levers; the room, the scope
 }
 
 # periscope screen (look mode): the eyepiece and the instruments you can glimpse around it

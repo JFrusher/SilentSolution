@@ -1,5 +1,6 @@
 """Build the single-file Windows executable: uv run --with pyinstaller build.py  ->  dist/SilentSolution.exe
 The licence and third-party notices are copied next to it; ship the whole dist/ folder."""
+import os
 import shutil
 import sys
 from importlib.metadata import distribution
@@ -10,8 +11,17 @@ import PyInstaller.__main__
 sys.path.insert(0, "src")
 from version import __version__  # noqa: E402
 
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+import pygame  # noqa: E402
+
+from graphics.models import build_all  # noqa: E402
+
+pygame.init()
+build_all()  # the control room's models aren't in git: build them before they're bundled
 PyInstaller.__main__.run(["src/main.py", "--onefile", "--windowed", "--clean", "--noconfirm",
-                          "--name", "SilentSolution", "--exclude-module", "tkinter"])
+                          "--name", "SilentSolution", "--exclude-module", "tkinter",
+                          "--hidden-import", "glcontext",  # moderngl picks its GL backend at run time
+                          "--add-data", f"assets{os.pathsep}assets"])  # the control room's models
 dist = Path("dist")
 for name in ("LICENSE", "THIRD-PARTY-NOTICES.txt"):
     shutil.copy(name, dist / name)

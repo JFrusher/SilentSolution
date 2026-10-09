@@ -65,8 +65,8 @@ class SpectrumAnalyzer:
 # ---------- teleprinter ----------
 class Teletype:
 
-    def __init__(self, audio, cps=34.0):
-        self.audio, self.cps = audio, cps
+    def __init__(self, audio, heard, cps=34.0):
+        self.audio, self.heard, self.cps = audio, heard, cps
         self.lines = deque(maxlen=40)
         self.queue = deque()
         self.typing = ""
@@ -74,6 +74,7 @@ class Teletype:
         self.fed = 0  # lines fed through, for the paper's perforations
 
     def print(self, text):
+        self.heard(text)
         self.queue.extend(textwrap.wrap(text, 30 if SETTINGS["large_text"] else 38) + [""])
 
     def update(self, dt):

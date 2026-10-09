@@ -9,6 +9,7 @@ import pygame
 import settings
 import sim
 from ai import ThreatDirector
+from crew import Crew
 from displays import CLASSES, SCALES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
 from geometry import bearing, offset
@@ -32,6 +33,7 @@ from layout import (
     SCOPE_LEVER,
     SCOPE_R,
     SNORT_LEVER,
+    TDC_CRANK_X,
     TDC_PANEL,
     TDC_ROW_H,
     TDC_ROW_Y0,
@@ -79,8 +81,11 @@ MAST_MESSAGES = {  # own mast events: (sonar log line, teleprinter line or "")
     "SNORKEL_FLOODED": ("SNORKEL FLOODED - DIESELS TRIPPED", "ENGINE ROOM: SNORKEL HEAD FLOODED AT SPEED. DIESELS "
                         "STOPPED FOR TEN SECONDS. KEEP UNDER EIGHT KNOTS WHILE SNORKELLING."),
     "SCOPE_DAMAGED": ("PERISCOPE BENT", "CONTROL ROOM: PERISCOPE BENT BY SPEED. ON THE DAMAGE LIST ({DAMAGE BOARD})."),
+    "AIR_EXHAUSTED": ("BLOW STOPPED - H.P. AIR EXHAUSTED", "CHIEF OF THE WATCH: H.P. AIR GROUPS EMPTY, THE BLOW HAS "
+                      "STOPPED. THE COMPRESSORS CHARGE THEM ONLY WHILE WE SNORKEL."),
 }
 ECHO_FADE = 40.0          # s an echo blip glows on the scope
+TDC_CRANK_NOTCH = 6       # px of crank drag per notch of a TDC value
 SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
 
 
@@ -114,7 +119,8 @@ class Console:
         self.active = ActiveSonar(self.world)
         self.waterfall, self.spectrum = WaterfallDisplay(), SpectrumAnalyzer()
         self.tdc = TargetDataComputer(self.world.player)
-        self.teletype = Teletype(audio)
+        self.heard = deque(maxlen=16)  # (n, kind, line): all that's said, printed or sounded aboard, for captions
+        self.teletype = Teletype(audio, lambda text: self.hear("PRINT", text))
         self.signal = self.held = 0.0
         self.dial_true = self.scope_true = 0.0  # where the hydrophone and the periscope point, TRUE bearing
         self.last_heading = self.world.player.heading
@@ -149,6 +155,8 @@ class Console:
         self.wire_hint = False
         self.long_shot = -99.0  # when F was last refused on a beyond-range solution
         self.crt_page = "SONAR"  # left of the monitor: waterfall, F2 TMA plot, F5 damage board
+        self.crew = Crew(self)
+        self.plot_notes = deque(maxlen=24)  # for the plot: (time, own x, own y, true brg, range m or None, text)
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
@@ -211,8 +219,14 @@ class Console:
     def classification(self):
         return CLASSES[self.spectrum.best] if self.spectrum.best is not None else None
 
-    def say(self, msg):
+    def say(self, msg, who=None):
+        """A line for the sonar log; `who` names the crewman calling it, for the captions."""
         self.log.append(f"{stamp(self.world.time)} {msg}")
+        self.hear("SAY", f"{who}: {msg}" if who else msg)
+
+    def hear(self, kind, line):
+        """SAY a spoken line, PRINT a teleprinter signal, SOUND a noise with nothing said about it."""
+        self.heard.append((self.heard[-1][0] + 1 if self.heard else 1, kind, line))
 
     # --- orders ---
     def telegraph_index(self):
@@ -223,6 +237,11 @@ class Console:
         index = int(clamp(index, 0, len(TELEGRAPH) - 1))
         self.world.player.ordered_speed = TELEGRAPH[index][1] * KNOT
         self.say(f"ENGINES {TELEGRAPH[index][0]}")
+
+    def rudder_by_hand(self, angle):
+        """The wheel, turned by the captain's own hand: it overrides any course the helmsman was steering."""
+        self.crew.hand_on_wheel()
+        self.world.player.rudder = float(angle)
 
     def order_depth(self, depth):
         p = self.world.player
@@ -341,12 +360,17 @@ class Console:
             return self.say(f"BEYOND RANGE: RUN {sol.run / YARD:,.0f} YD. FIRE AGAIN TO SHOOT")
         spread = self.tdc.values["SPR"]
         for k, i in enumerate(ready):
+            if not self.world.player.impulse():
+                self.say("NO IMPULSE AIR TO FIRE", "FIRE CONTROL")
+                break
             gyro = (sol.gyro + (k - (len(ready) - 1) / 2) * spread) % 360
             fish = self.world.fire(gyro, arm_distance=self.tdc.values["ARM"] * YARD, run_depth=self.tdc.values["DEP"],
                                    tube=i + 1, wired=True)
             self.tubes[i] = math.inf
             self.say(f"T{i + 1} AWAY. GYRO {gyro:05.1f}")
             self.wire_sel = fish
+        if all(self.tubes[i] == 0 for i in ready):  # not one fish away
+            return
         self.actions.add("FIRE")
         if not self.wire_hint:
             self.wire_hint = True
@@ -404,6 +428,8 @@ class Console:
         self.say("NOISEMAKER AWAY")
 
     def blow(self):
+        if sum(self.world.player.air) <= 0:
+            return self.say("NO H.P. AIR TO BLOW", "CHIEF")
         self.world.player.blowing = True
         self.audio.play_blow()
         self.actions.add("BLOW")
@@ -445,7 +471,7 @@ class Console:
             "BLOW": self.blow,
             "SLOWER": lambda: self.telegraph(self.telegraph_index() - 1),
             "FASTER": lambda: self.telegraph(self.telegraph_index() + 1),
-            "RUDDER AMIDSHIPS": lambda: setattr(p, "rudder", 0.0),
+            "RUDDER AMIDSHIPS": lambda: self.rudder_by_hand(0.0),
             "NOISEMAKER": self.noisemaker,
             "SCOPE RANGE": self.cycle_scope,
             "WIRE LEFT": lambda: self.nudge_fish(-1),
@@ -544,6 +570,8 @@ class Console:
             self.order_depth(round(angle_value(a, 0, 300) / 5) * 5)
         elif TDC_PANEL.collidepoint(pos) and 0 <= (y - TDC_ROW_Y0) // TDC_ROW_H < len(FIELDS):
             self.tdc.selected = int((y - TDC_ROW_Y0) // TDC_ROW_H)
+            if x >= TDC_CRANK_X:  # took hold of the row's crank
+                self.dragging = ("tdc", y)
         else:
             for i, (sx, sy) in enumerate(TUBE_SW):
                 if math.hypot(x - sx, y - sy) <= 26:
@@ -553,13 +581,18 @@ class Console:
                     return action()
 
     def drag(self, pos):
-        if isinstance(self.dragging, tuple):  # training the scope: the scene follows the hand
+        if isinstance(self.dragging, tuple) and self.dragging[0] == "tdc":  # winding a crank: a notch per few pixels
+            notches = int((self.dragging[1] - pos[1]) / TDC_CRANK_NOTCH)
+            if notches:
+                self.tdc.nudge(notches)
+                self.dragging = ("tdc", self.dragging[1] - notches * TDC_CRANK_NOTCH)
+        elif isinstance(self.dragging, tuple):  # training the scope: the scene follows the hand
             dx = pos[0] - self.dragging[1]
             self.scope_brg = (self.scope_brg - dx * settings.SETTINGS["mouse"] * SCOPE_FOV[self.high_power] / EYE) % 360
             self.dragging = ("scope", pos[0])
         elif self.dragging == "wheel":
             ordered = (pos[0] - WHEEL_C[0]) / (WHEEL_R + 16) * MAX_RUDDER
-            self.world.player.rudder = round(clamp(ordered, -MAX_RUDDER, MAX_RUDDER))
+            self.rudder_by_hand(round(clamp(ordered, -MAX_RUDDER, MAX_RUDDER)))
 
     def scroll(self, pos, dy):
         x, y = pos
@@ -568,11 +601,13 @@ class Console:
             if (dy > 0) != self.high_power:
                 self.toggle_power()
         elif TDC_PANEL.collidepoint(pos):
+            if 0 <= (y - TDC_ROW_Y0) // TDC_ROW_H < len(FIELDS):  # wind the row under the pointer
+                self.tdc.selected = int((y - TDC_ROW_Y0) // TDC_ROW_H)
             self.tdc.nudge(dy)
         elif math.hypot(x - DEPTH_C[0], y - DEPTH_C[1]) <= DEPTH_R:
             self.order_depth(p.ordered_depth - 10 * dy)
         elif math.hypot(x - WHEEL_C[0], y - WHEEL_C[1]) <= WHEEL_R + 18:
-            p.rudder = clamp(p.rudder + 5 * dy, -MAX_RUDDER, MAX_RUDDER)
+            self.rudder_by_hand(clamp(p.rudder + 5 * dy, -MAX_RUDDER, MAX_RUDDER))
         elif TELEGRAPH_RECT.collidepoint(pos):
             self.telegraph(self.telegraph_index() + dy)
         elif CRT_RECT.collidepoint(pos) and self.crt_page == "SONAR":
@@ -594,7 +629,7 @@ class Console:
             self.tracking = self.tracking and not train  # a hand on the wheel takes the dial back
         rudder = held("RUDDER RIGHT") - held("RUDDER LEFT")
         if rudder:
-            p.rudder = clamp(p.rudder + rudder * RUDDER_RATE * dt, -MAX_RUDDER, MAX_RUDDER)
+            self.rudder_by_hand(clamp(p.rudder + rudder * RUDDER_RATE * dt, -MAX_RUDDER, MAX_RUDDER))
         adj = held("TDC VALUE UP") - held("TDC VALUE DOWN")
         self.held = self.held + dt if adj else 0.0
         if self.held > HOLD_DELAY:
@@ -629,12 +664,13 @@ class Console:
         strain = max(0.0, (p.z - 80) / 170) + max(0.0, (p.speed / KNOT - 12) / 8) + (p.z > CRUSH_DEPTH)
         if random.random() < 0.3 * strain * dt:
             self.audio.play_creak(0.3 + 0.5 * min(strain, 1.0))
+            self.hear("SOUND", "[HULL CREAKS]")
 
         bearings, levels, widths, kinds, hostile = self.passive.listen()
         for brg, rng in self.active.update(dt):
             if brg is None:
                 self.waterfall.blip(0.0, 60, WF_W)  # layer reverb smears every bearing
-                self.say(f"LAYER RETURN {rng:.0f} M")
+                self.say(f"LAYER RETURN {rng:.0f} M", "SONAR")
                 continue
             self.audio.play_echo(2500 / rng, brg)
             self.waterfall.blip(brg, 230)
@@ -643,7 +679,7 @@ class Console:
             tdc_true = bearing(0.0, 0.0, self.tdc.x, self.tdc.y)
             if abs(angle_diff(brg + p.heading, tdc_true)) < 3:  # an echo on the plotted target: range for TMA
                 self.tma.add(world.time, brg + p.heading, "ECHO", rng)
-            self.say(f"ECHO {brg:05.1f}R {rng / YARD:,.0f} YD")
+            self.say(f"ECHO {brg:05.1f}R {rng / YARD:,.0f} YD", "SONAR")
         self.echoes = [e for e in self.echoes if world.time - e[2] < ECHO_FADE]
         rain = world.ocean.rain
         diesel = getattr(p, "snorkeling", False)
@@ -655,10 +691,15 @@ class Console:
         heard = gains * levels / 160
         self.signal = float(heard.max(initial=0.0)) / (1 + 2 * rain)
         self._track(dt, bearings, heard)
+        self.crew.update(dt, bearings, heard, levels)
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
         self.audio.set_hydrophone(self.signal, self.dial)
         self.tma.update(world.time, p, self.locked, self.dial_true)
-        self.torpedo_warning = bool(np.any(hostile & (levels > 30)))
+        warning = bool(np.any(hostile & (levels > 30)))
+        if warning and not self.torpedo_warning:  # torpedo in the water: the klaxon, through the whole boat
+            self.audio.play_klaxon()
+            self.hear("SOUND", "[KLAXON]")
+        self.torpedo_warning = warning
 
         self.flash = max(0.0, self.flash - dt * 2.5)
         self.shake = max(0.0, self.shake - dt * 1.5)
@@ -696,6 +737,8 @@ class Console:
         if kind == "WAVE":
             m, e, s, brg = b
             fuzz = 0 if self.diff["ping_warning"] else sim.DICE.uniform(-25, 25)
+            p = self.world.player
+            self.plot_notes.append((self.world.time, p.x, p.y, (brg + fuzz) % 360, 8000.0, f"CONVOY {m}M {e}E"))
             tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR "
                f"{(brg + fuzz) % 360:03.0f} TRUE, "
                f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")
@@ -717,7 +760,7 @@ class Console:
                + settings.keyed("{DAMAGE BOARD} TO SET IT."))
             return
         if kind == "REPAIRED":
-            self.say(f"{b} REPAIRED")
+            self.say(f"{b} REPAIRED", "DAMAGE CONTROL")
             return
         if kind == "LEAK":
             tt(f"DAMAGE CONTROL: FLOODING. {b} LEAK(S). PUMPS ON.")
@@ -755,24 +798,27 @@ class Console:
             self.jolt(loud * 0.7)
             if b >= 1:
                 self.audio.play_creak(1.0)
-                self.say(f"CHARGE CLOSE. HULL {world.hull:.0f}%")
+                self.say(f"CHARGE CLOSE. HULL {world.hull:.0f}%", "CONTROL ROOM")
+            else:
+                self.hear("SOUND", f"[EXPLOSION {self.passive.bearing_of(a):03.0f}R]")
             return
         brg = self.passive.bearing_of(a)
         if isinstance(a, Torpedo) and a.hostile:
             if kind == "DECOYED":
                 self.audio.play_explosion(self.passive.loudness(a), brg)
                 self.jolt(0.3)
-                self.say(f"DETONATION {brg:05.1f}R. DECOY TOOK IT")
+                self.say(f"DETONATION {brg:05.1f}R. DECOY TOOK IT", "SONAR")
             return  # nothing else about their fish is observable
         if kind == "HOSTILE_LAUNCH":
             if self.passive.loudness(a, ref=6000.0) > 0.05:
-                self.say(f"LAUNCH TRANSIENT {brg:05.1f}R!")
+                self.say(f"LAUNCH TRANSIENT {brg:05.1f}R!", "SONAR")
                 tt(f"CONN, SONAR: TORPEDO IN THE WATER, BEARING {brg:03.0f} RELATIVE.")
         elif kind == "ESCORT_PING":
             self.audio.play_enemy_ping(self.passive.loudness(a, ref=5000.0), brg)
             self.waterfall.blip(brg, 200)
             self.enemy_pings.append(((brg + world.player.heading) % 360, world.time))
             self.lamp_enemy = 1.5
+            self.hear("SOUND", f"[ENEMY SONAR PING {brg:03.0f}R]")
             if self.diff["ping_warning"]:
                 self.banner = (f"ENEMY SONAR {brg:03.0f}R - " + ("WE ARE HELD" if b else "NOT HELD"), 3.0)
         elif kind.startswith("AI_"):  # what a sonarman hears: revs, pinging, bearings drawing apart
@@ -785,33 +831,34 @@ class Console:
                    ("MERCHANT", "AI_SCATTER"): "FULL REVS, TURNING AWAY",
                    ("MERCHANT", "AI_CRUISE"): "REVS DOWN, STEADY"}.get((a.kind, kind))
             if msg:
-                self.say(f"CONTACT {brg:05.1f}R {msg}")
+                self.say(f"CONTACT {brg:05.1f}R {msg}", "SONAR")
         elif kind == "CONVOY_ALARM":
-            self.say(f"CONVOY {brg:05.1f}R REVS UP. ZIG-ZAG")
+            self.say(f"CONVOY {brg:05.1f}R REVS UP. ZIG-ZAG", "SONAR")
             tt("CONN, SONAR: CONVOY HAS WOKEN UP - REVS INCREASING, STARTING A ZIG-ZAG.")
         elif kind == "CONVOY_CALM":
-            self.say(f"CONVOY {brg:05.1f}R REVS DOWN")
+            self.say(f"CONVOY {brg:05.1f}R REVS DOWN", "SONAR")
         elif kind == "CONVOY_SCATTER":
-            self.say("CONVOY SCATTERING")
+            self.say("CONVOY SCATTERING", "SONAR")
             tt("CONN, SONAR: CONVOY IS SCATTERING - CONTACTS FANNING OUT AT FULL REVS. ESCORTS WILL HUNT THE "
                "TORPEDO TRACK BACK TO US.")
         elif kind == "CHARGES":
-            self.say(f"SPLASHES {brg:05.1f}R. CHARGES")
+            self.say(f"SPLASHES {brg:05.1f}R. CHARGES", "SONAR")
             tt("CONN, SONAR: DEPTH CHARGES IN THE WATER.")
         elif kind == "DECOY_DROP":
             self.audio.play_hiss(max(0.4, self.passive.loudness(a)), brg)
-            self.say(f"HISS {brg:05.1f}R. COUNTERMEASURE")
+            self.say(f"HISS {brg:05.1f}R. COUNTERMEASURE", "SONAR")
         elif kind in ("ARMED", "HOMING", "LOST"):
-            self.say(f"T{a.tube} " + {"ARMED": "SEEKER ACTIVE", "HOMING": "HOMING", "LOST": "LOST LOCK"}[kind])
+            self.say(f"T{a.tube} " + {"ARMED": "SEEKER ACTIVE", "HOMING": "HOMING", "LOST": "LOST LOCK"}[kind],
+                     "FIRE CONTROL")
         elif kind == "EXHAUSTED":
-            self.say(f"T{a.tube} FUEL OUT. " + ("DECOYED" if isinstance(b, Decoy) else "MISS"))
+            self.say(f"T{a.tube} FUEL OUT. " + ("DECOYED" if isinstance(b, Decoy) else "MISS"), "FIRE CONTROL")
         elif kind in ("HIT", "DECOYED"):
             self.audio.play_explosion(self.passive.loudness(a, ref=4000.0), brg)
             self.waterfall.blip(brg, 255)
             self.jolt(0.25)
-            self.say(f"T{a.tube} DETONATION {brg:05.1f}R")
+            self.say(f"T{a.tube} DETONATION {brg:05.1f}R", "SONAR")
             if kind == "HIT":
-                self.say("BREAKUP NOISES. SUNK")
+                self.say("BREAKUP NOISES. SUNK", "SONAR")
                 tt(f"CONFIRMED: {b.kind} SUNK. {self.score:,} GRT TOTAL.")
             else:
-                self.say("NO BREAKUP. DECOYED")
+                self.say("NO BREAKUP. DECOYED", "SONAR")

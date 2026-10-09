@@ -1,6 +1,6 @@
 [project]
 name = "silent-solution"
-version = "0.4.0"
+version = "0.5.0"
 description = "Submarine sonar and fire-control simulator: you never see the ocean, only the instruments."
 readme = "README.md"
 license = "MIT"
@@ -10,6 +10,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "moderngl>=5.12",
     "numpy>=1.26",
     "pygame-ce>=2.5.8",
 ]

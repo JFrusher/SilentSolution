@@ -34,9 +34,11 @@ from fire_control import TargetDataComputer
 from layout import CRT_RECT, WF_H, WF_POS, WF_W
 from sensors import PeriscopeOptics, cone_gain
 from sim import (
+    AIR_FULL,
     EXHAUSTED,
     KNOT,
     LEAK_REPAIR,
+    TORP_AIR,
     YARD,
     Decoy,
     Submarine,
@@ -267,6 +269,28 @@ if __name__ == "__main__":
     w = WorldSimulation(Submarine(0, 0, 0, 10 * KNOT, z=15), [])
     w.player.raise_mast("snorkel")
     assert "SNORKEL_FLOODED" in run(w, 2)
+
+    # H.P. air: a deep blow drains the groups, empty bottles stop it; each fish takes impulse air; the snorkel recharges
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=150), [])
+    p = w.player
+    p.blowing = True
+    run(w, 5)
+    assert sum(p.air) < 3 * AIR_FULL and p.air[0] < p.air[2], p.air
+    p.air = [0.0, 0.0, 100.0]
+    events = run(w, 2)
+    assert "AIR_EXHAUSTED" in events and not p.blowing and abs(p.ordered_depth - p.z) < 1e-6, (events, p.air)
+    p.air = [AIR_FULL, 200.0, 0.0]
+    assert p.impulse() and p.air[0] == AIR_FULL - TORP_AIR
+    p.air = [TORP_AIR - 1, 0.0, 0.0]
+    assert not p.impulse(), "not enough air to fire"
+    w = WorldSimulation(Submarine(0, 0, 0, 0, z=15), [])
+    calm_or_storm(w, 0.0)
+    w.player.air = [AIR_FULL, 1000.0, AIR_FULL]
+    run(w, 10)
+    assert w.player.air[1] == 1000.0, "no compressors without the snorkel"
+    w.player.raise_mast("snorkel")
+    run(w, 30)
+    assert w.player.air[1] > 1000.0, "the compressors charge while snorkelling"
 
     # being seen: snorkel worse than scope, speed (feather) worse than slow, storm + range nearly invisible
     snorkel = sum(spotted_within(["snorkel"], 1500, 60, s) for s in range(10))
