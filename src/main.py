@@ -480,6 +480,7 @@ class Patrol(Scene):
         self.spoke = {}  # crewman -> when he last made a call, so he looks round at you as he does
         self.heard = console.heard[-1][0] if console.heard else 0  # the last of console.heard captioned
         self.at = None  # the station you're working (the full console, "ALL", once the boat is lost)
+        self.card_at = (None, None)  # (station, step, size) -> where the instructor's card went, so it holds still
         self.on_foot = OnFoot(app, console, cr.by_periscope())  # you start on your feet at the conn
 
     @property
@@ -668,30 +669,41 @@ class Patrol(Scene):
 
     def training(self, screen):
         """The instructor's card over the room or a station: the order, his last words, and where to go for it;
-        at a station, rings round the parts the order is about."""
+        at a station, rings round the parts the order is about. The card sits where it hides least, and fades
+        under the pointer so you can see what it covers."""
         tut, con = self.console.tutorial, self.console
         step = tut.step
+        rings = []
         if not self.on_foot:
             pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 160)
-            for name in step.highlight:
-                for rect in stations.rings(self.view, HIGHLIGHTS[name]):
-                    pygame.draw.rect(screen, (255, int(150 + 90 * pulse), 40), rect.inflate(6, 6), 3, border_radius=8)
+            rings = [r.inflate(6, 6) for name in step.highlight for r in stations.rings(self.view, HIGHLIGHTS[name])]
+            for rect in rings:
+                pygame.draw.rect(screen, (255, int(150 + 90 * pulse), 40), rect, 3, border_radius=8)
         needed = "PERISCOPE" if "periscope" in step.highlight else stations.station_for(step.highlight, HIGHLIGHTS)
-        lines = textwrap.wrap(f"ORDER {tut.progress}: {tut.goal}", 64)
+        lines = textwrap.wrap(f"ORDER {tut.progress}: {tut.goal}", 50)
         at_scope = self.on_foot and self.on_foot.room.target() == "PERISCOPE"
         if needed and needed != self.at and not con.looking and not (needed == "PERISCOPE" and at_scope):
             lines.append("GO TO THE PERISCOPE STAND" if needed == "PERISCOPE" else f"TAKE THE {needed} STATION")
-        said = [*list(con.teletype.lines)[-4:], con.teletype.typing]
-        card = pygame.Rect(0, 0, 720, 18 + 22 * len(lines) + 17 * len(said))
-        card.midtop = (W // 2, 34)
-        pygame.draw.rect(screen, (246, 242, 222), card)
-        pygame.draw.rect(screen, art.INK_RED, card, 2)
+        tt = con.teletype  # at the radio the paper's on the station already
+        said = [] if self.at == "RADIO" else [line for line in [*list(tt.lines)[-3:], tt.typing] if line][-2:]
+        card = pygame.Surface((560,18 + 22 * len(lines) + 17 * len(said)))
+        key = (self.at, tut.progress, card.get_size())
+        if self.card_at[0] != key:
+            spot = ((W - card.get_width()) // 2, 34) if self.on_foot else stations.card_spot(self.view, card.get_size(),
+                                                                                              rings)
+            self.card_at = (key, spot)
+        at = pygame.Rect(self.card_at[1], card.get_size())
+        card.fill((246, 242, 222))
+        pygame.draw.rect(card, art.INK_RED, card.get_rect(), 2)
         for i, line in enumerate(lines):
             colour = art.INK_RED if line.startswith(("TAKE", "GO TO")) else art.INK
-            screen.blit(art.mono(16, True).render(line, True, colour), (card.x + 12, card.y + 8 + 22 * i))
-        top = card.y + 12 + 22 * len(lines)
+            card.blit(art.mono(16, True).render(line, True, colour), (12, 8 + 22 * i))
+        top = 12 + 22 * len(lines)
         for i, line in enumerate(said):
-            screen.blit(art.mono(13).render(line, True, (90, 88, 80)), (card.x + 12, top + 17 * i))
+            card.blit(art.mono(13).render(line, True, (90, 88, 80)), (12, top + 17 * i))
+        if at.collidepoint(pygame.mouse.get_pos()):
+            card.set_alpha(64)
+        screen.blit(card, at)
 
     def sit(self, station):
         self.on_foot.leave()

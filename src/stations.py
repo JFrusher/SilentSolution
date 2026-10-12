@@ -211,9 +211,12 @@ def teleprinter(s, pc, con, ws):
     lh = font.get_linesize() + 4
     platen = w.bottom - 26
     rows = (platen - w.y - 10) // lh
-    lines = [*list(tt.lines)[-(rows - 1):], tt.typing]
+    lines = tt.window(rows - 1 if tt.back else rows)  # wound back, the top row carries the notice
     for i, line in enumerate(lines):
         s.blit(font.render(line, True, art.INK), (w.x + 34, platen - 6 - (len(lines) - i) * lh))
+    if tt.back:
+        art.engrave(s, f"WOUND BACK {tt.back} LINES - WHEEL DOWN TO FOLLOW", (w.centerx, w.y + 16), 16, art.INK_RED,
+                    center=True)
     for k in range(0, w.h + 30, 30):  # tractor holes creep up as the paper feeds
         y = w.bottom - ((k + tt.fed * 15) % (w.h + 30))
         for x in (w.x + 14, w.right - 14):
@@ -411,6 +414,21 @@ def station_for(highlights, shapes):
         if n > most:
             best, most = v.name, n
     return best
+
+
+def card_spot(view, size, keep_clear=(), clear_below=70):
+    """Top-left for the instructor's card of `size` on a station canvas: off the drill's rings (`keep_clear`) if it
+    can be, then over as little of the instruments as it can. Top centre wins a tie; the bottom keeps clear of the
+    captions."""
+    w, h = size
+    low = H - clear_below - h
+    spots = (((W - w) // 2, 34), ((W - w) // 2, low), (12, 12), (W - w - 12, 12), (12, low), (W - w - 12, low))
+
+    def covered(card, rects):
+        return sum(card.clip(r).w * card.clip(r).h for r in rects)
+
+    instruments = [p.dst for p in view.pieces] + [r for r, _ in view.lamps]
+    return min(spots, key=lambda at: covered(R(at, size), keep_clear) * 100 + covered(R(at, size), instruments))
 
 
 class HeldAt:

@@ -225,7 +225,34 @@ for _ in range(80):
 assert scene.at == "SONAR" and stations.rings(scene.view, HIGHLIGHTS["waterfall"]), "the waterfall ring shows here"
 screen = pygame.display.get_surface()
 scene.draw(screen, 1 / 60)  # the instructor's card over the station
-first = main.Patrol(app, Console("TRAINING", app.audio, TRAINING))
+card = pygame.Rect(scene.card_at[1], scene.card_at[0][2])
+assert not any(card.colliderect(r) for r in stations.rings(scene.view, HIGHLIGHTS["waterfall"])), "card off the ring"
+for i in range(con.tutorial.start, con.tutorial.end):  # nowhere in the drill does the card hide what it rings
+    step = con.tutorial.steps[i]
+    at = stations.station_for(step.highlight, HIGHLIGHTS)
+    if at:
+        view = stations.VIEWS[at]
+        rings = [r.inflate(6, 6) for h in step.highlight for r in stations.rings(view, HIGHLIGHTS[h])]
+        spot = pygame.Rect(stations.card_spot(view, (560, 118), rings), (560, 118))
+        assert not any(spot.colliderect(r) for r in rings), (i, at, step.highlight, spot)
+
+# the teleprinter winds back under the wheel, holds its place while it prints, and winds forward to follow again
+tt = con.teletype
+tt.lines.clear()
+tt.lines.extend(f"LINE {n}" for n in range(10))
+tt.back = 0
+paper = stations.VIEWS["RADIO"].pieces[0]
+con.scroll(stations.through(paper, paper.dst.center), 3)
+assert tt.back == 3 and tt.window(4) == ["LINE 3", "LINE 4", "LINE 5", "LINE 6"], tt.window(4)
+tt.print("NEW")
+tt.update(5.0)
+assert tt.window(4) == ["LINE 3", "LINE 4", "LINE 5", "LINE 6"], "wound back, the paper holds still as it feeds"
+tt.scroll(-99)
+assert tt.back == 0 and tt.window(3) == ["NEW", "", ""], tt.window(3)
+tt.scroll(99)
+assert tt.window(4) == ["LINE 0"], "no further back than the first line"
+tt.back = 0
+first =main.Patrol(app, Console("TRAINING", app.audio, TRAINING))
 Tutorial(first.console, 0)
 step = first.console.tutorial.i
 first.event(pygame.event.Event(pygame.KEYDOWN, key=settings.code("ACKNOWLEDGE"), mod=0, unicode="", scancode=0))
