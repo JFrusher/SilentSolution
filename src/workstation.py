@@ -910,10 +910,13 @@ class Workstation:
             big = SETTINGS["large_text"]
             font, lh = art.mono(15 if big else 12), 19 if big else 15
             rows = (r.h - 16 - (ORDER_SLIP.h + 8 if con.tutorial else 0)) // lh
-            lines = [*list(tt.lines)[-(rows - 1):], tt.typing]
+            lines = tt.window(rows)
             for i, line in enumerate(lines):
                 f.blit(font.render(line, True, art.INK), (r.x + 20, r.bottom - 12 - (len(lines) - i) * lh))
-            if tt.queue and int(pygame.time.get_ticks() / 150) % 2:
+            if tt.back:
+                art.engrave(f, f"WOUND BACK {tt.back} LINES - WHEEL DOWN", (r.centerx, r.bottom - 6), 10, art.INK_RED,
+                            center=True)
+            if tt.queue and not tt.back and int(pygame.time.get_ticks() / 150) % 2:
                 cx = r.x + 20 + font.size(tt.typing)[0]
                 pygame.draw.rect(f, art.INK, (cx, r.bottom - 12 - lh, 7, lh - 3))
             art.counter(f, (TELETYPE.x + 184, TELETYPE.y + 8), f"{con.wave:02d}", 13)

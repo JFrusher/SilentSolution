@@ -39,6 +39,7 @@ from layout import (
     TDC_ROW_Y0,
     TELEGRAPH_BTNS,
     TELEGRAPH_RECT,
+    TELETYPE,
     TUBE_SW,
     WF_H,
     WF_POS,
@@ -613,6 +614,8 @@ class Console:
         elif CRT_RECT.collidepoint(pos) and self.crt_page == "SONAR":
             self.dial_true = (self.dial_true + dy) % 360
             self.tracking = False
+        elif TELETYPE.collidepoint(pos):  # wind the paper back through what has printed
+            self.teletype.scroll(dy)
 
     # --- simulation tick ---
     def update(self, dt, keys):

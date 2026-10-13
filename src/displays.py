@@ -67,15 +67,27 @@ class Teletype:
 
     def __init__(self, audio, heard, cps=34.0):
         self.audio, self.heard, self.cps = audio, heard, cps
-        self.lines = deque(maxlen=40)
+        self.lines = deque(maxlen=200)
         self.queue = deque()
         self.typing = ""
         self.acc = 0.0
         self.fed = 0  # lines fed through, for the paper's perforations
+        self.back = 0  # lines the paper is wound back; 0 follows the print
 
     def print(self, text):
         self.heard(text)
         self.queue.extend(textwrap.wrap(text, 30 if SETTINGS["large_text"] else 38) + [""])
+
+    def scroll(self, dy):
+        """Wind the paper back (dy > 0) through what has printed, or forward again."""
+        self.back = max(0, min(len(self.lines) - 1, self.back + dy))
+
+    def window(self, rows):
+        """The lines showing on `rows` of paper: the newest and the one typing, or older ones when wound back."""
+        if not self.back:
+            return [*list(self.lines)[-(rows - 1):], self.typing]
+        end = len(self.lines) - self.back
+        return list(self.lines)[max(0, end - rows):end]
 
     def update(self, dt):
         if not self.queue:
@@ -91,6 +103,8 @@ class Teletype:
                     self.audio.play_clack()
             if len(self.typing) >= len(line):
                 self.lines.append(self.typing)
+                if self.back:  # wound back: hold the reader's place while the paper feeds
+                    self.back = min(len(self.lines) - 1, self.back + 1)
                 self.typing = ""
                 self.queue.popleft()
                 self.fed += 1
