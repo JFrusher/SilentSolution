@@ -1,5 +1,6 @@
 """The crew: orders carried out after their reaction time, the helmsman's course, the sonarman's watch, the order
 wheel, and station keys turned into orders when the captain is on his feet. Run: uv run checks.py"""
+import math
 import os
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -233,3 +234,19 @@ for _ in range(900):  # the drill moves on once the teleprinter has finished pri
     first.update(1 / 60)
 assert not first.console.teletype.queue and first.console.tutorial.i > step, "ENTER acknowledges a drill on your feet"
 print("training in the room ok")
+
+# the navigator: dead reckoning drifts with the unseen current, he asks for a fix, and a mast above water gives one
+con = Console("COMMANDER", AUDIO, seed=3)
+cx, cy = con.world.ocean.current
+assert 0 < math.hypot(cx, cy) <= 0.5 * KNOT, "a commander's patrol has a current of up to half a knot"
+for _ in range(8000):  # a mile of doubt at half a knot takes two hours
+    con.world.time += 1.0
+    con.navigate(1.0)
+assert abs(con.nav_err[0] - 8000 * cx) < 1e-6 and abs(con.nav_err[1] - 8000 * cy) < 1e-6, "DR is out by the set"
+assert con.doubt() >= math.hypot(*con.nav_err), "the circle of doubt holds the true position"
+assert any("RECOMMEND A FIX" in line for _, _, line in con.heard), "the navigator asks for a fix"
+con.world.player.z = 0.0  # broached: hull above water
+con.navigate(1.0)
+assert con.nav_err == (0.0, 0.0) and con.doubt() == 0.0 and "FIX TAKEN" in con.heard[-1][2], "a fix resets DR"
+assert Console("CADET", AUDIO, seed=3).world.ocean.current == (0.0, 0.0), "cadets navigate perfectly"
+print("navigator ok")

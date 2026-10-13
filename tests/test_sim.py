@@ -425,7 +425,7 @@ if __name__ == "__main__":
     while t < 300:
         if t == 150:
             own.heading = 90.0  # leg change: makes range observable from bearings
-        log.update(t, own, True, bearing(own.x, own.y, tgt.x, tgt.y) + sim.DICE.gauss(0, 0.5))
+        log.update(t, own, True, bearing(own.x, own.y, tgt.x, tgt.y) + sim.DICE.gauss(0, 0.5), (own.x, own.y))
         if t == 200:
             log.add(t, bearing(own.x, own.y, tgt.x, tgt.y), "ECHO", own.range_to(tgt))
         own.step(0.5), tgt.step(0.5), tdc.update(0.5)

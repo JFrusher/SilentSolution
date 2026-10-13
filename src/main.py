@@ -428,7 +428,8 @@ class OnFoot:
             tdc, p = con.tdc, w.player
             solution = (tdc.x, tdc.y, *tdc.target_velocity())
             marks = [b for b in con.tma.recent(w.time, 600.0) if b[2] != "HYD"]  # marks and fixes, not the trace
-            plot = plot_art(list(con.tma.track), p.heading, marks, solution, con.plot_notes)
+            track = [(t, x, y) for t, _, _, x, y in con.tma.track]  # as worked on the table: dead reckoning
+            plot = plot_art(track, p.heading, marks, solution, con.plot_notes, con.doubt())
             self.plot_at = w.time
         lamps = alerts(con)  # the lamps flash with their alarms; the legend at the conn says which
         alert = float(any(on for _, on, _ in lamps))

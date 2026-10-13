@@ -23,13 +23,13 @@ def wrap(d):
 
 class TMALog:
     def __init__(self):
-        self.track = deque()     # (t, x, y): own ship, from own navigation
+        self.track = deque()     # (t, x, y, dr x, dr y): own ship, true for the TMA geometry, and as plotted
         self.bearings = deque()  # (t, true bearing, kind, range m or None); kind HYD / MARK / SCOPE / ECHO
         self.last_track = self.last_auto = -1e9
 
-    def update(self, t, own, locked, dial_true):
+    def update(self, t, own, locked, dial_true, dr):
         if t - self.last_track >= TRACK_STEP:
-            self.track.append((t, own.x, own.y))
+            self.track.append((t, own.x, own.y, *dr))
             self.last_track = t
         if locked and t - self.last_auto >= AUTO_LOG:
             self.add(t, dial_true, "HYD")

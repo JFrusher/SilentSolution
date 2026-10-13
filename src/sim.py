@@ -457,6 +457,7 @@ class Ocean:
     timer: float = 0.0
     wind: float = 4.0        # m/s; sea follows the weather
     wind_dir: float = 240.0  # deg the swell runs toward
+    current: tuple = (0.0, 0.0)  # m/s (east, north): set and drift dead reckoning can't see
     swells: list = field(default_factory=list)  # (amplitude share, wavenumber, direction offset deg, phase)
 
     def __post_init__(self):

@@ -92,7 +92,7 @@ def check_tdc_and_tma(w, seconds=120.0, dt=0.25):
     for _ in range(int(seconds / dt)):
         w.step(dt)
         tdc.update(dt)
-        log.update(w.time, p, False, 0.0)
+        log.update(w.time, p, False, 0.0, (p.x, p.y))
         history.append((w.time, fix(p, t).true_brg))
     f = fix(p, t)
     assert abs(angle_diff(tdc.get("BRG"), f.rel_brg)) < 0.2, (tdc.get("BRG"), f.rel_brg)
