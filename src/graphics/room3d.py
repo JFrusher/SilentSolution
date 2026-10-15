@@ -9,6 +9,7 @@ import numpy as np
 import pygame
 
 import control_room as cr
+from geometry import DATUM, MILE, dms, latlon
 from graphics import console_art as art
 from graphics import gltf
 from graphics.models import (
@@ -428,15 +429,7 @@ SMUDGES = [(_SMUDGE_RNG.uniform(0.1, 0.9), _SMUDGE_RNG.uniform(0.1, 0.9)) for _ 
 
 
 # ---------- the chart under the plot: the Iceland-Faroes gap ----------
-DATUM = (63.5, -10.0)       # where the patrol's origin lies: 63°30'N 10°00'W, on the Iceland-Faroe Ridge
 VARIATION = -18.0           # magnetic variation there in 1965, deg (west)
-MILE = 1852.0
-
-
-def latlon(x, y):
-    """Patrol metres (x east, y north of the datum) to latitude and longitude, deg (east +)."""
-    lat = DATUM[0] + y / 111320.0
-    return lat, DATUM[1] + x / (111320.0 * math.cos(math.radians(lat)))
 
 
 DEPTHS_LAT = np.arange(61.0, 66.01, 0.5)   # the depth grid's rows, deg N
@@ -473,18 +466,12 @@ def sounding(x, y):
     return max(1.0, m / FATHOM + lumps * 0.3)
 
 
-def dms(deg, pos, neg):
-    """63.517 -> 63°31'N"""
-    d = abs(deg)
-    m = round((d - int(d)) * 60)
-    return f"{int(d) + m // 60:d}°{m % 60:02d}'{pos if deg >= 0 else neg}"
-
-
-def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 720), span=8000.0):
+def plot_art(track, heading, bearings=(), solution=None, notes=(), doubt=0.0, size=(1040, 720), span=8000.0):
     """The attack plot: tracing paper over a printed sea chart, worked in pencil. Our dead-reckoning track with time
     marks, each bearing ruled from where we took it, the reports, and the TDC's target in red. Centred on where we
     are, north up, `span` metres across. track: (t, x, y); bearings: (t, true brg, kind, range); solution:
-    (x, y, vx, vy) relative to us; notes: (t, own x, own y, true brg, range or None, text)."""
+    (x, y, vx, vy) relative to us; notes: (t, own x, own y, true brg, range or None, text); doubt: m the DR position
+    may be out."""
     w, h = size
     k = w / span  # px per metre
     x0, y0 = (track[-1][1], track[-1][2]) if track else (0.0, 0.0)
@@ -559,6 +546,8 @@ def plot_art(track, heading, bearings=(), solution=None, notes=(), size=(1040, 7
                 chart.blit(pen.render(stamp(t), True, PENCIL), (q[0] + 8, q[1] - 22))
         hd = math.radians(heading)
         pygame.draw.circle(chart, PENCIL, (w / 2, h / 2), 7, 2)
+        if doubt * k > 10:  # the navigator's circle of doubt round the DR position
+            pygame.draw.circle(chart, PENCIL, (w / 2, h / 2), doubt * k, 1)
         pygame.draw.line(chart, PENCIL, (w / 2, h / 2), (w / 2 + 40 * math.sin(hd), h / 2 - 40 * math.cos(hd)), 3)
         for t, ox, oy, brg, rng, text in notes:  # reports: a cross where placed, else a note along the bearing
             b = math.radians(brg)

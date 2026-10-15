@@ -141,44 +141,19 @@
    4
   ],
   [
-   11782,
-   "ESCORT_PING",
+   11543,
+   "AI_EVADE",
    4
   ],
   [
-   12263,
-   "ESCORT_PING",
-   4
-  ],
-  [
-   12722,
-   "HEAD_VALVE",
-   1
-  ],
-  [
-   12744,
-   "ESCORT_PING",
+   11543,
+   "DECOY_DROP",
    4
   ],
   [
    13000,
    "MASTS_LOWERED",
    1
-  ],
-  [
-   13225,
-   "ESCORT_PING",
-   4
-  ],
-  [
-   13706,
-   "ESCORT_PING",
-   4
-  ],
-  [
-   14187,
-   "ESCORT_PING",
-   4
   ]
  ],
  "log": [
@@ -187,7 +162,7 @@
   "02:33 MARK 000.0R. NOTHING IN THE WIRES",
   "02:36 AUTO-SOLVE NOT FITTED - PLOT IT YOURSELF",
   "03:03 RAISE SNORKEL. START DIESELS",
-  "03:32 HEAD VALVE SHUT - WAVE OVER SNORKEL",
+  "03:12 HISS 024.0R. COUNTERMEASURE",
   "03:36 MASTS HOUSED FOR DEPTH"
  ],
  "teletype": [
@@ -197,8 +172,8 @@
   "FOR STATION DRILL.",
   "",
   "DISPATCH WAVE 1: CONVOY OF 3",
-  "MERCHANTS, 1 ESCORT(S) REPORTED NEAR",
-  "172 TRUE, 8 KM. ATTACK AT DISCRETION.",
+  "MERCHANTS, 1 ESCORT(S) REPORTED IN",
+  "63\u00b034'N 9\u00b057'W. ATTACK AT DISCRETION.",
   "",
   "CONN, SONAR: CONVOY HAS WOKEN UP -",
   "REVS INCREASING, STARTING A ZIG-ZAG.",
@@ -218,9 +193,9 @@
   "hull": 100.0,
   "score": 0,
   "wave": 1,
-  "targets": 4,
+  "targets": 5,
   "torpedoes": 2,
   "dial": 0.0,
-  "dice": 0.6652474490794696
+  "dice": 0.13127423248460368
  }
 }

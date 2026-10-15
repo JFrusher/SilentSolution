@@ -8,6 +8,22 @@ from dataclasses import dataclass
 
 import numpy as np
 
+DATUM = (63.5, -10.0)  # where the patrol's origin lies: 63°30'N 10°00'W, on the Iceland-Faroe Ridge
+MILE = 1852.0
+
+
+def latlon(x, y):
+    """Patrol metres (x east, y north of the datum) to latitude and longitude, deg (east +)."""
+    lat = DATUM[0] + y / 111320.0
+    return lat, DATUM[1] + x / (111320.0 * math.cos(math.radians(lat)))
+
+
+def dms(deg, pos, neg):
+    """63.517 -> 63°31'N"""
+    d = abs(deg)
+    m = round((d - int(d)) * 60)
+    return f"{int(d) + m // 60:d}°{m % 60:02d}'{pos if deg >= 0 else neg}"
+
 
 def bearing(ax, ay, bx, by):
     """True bearing from a to b, 0..360."""

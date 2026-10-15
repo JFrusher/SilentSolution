@@ -12,7 +12,7 @@ from ai import ThreatDirector
 from crew import Crew
 from displays import CLASSES, SCALES, SpectrumAnalyzer, Teletype, WaterfallDisplay
 from fire_control import FIELDS, TargetDataComputer
-from geometry import bearing, offset
+from geometry import MILE, bearing, dms, latlon, offset
 from layout import (
     BLOW_BTN,
     CRT_RECT,
@@ -92,12 +92,16 @@ SCOPE_RANGES = (5000.0, 10000.0, 20000.0)  # yd
 
 
 # ---------- game state behind the workstation ----------
+FIX_WORTH = 500.0  # m of doubt before the navigator mentions a fix
+
+
 def build_world(d, seed=None):
     if seed is not None:
         sim.seed(seed)
     world = WorldSimulation(Submarine(0, 0, 0, 4 * KNOT, z=60, uses_battery=d["battery"], uses_oxygen=d["oxygen"],
                                       mast_damage=d["mast_damage"], lower_delay=d["lower_delay"]), [])
     world.ocean.layer_loss = d["layer_loss"]
+    world.ocean.current = offset(0.0, 0.0, sim.DICE.uniform(0, 360), d["drift"] * KNOT * sim.DICE.uniform(0.6, 1.0))
     world.leaks_enabled, world.torp_damage, world.spot_mult = d["leaks"], d["torp_damage"], d["spot_mult"]
     world.systems_damage = True
     world.director = ThreatDirector(d)
@@ -158,10 +162,35 @@ class Console:
         self.crt_page = "SONAR"  # left of the monitor: waterfall, F2 TMA plot, F5 damage board
         self.crew = Crew(self)
         self.plot_notes = deque(maxlen=24)  # for the plot: (time, own x, own y, true brg, range m or None, text)
+        self.nav_err = (0.0, 0.0)  # how far the current has set us from our dead reckoning since the last fix, m
+        self.fixed_at = 0.0        # when the navigator last had a fix
+        self.nav_warned = False    # he has asked for a fix since that one
         self.say("SONAR ONLINE. PASSIVE ARRAY NOMINAL")
         if diff is None:
             self.teletype.print(f"FROM FLAG OFFICER SUBMARINES: {level} PATROL. INTERCEPT CONVOYS IN YOUR SECTOR. "
                                 "STAY DEEP, STAY QUIET. F1 FOR STATION DRILL.")
+
+    # --- navigation: the plot is worked from dead reckoning; a mast above water gives a fix ---
+    def dr(self):
+        """Where the navigator reckons we are."""
+        p, (ex, ey) = self.world.player, self.nav_err
+        return p.x - ex, p.y - ey
+
+    def doubt(self):
+        """Radius the navigator gives his DR position, m: the worst current for the area since the last fix."""
+        return (self.world.time - self.fixed_at) * self.diff["drift"] * KNOT
+
+    def navigate(self, dt):
+        p, (cx, cy) = self.world.player, self.world.ocean.current
+        if p.exposed:  # scope, snorkel or hull above water: a fix
+            if self.doubt() > FIX_WORTH:
+                self.say(f"FIX TAKEN. DR WAS {math.hypot(*self.nav_err) / MILE:.1f} MILES OUT", "NAVIGATOR")
+            self.nav_err, self.fixed_at, self.nav_warned = (0.0, 0.0), self.world.time, False
+            return
+        self.nav_err = (self.nav_err[0] + cx * dt, self.nav_err[1] + cy * dt)
+        if self.doubt() > MILE and not self.nav_warned:
+            self.nav_warned = True
+            self.say("DR GOOD TO A MILE AT BEST. RECOMMEND A FIX", "NAVIGATOR")
 
     # --- bearings: stored TRUE; relative is a view of them from the ship's head ---
     @property
@@ -697,7 +726,8 @@ class Console:
         self.crew.update(dt, bearings, heard, levels)
         self.spectrum.update(dt, world.time, gains, levels, kinds, rain + (0.35 if diesel else 0.0))
         self.audio.set_hydrophone(self.signal, self.dial)
-        self.tma.update(world.time, p, self.locked, self.dial_true)
+        self.navigate(dt)
+        self.tma.update(world.time, p, self.locked, self.dial_true, self.dr())
         warning = bool(np.any(hostile & (levels > 30)))
         if warning and not self.torpedo_warning:  # torpedo in the water: the klaxon, through the whole boat
             self.audio.play_klaxon()
@@ -741,10 +771,15 @@ class Console:
             m, e, s, brg = b
             fuzz = 0 if self.diff["ping_warning"] else sim.DICE.uniform(-25, 25)
             p = self.world.player
-            self.plot_notes.append((self.world.time, p.x, p.y, (brg + fuzz) % 360, 8000.0, f"CONVOY {m}M {e}E"))
-            tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED NEAR "
-               f"{(brg + fuzz) % 360:03.0f} TRUE, "
-               f"8 KM." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "") + " ATTACK AT DISCRETION.")
+            cx, cy = offset(p.x, p.y, brg + fuzz, 8000.0)  # shore plots it on the chart, not from where we think we are
+            lat, lon = latlon(cx, cy)
+            self.plot_notes.append((self.world.time, cx, cy, 0.0, 0.0, f"CONVOY {m}M {e}E"))
+            tt(f"DISPATCH WAVE {a}: CONVOY OF {m} MERCHANTS, {e} ESCORT(S) REPORTED IN "
+               f"{dms(lat, 'N', 'S')} {dms(lon, 'E', 'W')}." + (f" {s} HOSTILE SUBMARINE(S) SUSPECTED." if s else "")
+               + " ATTACK AT DISCRETION.")
+            ox, oy = self.dr()
+            km = math.hypot(cx - ox, cy - oy) / 1000
+            self.say(f"CONVOY BEARS {bearing(ox, oy, cx, cy):03.0f}, {km:.0f} KM BY DR", "NAVIGATOR")
             return
         if kind == "WAVE_CLEAR":
             torps, decoys = b
